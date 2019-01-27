@@ -6,7 +6,7 @@
 ; This is the default disassembler for Tali Forth 2. Use by passing
 ; the address and length of the block of memory to be disassembled:
 ;
-;       disasm ( addr x -- ) 
+;       disasm ( addr length -- ) 
 
 ; The underflow checking is handled by the word's stub in
 ; native_words.asm, see there for more information.
@@ -15,50 +15,179 @@
 ; is, uh, simpler. See the documentation for more information.  Because
 ; disassemblers are used interactively with slow humans, we don't care that
 ; much about speed and put the emphasis at being small.
+
 .scope
-disassembler:
+disassembler: ; using assembler tables
+                jsr xt_over     ; convert length to limit
+                jsr xt_plus
+_instruction_loop:
+               
+                lda 2,x         ; All done?
+                cmp 0,x
+                lda 3,x
+                sbc 1,x
+                bcc +
+
+                ; Clean up and leave
+                jmp xt_two_drop         ; JSR/RTS
+
+*
                 jsr xt_cr       ; ( addr u ) 
-_byte_loop:
-                ; Print address at start of the line. Note we use whatever
-                ; number base the user has
+
+                ; Print address at start of the line.
+                ; Note we use whatever number base the user has
                 jsr xt_over     ; ( addr u addr ) 
                 jsr xt_u_dot    ; ( addr u ) 
                 jsr xt_space
 
-                ; We use the opcode value as the offset in the oc_index_table.
-                ; We have 256 entries, each two bytes long, so we can't just
-                ; use an index with Y. We use tmp2 for this.
-                lda #<oc_index_table
+                ; find the assembler word with matching opcode
+                ldy #2*2+1+wordlists_offset ; for tmp1=each word in assembler wordlist
+                lda (up),y
+                pha
+                dey
+                lda (up),y
+                bra _w_1
+
+_w_next:
+                ldy #2+1 ; nt = nt->next
+                lda (tmp1),y
+                pha
+                dey
+                lda (tmp1),y
+_w_1:           ply
+                sta tmp1
+                sty tmp1+1
+                beq _w_notfound
+        
+                ldy #4          ; tmp2 = nt->xt
+                lda (tmp1),y
                 sta tmp2
-                lda #>oc_index_table
-                sta tmp2+1
-
-                lda (2,x)       ; get opcode that addr points to
-
-                asl             ; multiply by two for offset
-                bcc +
-                inc tmp2+1      ; we're on second page
-*
-                tay             ; use Y as the index
-
-                ; Get address of the entry in the opcode table. We put it
-                ; in tmp3 and push a copy of it to the stack to be able to
-                ; print the opcode later
-                lda (tmp2),y    ; LSB
-                sta tmp3
-                pha
-
                 iny
+                lda (tmp1),y
+                sta tmp2+1
+        
+                ldy #3          ; opcode match?
+                lda (tmp2),y
+                cmp (2,x)
+                bne _w_next
 
-                lda (tmp2),y    ; MSB
-                sta tmp3+1
+                lda (tmp2)      ; word starts with jsr abs?
+                cmp #$20
+                bne _w_next
+        
+                jsr _GetByte    ; consume the opcode
+
+                lda tmp1        ; save nt for printing mnemonic
+                ldy tmp1+1
+                phy
                 pha
 
-                ; The first byte is the "lengths byte" which is coded so 
-                ; that bits 7 to 6 are the length of the instruction (1 to
-                ; 3 bytes) and 2 to 0 are the length of the mnemonic. 
-                lda (tmp3)
-                tay                     ; save copy of lengths byte
+               ; Since this is Simpler Assembler Notation (SAN) in a Forth
+                ; system, we want to print any operand before we print the
+                ; mnemonic ('1000 sta' instead of 'sta 1000'). This allows us
+                ; to copy and paste directly from the disassembler to the
+                ; assembler. 
+
+                ldy #1          ; get jsr abs lo byte
+                lda (tmp2),y
+                cmp #<asm_ubyte
+                beq _1_operand
+                cmp #<asm_1byte
+                beq _1_operand
+                cmp #<asm_2byte
+                beq _2_operand
+
+                ; Default to no operand.
+                ; Since we want to have a nicely formatted output, we need to
+                ; indent the mnemonic by five spaces.
+                lda #5
+                jsr PsuZA               ; ( addr u 5 )
+                jsr xt_spaces           ; ( addr u )
+                bra _print_mnemonic
+
+_2_operand:     ; 2 operand bytes
+                jsr _GetByte            ; get LSB
+                pha
+                jsr _GetByte            ; get MSB
+                tay
+                pla
+                bra _print_operand
+                
+_1_operand:     ; 1 operand byte
+                jsr _GetByte
+                ldy #0
+
+_print_operand:
+                ; We arrive here with the operand in YA.
+                jsr PsuYA
+                jsr PsuYA
+                                
+                ; We want the output to be nicely formatted in columns, so
+                ; we use U.R. The maximal width of the number in decimal on an
+                ; 16-bit addressed machine is five characters
+                lda #5
+                jsr u_dot_r_A          ; U.R ( addr+n u-n )
+
+                jsr xt_sym
+
+                ; fall through to _print_mnemonic
+
+_print_mnemonic:
+                ; Time to print the mnemonic.
+                jsr xt_space
+                pla                     ; get saved nt
+                ply
+                jsr PsuYA
+                jsr xt_name_to_string
+                jsr xt_type
+   
+                jmp _instruction_loop
+
+_w_notfound:    jsr _GetByte
+                jsr PsuZA
+                jsr xt_u_dot
+                jsr xt_space
+                lda #'c
+                jsr emit_a
+                lda #$2c ; ',
+                jsr emit_a
+                jmp _instruction_loop
+
+_GetByte: ; get next byte from instruction stream
+                lda (2,x)       ; get the byte
+                
+                inc 2,x         ; increment adr
+                bne +
+                inc 3,x
+*                
+                rts
+disassembler_end:
+.scend
+
+
+; .scope
+; disassembler2: ; standalone
+; _loop:
+                ; jsr xt_cr       ; ( addr u ) 
+
+                ; Print address at start of the line.
+                ; Note we use whatever number base the user has
+                ; jsr xt_over     ; ( addr u addr ) 
+                ; jsr xt_u_dot    ; ( addr u ) 
+                ; jsr xt_space
+
+                ; jsr _GetByte    ; get opcode that addr points to
+                ; pha             ; save a copy for later
+                ; tay             ; use Y as the index
+                ; lda _ATbl,y     ; get addressing mode index
+                ; tay             ; get operand byte count
+                ; lda _A0,y
+                ; stz tmp1
+                ; stz tmp1+1
+                ; lsr
+                ; lsr
+                ; lsr
+                ; lsr
 
                 ; Since this is Simpler Assembler Notation (SAN) in a Forth
                 ; system, we want to print any operand before we print the
@@ -66,501 +195,730 @@ _byte_loop:
                 ; to copy and paste directly from the disassembler to the
                 ; assembler. 
 
-                ; What happens next depends on the length of the
-                ; instruction in bytes: 
-
-                ;   1 byte:  OPC          -->          OPC  bit sequence: %01
-                ;   2 bytes: OPC LSB      -->    0 LSB OPC  bit sequence: %10
-                ;   3 bytes: OPC LSB MSB  -->  MSB LSB OPC  bit sequence: %11
-
-                ; We can distinguish between the first case, where there is
-                ; only the mnemonic, and the second and third cases, where we
-                ; have an operand. We do this by use of the bit sequence in
-                ; bits 7 and 6.
-                bpl _no_operand         ; bit 7 clear, single-byte instruction
+                ; beq _no_operand         ; no operand bytes?
+                ; dea
+                ; beq _1_operand
                 
-                ; We have an operand. Prepare the Data Stack
-                jsr xt_zero             ; ( addr u 0 ) ZERO does not use Y
-
-                ; Because of the glory of a little endian CPU, we can start
-                ; with the next byte regardless if this is a one or two byte
-                ; operand, because we'll need the LSB one way or the other. 
-                ; We have a copy of the opcode on the stack, so we can now move
-                ; to the next byte
-                inc 4,x
-                bne +
-                inc 5,x                 ; ( addr+1 u 0 )
-*
-                lda 2,x
-                bne +
-                dec 3,x
-*
-                dec 2,x                 ; ( addr+1 u-1 0 )
-
-                lda (4,x)
-                sta 0,x                 ; LSB of operand ( addr+1 u-1 LSB )
-
-                ; We still have a copy of the lengths byte in Y, which we use
-                ; to see if we have a one-byte operand (and are done already)
-                ; or a two-byte operand
-                tya                     ; retrieve copy of lengths byte
-                rol                     ; shift bit 6 to bit 7
-                bpl _print_operand
+                ; 2 operand bytes
+                ; jsr _GetByte            ; get LSB
+                ; pha
+                ; jsr _GetByte            ; get MSB
+                ; tay
+                ; pla
+                ; bra _print_operand
                 
-                ; We have a three-byte instruction, so we need to get the MSB
-                ; of the operand. Move to the next byte
-                inc 4,x
-                bne +
-                inc 5,x                 ; ( addr+2 u-1 LSB )
-*
-                lda 2,x
-                bne +
-                dec 3,x
-*
-                dec 2,x                 ; ( addr+2 u-2 LSB )
+; _1_operand:     ; 1 operand byte
+                ; jsr _GetByte
+                ; ldy #0
 
-                lda (4,x)
-                sta 1,x                 ; MSB of operand ( addr+2 u-2 opr )
-
-                ; fall through to _print_operand
-
-_print_operand:
-                ; We arrive here with the lengths byte in Y, the address of the
-                ; opcode table entry for the on the stack and ( addr+n u-n opr
-                ; ). We want the output to be nicely formatted in columns, so
+; _print_operand:
+                ; We arrive here with the operand in YA.
+                ; jsr PsuYA
+                ; jsr PsuYA
+                ; We want the output to be nicely formatted in columns, so
                 ; we use U.R. The maximal width of the number in decimal on an
                 ; 16-bit addressed machine is five characters
-                dex
-                dex
-                lda #5
-                sta 0,x
-                stz 1,x                 ; ( addr+n u-n opr 5 )
+                ; lda #5
+                ; jsr u_dot_r_A          ; U.R ( addr+n u-n )
 
-                jsr xt_u_dot_r          ; U.R ( addr+n u-n )
+                ; jsr xt_sym
+                
+                ; bra _print_mnemonic
 
-                bra _print_mnemonic
-
-_no_operand:
+; _no_operand:
                 ; We arrive here with the opcode table address on the stack,
                 ; the lengths byte in Y and ( addr u ). Since we want to have
                 ; a nicely formatted output, we need to indent the mnemonic by
                 ; five spaces.
-                dex
-                dex
-                lda #5
-                sta 0,x
-                stz 1,x                 ; ( addr u 5 )
-
-                jsr xt_spaces           ; ( addr u )
+                ; lda #5
+                ; jsr PsuZA               ; ( addr u 5 )
+                ; jsr xt_spaces           ; ( addr u )
 
                 ; fall through to _print_mnemonic
                 
-_print_mnemonic:
-                ; We arrive here with the opcode table address on the stack and
-                ; ( addr u | addr+n u-n ). Time to print the mnemonic.
-                jsr xt_space
+; _print_mnemonic:
+                ; We arrive here with ???
+                ; Time to print the mnemonic.
+                ; jsr xt_space
 
-                dex
-                dex                     ; ( addr u ? )
-                pla                     ; MSB
-                sta 1,x                 ; ( addr u MSB )
-                pla                     ; LSB
-                sta 0,x                 ; ( addr u addr-o )
+                ; ply                 ; copy saved opcode
+                ; phy
+                ; lda _MTbl,y         ; get start offset in M0
+                ; tay
+                ; lda _M0+0,y         ; print 1st char
+                ; and #$7f
+                ; jsr emit_a
+                ; lda _M0+1,y
+                ; jsr emit_a
+                ; lda _M0+2,y
+                ; jsr emit_a
 
-                jsr xt_count            ; ( addr u addr-o u-o )
-
-                ; The length of the mnemnonic string is in bits 2 to 0
-                stz 1,x                 ; paranoid
-                lda 0,x
-                and #%00000111          ; ( addr u addr-o u-o )
-                sta 0,x
-               
-                jsr xt_type             ; ( addr u )
-                jsr xt_cr 
-
-                ; Housekeeping: Next byte
-                inc 2,x
-                bne +
-                inc 3,x                 ; ( addr+1 u )
-*
-                jsr xt_one_minus        ; ( addr+1 u-1 )
-
-                lda 0,x                 ; All done?
-                ora 1,x
-                beq _done
-
-                lda 1,x                 ; Catch mid-instruction ranges
-                bmi _done
-
-                jmp _byte_loop          ; out of range for BRA
-_done:
+                ; add bit # to end of mnemonic
+                ; lda _M0,y           ; get saved M value
+                ; bpl +
+                ; pla                 ; copy saved opcode
+                ; pha
+                ; lsr
+                ; lsr
+                ; lsr
+                ; lsr
+                ; and #7
+                ; ora #'0
+                ; jsr emit_a
+; *
+                ; print addressing mode
+                ; ply                 ; get saved opcode
+                ; lda _ATbl,y
+                ; tay
+                ; lda _A0,y
+                ; and #$0f
+                ; beq _am2
+; _am1:           pha
+                ; iny
+                ; lda _A0,y
+                ; jsr emit_a
+                ; pla
+                ; dec
+                ; bne _am1
+; _am2:
+                
+                
+                ; lda 1,x                 ; All done?
+                ; bmi _done
+                ; ora 0,x
+                ; beq _done
+                ; jmp _loop
+; _done:
                 ; Clean up and leave
-                jmp xt_two_drop         ; JSR/RTS
-.scend
+                ; jmp xt_two_drop         ; JSR/RTS
+
+
+; _GetByte: ; get next byte from instruction stream
+                ; lda 0,x         ; decrement length
+                ; bne +
+                ; dec 1,x
+; *               dec 0,x
+
+                ; lda (2,x)       ; get the byte
+                
+                ; inc 2,x         ; increment adr
+                ; bne +
+                ; inc 3,x
+; *
+                
+                ; rts
 
 ; =========================================================
-oc_index_table:
-        ; Lookup table for the instruction data (length of instruction in
-        ; bytes, length of mnemonic in bytes, mnemonic string). This is used by
-        ; the assembler as well.
 
-        ; Opcodes 00-0F
-        .word oc00, oc01, oc__, oc__, oc04, oc05, oc06, oc__
-        .word oc08, oc09, oc0a, oc__, oc0c, oc0d, oc0e, oc0f 
+; _ATbl: ; address_mode indexed by opcode
+        ; .byte _A1-_A0   ; 00 brk    enforce the signature byte
+        ; .byte _AZXI-_A0 ; 01 ora.zxi
+        ; .byte 0         ; 02
+        ; .byte 0         ; 03
+        ; .byte _AZ-_A0   ; 04 tsb.z
+        ; .byte _AZ-_A0   ; 05 ora.z
+        ; .byte _AZ-_A0   ; 06 asl.z
+        ; .byte _AZ-_A0   ; 07 rmb0.z
+        ; .byte 0         ; 08 php
+        ; .byte _AN-_A0   ; 09 ora.#
+        ; .byte _AA-_A0   ; 0A asl.a
+        ; .byte 0         ; 0B
+        ; .byte _A2-_A0   ; 0C tsb
+        ; .byte _A2-_A0   ; 0D ora
+        ; .byte _A2-_A0   ; 0E asl
+        ; .byte _A2-_A0   ; 0F bbr0
+        ; .byte _A1-_A0   ; 10 bpl
+        ; .byte _AZIY-_A0 ; 11 ora.ziy
+        ; .byte _AZI-_A0  ; 12 ora.zi
+        ; .byte 0         ; 13
+        ; .byte _AZ-_A0   ; 14 trb
+        ; .byte _AZX-_A0  ; 15 ora.zx
+        ; .byte _AZX-_A0  ; 16 asl.zx
+        ; .byte _AZ-_A0   ; 17 rmb1.z
+        ; .byte 0         ; 18 clc
+        ; .byte _AY-_A0   ; 19 ora.y
+        ; .byte _AA-_A0   ; 1A inc.a
+        ; .byte 0         ; 1B
+        ; .byte _A2-_A0   ; 1C trb
+        ; .byte _AX-_A0   ; 1D ora.x
+        ; .byte _AX-_A0   ; 1E asl.x
+        ; .byte _A2-_A0   ; 1F bbr1
+        ; .byte _A2-_A0   ; 20 jsr
+        ; .byte _AZXI-_A0 ; 21 and.zxi
+        ; .byte 0         ; 22
+        ; .byte 0         ; 23
+        ; .byte _AZ-_A0   ; 24 bit.z
+        ; .byte _AZ-_A0   ; 25 and.z
+        ; .byte _AZ-_A0   ; 26 rol.z
+        ; .byte _AZ-_A0   ; 27 rmb2.z
+        ; .byte 0         ; 28 plp
+        ; .byte _AN-_A0   ; 29 and.#
+        ; .byte _AA-_A0   ; 2A rol.a
+        ; .byte 0         ; 2B
+        ; .byte _A2-_A0   ; 2C bit
+        ; .byte _A2Dot-_A0    ; 2D and.
+        ; .byte _A2-_A0   ; 2E rol
+        ; .byte _A2-_A0   ; 2F bbr2
+        ; .byte _A1-_A0   ; 30 bmi
+        ; .byte _AZIY-_A0 ; 31 and.ziy
+        ; .byte _AZI-_A0  ; 32 and.zi
+        ; .byte 0         ; 33
+        ; .byte _AZXI-_A0 ; 34 bit.zxi
+        ; .byte _AZX-_A0  ; 35 and.zx
+        ; .byte _AZX-_A0  ; 36 rol.zx
+        ; .byte _AZ-_A0   ; 37 rmb3.z
+        ; .byte 0         ; 38 sec
+        ; .byte _AY-_A0   ; 39 and.y
+        ; .byte _AA-_A0   ; 3A dec.a
+        ; .byte 0         ; 3B
+        ; .byte _AX-_A0   ; 3C bit.x
+        ; .byte _AX-_A0   ; 3D and.x
+        ; .byte _AX-_A0   ; 3E rol.x
+        ; .byte _A2-_A0   ; 3F bbr3
+        ; .byte 0         ; 40 rti
+        ; .byte _AZXI-_A0 ; 41 eor.zxi
+        ; .byte 0         ; 42
+        ; .byte 0         ; 43
+        ; .byte 0         ; 44
+        ; .byte _AZ-_A0   ; 45 eor.z
+        ; .byte _AZ-_A0   ; 46 lsr.z
+        ; .byte _AZ-_A0   ; 47 rmb4.z
+        ; .byte 0         ; 48 pha
+        ; .byte _AN-_A0   ; 49 eor.#
+        ; .byte _AA-_A0   ; 4a lsr.a
+        ; .byte 0         ; 4B
+        ; .byte _A2-_A0   ; 4C jmp
+        ; .byte _A2-_A0   ; 4D eor
+        ; .byte _A2-_A0   ; 4E lsr
+        ; .byte _A2-_A0   ; 4F bbr4
+        ; .byte _A1-_A0   ; 50 bvc
+        ; .byte _AZIY-_A0 ; 51 eor.ziy
+        ; .byte _AZI-_A0  ; 52 eor.zi
+        ; .byte 0         ; 53
+        ; .byte 0         ; 54
+        ; .byte _AZX-_A0  ; 55 eor.zx
+        ; .byte _AZX-_A0  ; 56 lsr.zx
+        ; .byte _AZ-_A0   ; 57 rmb5.z
+        ; .byte 0         ; 58 cli
+        ; .byte _AY-_A0   ; 59 eor.y
+        ; .byte 0         ; 5A phy
+        ; .byte 0         ; 5B
+        ; .byte 0         ; 5C
+        ; .byte _AX-_A0   ; 5D eor.x
+        ; .byte _AX-_A0   ; 5E lsr.x
+        ; .byte _A2-_A0   ; 5F bbr5
+        ; .byte 0         ; 60 rts
+        ; .byte _AZXI-_A0 ; 61 adc.zxi
+        ; .byte 0         ; 62
+        ; .byte 0         ; 63
+        ; .byte _AZ-_A0   ; 64 stz.z
+        ; .byte _AZ-_A0   ; 65 adc.z
+        ; .byte _AZ-_A0   ; 66 ror.z
+        ; .byte _AZ-_A0   ; 67 rmb6.z
+        ; .byte 0         ; 68 pla
+        ; .byte _AN-_A0   ; 69 adc.#
+        ; .byte _AA-_A0   ; 6A ror.a
+        ; .byte 0         ; 6B
+        ; .byte _AI-_A0   ; 6C jmp.i
+        ; .byte _A2-_A0   ; 6D adc
+        ; .byte _A2-_A0   ; 6E ror
+        ; .byte _A2-_A0   ; 6F bbr6
+        ; .byte _A1-_A0   ; 70 bvs
+        ; .byte _AZIY-_A0 ; 71 adc.ziy
+        ; .byte _AZI-_A0  ; 72 adc.zi
+        ; .byte 0         ; 73
+        ; .byte _AZX-_A0  ; 74 stz.zx
+        ; .byte _AZX-_A0  ; 75 adc.zx
+        ; .byte _AZX-_A0  ; 76 ror.zx
+        ; .byte _AZ-_A0   ; 77 rmb7.z
+        ; .byte 0         ; 78 sei
+        ; .byte _AY-_A0   ; 79 adc.y
+        ; .byte 0         ; 7A ply
+        ; .byte 0         ; 7B
+        ; .byte _AXI-_A0  ; 7C jmp.xi
+        ; .byte _AX-_A0   ; 7D adc.x
+        ; .byte _AX-_A0   ; 7E ror.x
+        ; .byte _A2-_A0   ; 7F bbr7
+        ; .byte _A1-_A0   ; 80 bra
+        ; .byte _AZXI-_A0 ; 81 sta.zxi
+        ; .byte 0         ; 82
+        ; .byte 0         ; 83
+        ; .byte _AZ-_A0   ; 84 sty.z
+        ; .byte _AZ-_A0   ; 85 sta.z
+        ; .byte _AZ-_A0   ; 86 stx.z
+        ; .byte _AZ-_A0   ; 87 smb0.z
+        ; .byte 0         ; 88 dey
+        ; .byte _AN-_A0   ; 89 bit.#
+        ; .byte 0         ; 8A txa
+        ; .byte 0         ; 8B
+        ; .byte _A2-_A0   ; 8C sty
+        ; .byte _A2-_A0   ; 8D sta
+        ; .byte _A2-_A0   ; 8E stx
+        ; .byte _A2-_A0   ; 8F bbs0
+        ; .byte _A1-_A0   ; 90 bcc
+        ; .byte _AZIY-_A0 ; 91 sta.ziy
+        ; .byte _AZI-_A0  ; 92 sta.zi
+        ; .byte 0         ; 93
+        ; .byte _AZX-_A0  ; 94 sty.zx
+        ; .byte _AZX-_A0  ; 95 sta.zx
+        ; .byte _AZY-_A0  ; 96 stx.zy
+        ; .byte _AZ-_A0   ; 97 smb1.z
+        ; .byte 0         ; 98 tya
+        ; .byte _AY-_A0   ; 99 sta.y
+        ; .byte 0         ; 9A txs
+        ; .byte 0         ; 9B
+        ; .byte _A2-_A0   ; 9C stz
+        ; .byte _AX-_A0   ; 9D sta.x
+        ; .byte _AX-_A0   ; 9E stz.x
+        ; .byte _A2-_A0   ; 9F bbs1
+        ; .byte _AN-_A0   ; A0 ldy.#
+        ; .byte _AZXI-_A0 ; A1 lda.zxi
+        ; .byte _AN-_A0   ; A2 ldx.#
+        ; .byte 0         ; A3
+        ; .byte _AZ-_A0   ; A4 ldy.z
+        ; .byte _AZ-_A0   ; A5 lda.z
+        ; .byte _AZ-_A0   ; A6 ldx.z
+        ; .byte _AZ-_A0   ; A7 smb2.z
+        ; .byte 0         ; A8 tay
+        ; .byte _AN-_A0   ; A9 lda.#
+        ; .byte 0         ; AA tax
+        ; .byte 0         ; AB
+        ; .byte _A2-_A0   ; AC ldy
+        ; .byte _A2-_A0   ; AD lda
+        ; .byte _A2-_A0   ; AE ldx
+        ; .byte _A2-_A0   ; AF bbs2
+        ; .byte _A1-_A0   ; B0 bcs
+        ; .byte _AZIY-_A0 ; B1 lda.ziy
+        ; .byte _AZI-_A0  ; B2 lda.zi
+        ; .byte 0         ; B3
+        ; .byte _AZX-_A0  ; B4 ldy.zx
+        ; .byte _AZX-_A0  ; B5 lda.zx
+        ; .byte _AZY-_A0  ; B6 ldx.zy
+        ; .byte _AZ-_A0   ; B7 smb3.z
+        ; .byte 0         ; B8 clv
+        ; .byte _AY-_A0   ; B9 lda.y
+        ; .byte 0         ; BA tsx
+        ; .byte 0         ; BB
+        ; .byte _AX-_A0   ; BC ldy.x
+        ; .byte _AX-_A0   ; BD lda.x
+        ; .byte _AY-_A0   ; BE ldx.y
+        ; .byte _A2-_A0   ; BF bbs4
+        ; .byte _AN-_A0   ; C0 cpy.#
+        ; .byte _AZXI-_A0 ; C1 cmp.zxi
+        ; .byte 0         ; C2
+        ; .byte 0         ; C3
+        ; .byte _AZ-_A0   ; C4 cpy.z
+        ; .byte _AZ-_A0   ; C5 cmp.z
+        ; .byte _AZ-_A0   ; C6 dec.z
+        ; .byte _AZ-_A0   ; C7 smb4.z
+        ; .byte 0         ; C8 iny
+        ; .byte _AN-_A0   ; C9 cmp.#
+        ; .byte 0         ; CA dex
+        ; .byte 0         ; CB
+        ; .byte _A2-_A0   ; CC cpy
+        ; .byte _A2-_A0   ; CD cmp
+        ; .byte _A2-_A0   ; CE dec
+        ; .byte _A2-_A0   ; CF bbs4
+        ; .byte _A1-_A0   ; D0 bne
+        ; .byte _AZIY-_A0 ; D1 cmp.ziy
+        ; .byte _AZI-_A0  ; D2 cmp.zi
+        ; .byte 0         ; D3
+        ; .byte 0         ; D4
+        ; .byte _AZX-_A0  ; D5 cmp.zx
+        ; .byte _AZX-_A0  ; D6 dec.zx
+        ; .byte _AZ-_A0   ; D7 smb5.z
+        ; .byte 0         ; D8 cld
+        ; .byte _AY-_A0   ; D9 cmp.y
+        ; .byte 0         ; DA phx
+        ; .byte 0         ; DB
+        ; .byte 0         ; DC
+        ; .byte _AX-_A0   ; DD cmp.x
+        ; .byte _AX-_A0   ; DE dec.x
+        ; .byte _A2-_A0   ; DF bbs5
+        ; .byte _AN-_A0   ; E0 cpx.#
+        ; .byte _AZXI-_A0 ; E1 sbc.zxi
+        ; .byte 0         ; E2
+        ; .byte 0         ; E3
+        ; .byte _AZ-_A0   ; E4 cpx.z
+        ; .byte _AZ-_A0   ; E5 sbc.z
+        ; .byte _AZ-_A0   ; E6 inc.z
+        ; .byte _AZ-_A0   ; E7 smb6.z
+        ; .byte 0         ; E8 inx
+        ; .byte _AN-_A0   ; E9 sbc.#
+        ; .byte 0         ; EA nop
+        ; .byte 0         ; EB
+        ; .byte _A2-_A0   ; EC cpx
+        ; .byte _A2-_A0   ; ED sbc
+        ; .byte _A2-_A0   ; EE inc
+        ; .byte _A2-_A0   ; EF bbs6
+        ; .byte _A1-_A0   ; F0 beq
+        ; .byte _AZIY-_A0 ; F1 sbc.ziy
+        ; .byte _AZI-_A0  ; F2 sbc.zi
+        ; .byte 0         ; F3
+        ; .byte 0         ; F4
+        ; .byte _AZX-_A0  ; F5 sbc.zx
+        ; .byte _AZX-_A0  ; F6 inc.zx
+        ; .byte _AZ-_A0   ; F7 smb7.z
+        ; .byte 0         ; F8 sed
+        ; .byte _AY-_A0   ; F9 sbc.y
+        ; .byte 0         ; FA plx
+        ; .byte 0         ; FB
+        ; .byte 0         ; FC
+        ; .byte _AX-_A0   ; FD sbc.x
+        ; .byte _AX-_A0   ; FE inc.x
+        ; .byte _A2-_A0   ; FF bbs7
 
-        ; Opcodes 10-1F
-        .word oc10, oc11, oc12, oc__, oc14, oc15, oc16, oc17
-        .word oc18, oc19, oc1a, oc__, oc1c, oc1d, oc__, oc1f 
-        
-        ; Opcodes 20-2F
-        .word oc20, oc21, oc__, oc__, oc24, oc25, oc26, oc27
-        .word oc28, oc29, oc2a, oc__, oc2c, oc2d, oc2e, oc2f 
+; _A0: ; address mode info
+        ; 1st byte:
+            ; hi nibble is # of operand bytes
+            ; lo nibble is # of characters in string
+        ; .byte $00
+; _A1:    .byte $10
+; _A2:    .byte $20
+; _A2Dot: .byte $21,"."
+; _AA:    .byte $02,".a"
+; _AI:    .byte $22,".i"
+; _AN:    .byte $12,".#"
+; _AX:    .byte $22,".x"
+; _AXI:   .byte $23,".xi"
+; _AY:    .byte $22,".y"
+; _AZ:    .byte $12,".z"
+; _AZI:   .byte $13,".zi"
+; _AZIY:  .byte $14,".ziy"
+; _AZX:   .byte $13,".zx"
+; _AZY:   .byte $13,".zy"
+; _AZXI:  .byte $14,".zxi"
 
-        ; Opcodes 30-3F
-        .word oc30, oc31, oc32, oc__, oc34, oc35, oc36, oc37
-        .word oc38, oc39, oc3a, oc__, oc3c, oc3d, oc3e, oc0f 
 
-        ; Opcodes 40-4F
-        .word oc40, oc41, oc__, oc__, oc__, oc45, oc46, oc47
-        .word oc48, oc49, oc4a, oc__, oc4c, oc4d, oc4e, oc4f 
+; _MTbl: ; mnemonics indexed by opcode
+        ; .byte _M_brk-_M0    ;00
+        ; .byte _M_ora-_M0
+        ; .byte 0
+        ; .byte 0
+        ; .byte _M_tsb-_M0    ;04
+        ; .byte _M_ora-_M0
+        ; .byte _M_asl-_M0
+        ; .byte _M_rmb-_M0
+        ; .byte _M_php-_M0    ;08
+        ; .byte _M_ora-_M0
+        ; .byte _M_asl-_M0
+        ; .byte 0
+        ; .byte _M_tsb-_M0    ;0c
+        ; .byte _M_ora-_M0
+        ; .byte _M_asl-_M0
+        ; .byte _M_bbr-_M0
+        ; .byte _M_bpl-_M0    ;10
+        ; .byte _M_ora-_M0
+        ; .byte _M_ora-_M0
+        ; .byte 0
+        ; .byte _M_trb-_M0    ;14
+        ; .byte _M_ora-_M0
+        ; .byte _M_asl-_M0
+        ; .byte _M_rmb-_M0
+        ; .byte _M_clc-_M0    ;18
+        ; .byte _M_ora-_M0
+        ; .byte _M_inc-_M0
+        ; .byte 0
+        ; .byte _M_trb-_M0    ;1C
+        ; .byte _M_ora-_M0
+        ; .byte _M_asl-_M0
+        ; .byte _M_bbr-_M0
+        ; .byte _M_jsr-_M0    ;20
+        ; .byte _M_and-_M0
+        ; .byte 0
+        ; .byte 0
+        ; .byte _M_bit-_M0    ;24
+        ; .byte _M_and-_M0
+        ; .byte _M_rol-_M0
+        ; .byte _M_rmb-_M0
+        ; .byte _M_plp-_M0    ;28
+        ; .byte _M_and-_M0
+        ; .byte _M_rol-_M0
+        ; .byte 0
+        ; .byte _M_bit-_M0    ;2c
+        ; .byte _M_and-_M0
+        ; .byte _M_rol-_M0
+        ; .byte _M_bbr-_M0
+        ; .byte _M_bmi-_M0    ;30
+        ; .byte _M_and-_M0
+        ; .byte _M_and-_M0
+        ; .byte 0
+        ; .byte _M_bit-_M0    ;34
+        ; .byte _M_and-_M0
+        ; .byte _M_rol-_M0
+        ; .byte _M_rmb-_M0
+        ; .byte _M_sec-_M0    ;38
+        ; .byte _M_and-_M0
+        ; .byte _M_dec-_M0
+        ; .byte 0
+        ; .byte _M_bit-_M0    ;3c
+        ; .byte _M_and-_M0
+        ; .byte _M_rol-_M0
+        ; .byte _M_bbr-_M0
+        ; .byte _M_rti-_M0    ;40
+        ; .byte _M_eor-_M0
+        ; .byte 0
+        ; .byte 0
+        ; .byte 0             ;44
+        ; .byte _M_eor-_M0
+        ; .byte _M_lsr-_M0
+        ; .byte _M_rmb-_M0
+        ; .byte _M_pha-_M0    ;48
+        ; .byte _M_eor-_M0
+        ; .byte _M_lsr-_M0
+        ; .byte 0
+        ; .byte _M_jmp-_M0    ;4c
+        ; .byte _M_eor-_M0
+        ; .byte _M_lsr-_M0
+        ; .byte _M_bbr-_M0
+        ; .byte _M_bvc-_M0    ;50
+        ; .byte _M_eor-_M0
+        ; .byte _M_eor-_M0
+        ; .byte 0
+        ; .byte 0             ;54
+        ; .byte _M_eor-_M0
+        ; .byte _M_lsr-_M0
+        ; .byte _M_rmb-_M0
+        ; .byte _M_cli-_M0    ;58
+        ; .byte _M_eor-_M0
+        ; .byte _M_phy-_M0
+        ; .byte 0
+        ; .byte 0             ;5C
+        ; .byte _M_eor-_M0
+        ; .byte _M_lsr-_M0
+        ; .byte _M_bbr-_M0
+        ; .byte _M_rts-_M0    ;60
+        ; .byte _M_adc-_M0
+        ; .byte 0
+        ; .byte 0
+        ; .byte _M_stz-_M0    ;64
+        ; .byte _M_adc-_M0
+        ; .byte _M_ror-_M0
+        ; .byte _M_rmb-_M0
+        ; .byte _M_pla-_M0    ;68
+        ; .byte _M_adc-_M0
+        ; .byte _M_ror-_M0
+        ; .byte 0
+        ; .byte _M_jmp-_M0    ;6C
+        ; .byte _M_adc-_M0
+        ; .byte _M_ror-_M0
+        ; .byte _M_bbr-_M0
+        ; .byte _M_bvs-_M0    ;70
+        ; .byte _M_adc-_M0
+        ; .byte _M_adc-_M0
+        ; .byte 0
+        ; .byte _M_stz-_M0    ;74
+        ; .byte _M_adc-_M0
+        ; .byte _M_ror-_M0
+        ; .byte _M_rmb-_M0
+        ; .byte _M_sei-_M0    ;78
+        ; .byte _M_adc-_M0
+        ; .byte _M_ply-_M0
+        ; .byte 0
+        ; .byte _M_jmp-_M0    ;7C
+        ; .byte _M_adc-_M0
+        ; .byte _M_ror-_M0
+        ; .byte _M_bbr-_M0
+        ; .byte _M_bra-_M0    ;80
+        ; .byte _M_sta-_M0
+        ; .byte 0
+        ; .byte 0
+        ; .byte _M_sty-_M0    ;84
+        ; .byte _M_sta-_M0
+        ; .byte _M_stx-_M0
+        ; .byte _M_smb-_M0
+        ; .byte _M_dey-_M0    ;88
+        ; .byte _M_bit-_M0
+        ; .byte _M_txa-_M0
+        ; .byte 0
+        ; .byte _M_sty-_M0    ;8c
+        ; .byte _M_sta-_M0
+        ; .byte _M_stx-_M0
+        ; .byte _M_bbs-_M0
+        ; .byte _M_bcc-_M0    ;90
+        ; .byte _M_sta-_M0
+        ; .byte _M_sta-_M0
+        ; .byte 0
+        ; .byte _M_sty-_M0    ;94
+        ; .byte _M_sta-_M0
+        ; .byte _M_stx-_M0
+        ; .byte _M_smb-_M0
+        ; .byte _M_tya-_M0    ;98
+        ; .byte _M_sta-_M0
+        ; .byte _M_txs-_M0
+        ; .byte 0
+        ; .byte _M_stz-_M0    ;9C
+        ; .byte _M_sta-_M0
+        ; .byte _M_stz-_M0
+        ; .byte _M_bbs-_M0
+        ; .byte _M_ldy-_M0    ;A0
+        ; .byte _M_lda-_M0
+        ; .byte _M_ldx-_M0
+        ; .byte 0
+        ; .byte _M_ldy-_M0    ;A4
+        ; .byte _M_lda-_M0
+        ; .byte _M_ldx-_M0
+        ; .byte _M_smb-_M0
+        ; .byte _M_tay-_M0    ;A8
+        ; .byte _M_lda-_M0
+        ; .byte _M_tax-_M0
+        ; .byte 0
+        ; .byte _M_ldy-_M0    ;AC
+        ; .byte _M_lda-_M0
+        ; .byte _M_ldx-_M0
+        ; .byte _M_bbs-_M0
+        ; .byte _M_bcs-_M0    ;B0
+        ; .byte _M_lda-_M0
+        ; .byte _M_lda-_M0
+        ; .byte 0
+        ; .byte _M_ldy-_M0    ;B4
+        ; .byte _M_lda-_M0
+        ; .byte _M_ldx-_M0
+        ; .byte _M_smb-_M0
+        ; .byte _M_clv-_M0    ;B8
+        ; .byte _M_lda-_M0
+        ; .byte _M_tax-_M0
+        ; .byte 0
+        ; .byte _M_ldy-_M0    ;BC
+        ; .byte _M_lda-_M0
+        ; .byte _M_ldx-_M0
+        ; .byte _M_bbs-_M0
+        ; .byte _M_cpy-_M0    ;C0
+        ; .byte _M_cmp-_M0
+        ; .byte 0
+        ; .byte 0
+        ; .byte _M_cpy-_M0    ;C4
+        ; .byte _M_cmp-_M0
+        ; .byte _M_dec-_M0
+        ; .byte _M_smb-_M0
+        ; .byte _M_iny-_M0    ;C8
+        ; .byte _M_cmp-_M0
+        ; .byte _M_dex-_M0
+        ; .byte 0
+        ; .byte _M_cpy-_M0    ;CC
+        ; .byte _M_cmp-_M0
+        ; .byte _M_dec-_M0
+        ; .byte _M_bbs-_M0
+        ; .byte _M_bne-_M0    ;D0
+        ; .byte _M_cmp-_M0
+        ; .byte _M_cmp-_M0
+        ; .byte 0
+        ; .byte 0             ;D4
+        ; .byte _M_cmp-_M0
+        ; .byte _M_dec-_M0
+        ; .byte _M_smb-_M0
+        ; .byte _M_cld-_M0    ;D8
+        ; .byte _M_cmp-_M0
+        ; .byte _M_phx-_M0
+        ; .byte 0
+        ; .byte 0             ;DC
+        ; .byte _M_cmp-_M0
+        ; .byte _M_dec-_M0
+        ; .byte _M_bbs-_M0
+        ; .byte _M_cpx-_M0    ;E0
+        ; .byte _M_sbc-_M0
+        ; .byte 0
+        ; .byte 0
+        ; .byte _M_cpx-_M0    ;E4
+        ; .byte _M_sbc-_M0
+        ; .byte _M_inc-_M0
+        ; .byte _M_smb-_M0
+        ; .byte _M_inx-_M0    ;E8
+        ; .byte _M_sbc-_M0
+        ; .byte _M_nop-_M0
+        ; .byte 0
+        ; .byte _M_cpx-_M0    ;EC
+        ; .byte _M_sbc-_M0
+        ; .byte _M_inc-_M0
+        ; .byte _M_bbs-_M0
+        ; .byte _M_beq-_M0    ;F0
+        ; .byte _M_sbc-_M0
+        ; .byte _M_sbc-_M0
+        ; .byte 0
+        ; .byte 0             ;F4
+        ; .byte _M_sbc-_M0
+        ; .byte _M_inc-_M0
+        ; .byte _M_smb-_M0
+        ; .byte _M_sed-_M0    ;F8
+        ; .byte _M_sbc-_M0
+        ; .byte _M_plx-_M0
+        ; .byte 0
+        ; .byte 0             ;FC
+        ; .byte _M_sbc-_M0
+        ; .byte _M_inc-_M0
+        ; .byte _M_bbs-_M0
 
-        ; Opcodes 50-5F
-        .word oc50, oc51, oc52, oc__, oc__, oc55, oc56, oc57
-        .word oc58, oc59, oc5a, oc__, oc__, oc__, oc5e, oc5f 
-        
-        ; Opcodes 60-6F
-        .word oc60, oc61, oc__, oc__, oc64, oc65, oc66, oc67
-        .word oc68, oc69, oc6a, oc__, oc6c, oc6d, oc6e, oc6f 
-
-        ; Opcodes 70-7F
-        .word oc70, oc71, oc72, oc__, oc74, oc75, oc76, oc77
-        .word oc78, oc79, oc7a, oc__, oc7c, oc7d, oc7e, oc7f 
-
-        ; Opcodes 80-8F
-        .word oc80, oc81, oc__, oc__, oc84, oc85, oc86, oc__
-        .word oc88, oc89, oc8a, oc__, oc8c, oc8d, oc8e, oc8f 
-
-        ; Opcodes 90-9F
-        .word oc90, oc91, oc92, oc__, oc94, oc95, oc96, oc97
-        .word oc98, oc99, oc9a, oc__, oc9c, oc9d, oc9e, oc9f 
-        
-        ; Opcodes A0-AF
-        .word oca0, oca1, oca2, oc__, oca4, oca5, oca6, oca7
-        .word oca8, oca9, ocaa, oc__, ocac, ocad, ocae, ocaf 
-
-        ; Opcodes B0-BF
-        .word ocb0, ocb1, ocb2, oc__, ocb4, ocb5, ocb6, ocb7
-        .word ocb8, ocb9, ocba, oc__, ocbc, ocbd, ocbe, ocbf 
-
-        ; Opcodes C0-CF
-        .word occ0, occ1, oc__, oc__, occ4, occ5, occ6, occ7
-        .word occ8, occ9, occa, oc__, occc, occd, occe, occf 
-
-        ; Opcodes D0-DF
-        .word ocd0, ocd1, ocd2, oc__, oc__, ocd5, ocd6, ocd7
-        .word ocd8, ocd9, ocda, oc__, oc__, ocdd, ocde, ocdf 
-        
-        ; Opcodes E0-EF
-        .word oce0, oce1, oc__, oc__, oce4, oce5, oce6, oce7
-        .word oce8, oce9, ocea, oc__, ocec, oced, ocee, ocef 
-
-        ; Opcodes F0-FF
-        .word ocf0, ocf1, ocf2, oc__, oc__, ocf5, ocf6, ocf7
-        .word ocf8, ocf9, ocfa, oc__, oc__, ocfd, ocfe, ocff
-
-        
-; =========================================================
-oc_table:
-        ; Opcode data table for the disassember, which is also be used by the
-        ; assembler. Each entry starts with a "lengths byte":
-      
-        ;       bit 7-6:  Length of instruction in bytes (1 to 3 for the 65c02)
-        ;       bit 5-3:  unused
-        ;       bit 2-0:  Length of mnemonic in chars (3 to 7)
-
-        ; To convert a line in this table to a Forth string of the mnemonic,
-        ; use the COUNT word on the address of the lengths byte to get 
-        ; ( addr u ) and then mask all but the bits 2-0 of the TOS.
-
-        ; To make debugging easier, we keep the raw numbers for the lengths of
-        ; the instruction and mnemonicis and let the assembler do the math
-        ; required to shift and add. The actual mnemonic string follows after
-        ; and is not zero terminated.
+; _M0: ; mnemonics
+            ; .byte "?  "
+; _M_adc:     .byte "adc"
+; _M_and:     .byte "and"
+; _M_asl:     .byte "asl"
+; _M_bbr:     .byte $80+$62,"br"
+; _M_bbs:     .byte $80+$62,"bs"
+; _M_bcc:     .byte "bcc"
+; _M_bcs:     .byte "bcs"
+; _M_beq:     .byte "beq"
+; _M_bit:     .byte "bit"
+; _M_bmi:     .byte "bmi"
+; _M_bne:     .byte "bne"
+; _M_bpl:     .byte "bpl"
+; _M_bra:     .byte "bra"
+; _M_brk:     .byte "brk"
+; _M_bvc:     .byte "bvc"
+; _M_bvs:     .byte "bvs"
+; _M_clc:     .byte "clc"
+; _M_cld:     .byte "cld"
+; _M_cli:     .byte "cli"
+; _M_clv:     .byte "clv"
+; _M_cmp:     .byte "cmp"
+; _M_cpx:     .byte "cpx"
+; _M_cpy:     .byte "cpy"
+; _M_dec:     .byte "dec"
+; _M_dex:     .byte "dex"
+; _M_dey:     .byte "dey"
+; _M_eor:     .byte "eor"
+; _M_inc:     .byte "inc"
+; _M_inx:     .byte "inx"
+; _M_iny:     .byte "iny"
+; _M_jmp:     .byte "jmp"
+; _M_jsr:     .byte "jsr"
+; _M_lda:     .byte "lda"
+; _M_ldx:     .byte "ldx"
+; _M_ldy:     .byte "ldy"
+; _M_lsr:     .byte "lsr"
+; _M_nop:     .byte "nop"
+; _M_ora:     .byte "ora"
+; _M_pha:     .byte "pha"
+; _M_php:     .byte "php"
+; _M_phx:     .byte "phx"
+; _M_phy:     .byte "phy"
+; _M_pla:     .byte "pla"
+; _M_plp:     .byte "plp"
+; _M_plx:     .byte "plx"
+; _M_ply:     .byte "ply"
+; _M_rmb:     .byte $80+$72,"mb"
+; _M_rol:     .byte "rol"
+; _M_ror:     .byte "ror"
+; _M_rti:     .byte "rti"
+; _M_rts:     .byte "rts"
+; _M_sec:     .byte "sec"
+; _M_sed:     .byte "sed"
+; _M_sei:     .byte "sei"
+; _M_smb:     .byte $80+$73,"mb"
+; _M_sbc:     .byte "sbc"
+; _M_sta:     .byte "sta"
+; _M_stx:     .byte "stx"
+; _M_sty:     .byte "sty"
+; _M_stz:     .byte "stz"
+; _M_tax:     .byte "tax"
+; _M_tay:     .byte "tay"
+; _M_trb:     .byte "trb"
+; _M_tsb:     .byte "tsb"
+; _M_tsx:     .byte "tsx"
+; _M_txa:     .byte "txa"
+; _M_txs:     .byte "txs"
+; _M_tya:     .byte "tya"
  
-	oc00:	.byte 2*64+3, "brk"              ; enforce the signature byte
-	oc01:	.byte 2*64+7, "ora.zxi"
-;      (oc02)
-;      (oc03)
-        oc04:   .byte 2*64+5, "tsb.z"
-	oc05:	.byte 2*64+5, "ord.z"
-	oc06:	.byte 2*64+5, "asl.z"
-;      (oc07)
-	oc08:	.byte 1*64+3, "php"
-	oc09:	.byte 2*64+5, "ora.#"
-	oc0a:	.byte 1*64+5, "asl.a"
-;      (oc0b)
-	oc0c:	.byte 3*64+3, "tsb"
-	oc0d:	.byte 3*64+3, "ora"
-	oc0e:	.byte 3*64+3, "asl"
-	oc0f:	.byte 3*64+4, "bbr0"
-
-	oc10:	.byte 2*64+3, "bpl"
-	oc11:	.byte 2*64+7, "ora.ziy"
-	oc12:	.byte 2*64+6, "ora.zi"
-;      (oc13:)
-	oc14:	.byte 2*64+5, "trb.z"
-	oc15:	.byte 2*64+6, "ora.zx"
-	oc16:	.byte 2*64+6, "asl.zx"
-	oc17:	.byte 2*64+6, "rmb1.z"
-	oc18:	.byte 1*64+3, "clc"
-	oc19:	.byte 3*64+5, "ora.y"
-	oc1a:	.byte 1*64+5, "inc.a"
-;      (oc1b:)
-	oc1c:	.byte 3*64+3, "trb"
-	oc1d:	.byte 3*64+5, "ora.x"
-;      (oc1e:)
-	oc1f:	.byte 3*64+5, "asl.x"
-
-	oc20:	.byte 3*64+3, "jsr"
-	oc21:	.byte 2*64+7, "and.zxi"
-;      (oc22:)
-;      (oc23:)
-	oc24:	.byte 2*64+5, "bit.z"
-	oc25:	.byte 2*64+5, "and.z"
-	oc26:	.byte 2*64+5, "rol.z"
-	oc27:	.byte 2*64+6, "rmb2.z"
-	oc28:	.byte 1*64+3, "plp"
-	oc29:	.byte 2*64+5, "and.#"
-	oc2a:	.byte 1*64+5, "rol.a"
-;      (oc2b:)
-	oc2c:	.byte 3*64+3, "bit"
-	oc2d:	.byte 3*64+4, "and."
-	oc2e:	.byte 3*64+3, "rol"
-	oc2f:	.byte 3*64+4, "bbr2"
-
-	oc30:	.byte 2*64+3, "bmi"
-	oc31:	.byte 2*64+7, "and.ziy"
-	oc32:	.byte 2*64+6, "and.zi"
-;      (oc33:)
-	oc34:	.byte 2*64+7, "bit.zxi"
-	oc35:	.byte 2*64+6, "and.zx"
-	oc36:	.byte 2*64+6, "rol.zx"
-	oc37:	.byte 2*64+6, "rmb3.z"
-	oc38:	.byte 1*64+3, "sec"
-	oc39:	.byte 3*64+5, "and.y"
-	oc3a:	.byte 1*64+5, "dec.a"
-;      (oc3b:)
-	oc3c:	.byte 3*64+5, "bit.x"
-	oc3d:	.byte 3*64+5, "and.x"
-	oc3e:	.byte 3*64+5, "rol.x"
-	oc3f:	.byte 3*64+4, "bbr3"
-
-	oc40:	.byte 1*64+3, "rti"
-	oc41:	.byte 2*64+7, "eor.zxi"
-;      (oc42:)
-;      (oc43:)
-;      (oc44:)
-	oc45:	.byte 2*64+5, "eor.z"
-	oc46:	.byte 2*64+5, "lsr.z"
-	oc47:	.byte 2*64+6, "rbm4.z"
-	oc48:	.byte 1*64+3, "pha"
-	oc49:	.byte 2*64+5, "eor.#"
-	oc4a:	.byte 1*64+5, "lsr.a"
-;      (oc4b:)
-	oc4c:	.byte 3*64+3, "jmp"
-	oc4d:	.byte 3*64+3, "eor"
-	oc4e:	.byte 3*64+3, "lsr"
-	oc4f:	.byte 3*64+4, "bbr4"
-
-	oc50:	.byte 2*64+3, "bvc"
-	oc51:	.byte 2*64+7, "eor.ziy"
-	oc52:	.byte 2*64+6, "eor.zi"
-;      (oc53:)
-;      (oc54:)
-	oc55:	.byte 2*64+6, "eor.zx"
-	oc56:	.byte 2*64+6, "lsr.zx"
-	oc57:	.byte 2*64+6, "rbm5.z"
-	oc58:	.byte 1*64+3, "cli"
-	oc59:	.byte 3*64+5, "eor.y"
-	oc5a:	.byte 1*64+3, "phy"
-;      (oc5b:)
-;      (oc5c:)
-	oc5d:	.byte 3*64+5, "eor.x"
-	oc5e:	.byte 3*64+5, "lsr.x"
-	oc5f:	.byte 3*64+4, "bbr5"
-
-	oc60:	.byte 1*64+3, "rts"
-	oc61:	.byte 2*64+7, "adc.zxi"
-;      (oc62:)
-;      (oc63:)
-	oc64:	.byte 2*64+5, "stz.z"
-	oc65:	.byte 2*64+5, "adc.z"
-	oc66:	.byte 2*64+5, "ror.z"
-	oc67:	.byte 2*64+6, "rmb6.z"
-	oc68:	.byte 1*64+3, "pla"
-	oc69:	.byte 2*64+5, "adc.#"
-	oc6a:	.byte 1*64+5, "ror.a"
-;      (oc6b:)
-	oc6c:	.byte 3*64+5, "jmp.i"
-	oc6d:	.byte 3*64+3, "adc"
-	oc6e:	.byte 3*64+3, "ror"
-	oc6f:	.byte 3*64+4, "bbr6"
-
-	oc70:	.byte 2*64+3, "bvs"
-	oc71:	.byte 2*64+7, "adc.ziy"
-	oc72:	.byte 2*64+6, "adc.zi"
-;      (oc73:)
-	oc74:	.byte 2*64+6, "stz.zx"
-	oc75:	.byte 2*64+6, "adc.zx"
-	oc76:	.byte 2*64+6, "ror.zx"
-	oc77:	.byte 2*64+6, "rmb7.z"
-	oc78:	.byte 1*64+3, "sei"
-	oc79:	.byte 3*64+5, "adc.y"
-	oc7a:	.byte 1*64+3, "ply"
-;      (oc7b:)
-	oc7c:	.byte 3*64+6, "jmp.xi"
-	oc7d:	.byte 3*64+5, "adc.x"
-	oc7e:	.byte 3*64+5, "ror.x"
-	oc7f:	.byte 3*64+4, "bbr7"
-
-	oc80:	.byte 2*64+3, "bra"
-	oc81:	.byte 2*64+7, "sta.zxi"
-;      (oc82:)
-;      (oc83:)
-	oc84:	.byte 2*64+5, "sty.z"
-	oc85:	.byte 2*64+5, "sta.z"
-	oc86:	.byte 2*64+5, "stx.z"
-;      (oc87:)
-	oc88:	.byte 1*64+3, "dey"
-	oc89:	.byte 2*64+5, "bit.#"
-	oc8a:	.byte 1*64+3, "txa"
-;      (oc8b:)
-	oc8c:	.byte 3*64+3, "sty"
-	oc8d:	.byte 3*64+3, "sta"
-	oc8e:	.byte 3*64+3, "stx"
-	oc8f:	.byte 3*64+4, "bbs0"
-
-	oc90:	.byte 2*64+3, "bcc"
-	oc91:	.byte 2*64+7, "sta.ziy"
-	oc92:	.byte 2*64+6, "sta.zi"
-;      (oc93:)
-	oc94:	.byte 2*64+6, "sty.zx"
-	oc95:	.byte 2*64+6, "sta.zx"
-	oc96:	.byte 2*64+6, "stx.zy"
-	oc97:	.byte 2*64+6, "smb1.z"
-	oc98:	.byte 1*64+3, "tya"
-	oc99:	.byte 3*64+5, "sta.y"
-	oc9a:	.byte 1*64+3, "txs"
-;      (oc9b:)
-	oc9c:	.byte 3*64+3, "stz"
-	oc9d:	.byte 3*64+5, "sta.x"
-	oc9e:	.byte 3*64+5, "stz.x"
-	oc9f:	.byte 3*64+4, "bbs1"
-
-	oca0:	.byte 2*64+5, "ldy.#"
-	oca1:	.byte 2*64+7, "lda.zxi"
-	oca2:	.byte 2*64+5, "ldx.#"
-;      (oca3:)
-	oca4:	.byte 2*64+5, "ldy.z"
-	oca5:	.byte 2*64+5, "lda.z"
-	oca6:	.byte 2*64+5, "ldx.z"
-	oca7:	.byte 2*64+6, "smb2.z"
-	oca8:	.byte 1*64+3, "tay"
-	oca9:	.byte 2*64+5, "lda.#"
-	ocaa:	.byte 1*64+3, "tax"
-;      (ocab:)
-	ocac:	.byte 3*64+3, "ldy"
-	ocad:	.byte 3*64+3, "lda"
-	ocae:	.byte 3*64+3, "ldx"
-	ocaf:	.byte 3*64+4, "bbs2"
-
-	ocb0:	.byte 2*64+3, "bcs"
-	ocb1:	.byte 2*64+7, "lda.ziy"
-	ocb2:	.byte 2*64+6, "lda.zi"
-;      (ocb3:)
-	ocb4:	.byte 2*64+6, "ldy.zx"
-	ocb5:	.byte 2*64+6, "lda.zx"
-	ocb6:	.byte 2*64+6, "ldx.zy"
-	ocb7:	.byte 2*64+6, "smb3.z"
-	ocb8:	.byte 1*64+3, "clv"
-	ocb9:	.byte 3*64+5, "lda.y"
-	ocba:	.byte 1*64+3, "tsx"
-;      (ocbb:)
-	ocbc:	.byte 3*64+5, "ldy.x"
-	ocbd:	.byte 3*64+5, "lda.x"
-	ocbe:	.byte 3*64+5, "ldx.y"
-	ocbf:	.byte 3*64+4, "bbs4"
-
-	occ0:	.byte 2*64+5, "cpy.#"
-	occ1:	.byte 2*64+7, "cmp.zxi"
-;      (occ2:)
-;      (occ3:)
-	occ4:	.byte 2*64+5, "cpy.z"
-	occ5:	.byte 2*64+5, "cmp.z"
-	occ6:	.byte 2*64+5, "dec.z"
-	occ7:	.byte 2*64+6, "smb4.z"
-	occ8:	.byte 1*64+3, "iny"
-	occ9:	.byte 2*64+5, "cmp.#"
-	occa:	.byte 1*64+3, "dex"
-;      (occb:)
-	occc:	.byte 3*64+3, "cpy"
-	occd:	.byte 3*64+3, "cmp"
-	occe:	.byte 3*64+3, "dec"
-	occf:	.byte 3*64+4, "bbs4"
-
-	ocd0:	.byte 2*64+3, "bne"
-	ocd1:	.byte 2*64+7, "cmp.ziy"
-	ocd2:	.byte 2*64+6, "cmp.zi"
-;      (ocd3:)
-;      (ocd4:)
-	ocd5:	.byte 2*64+6, "cmp.zx"
-	ocd6:	.byte 2*64+6, "dec.zx"
-	ocd7:	.byte 2*64+6, "smb5.z"
-	ocd8:	.byte 1*64+3, "cld"
-	ocd9:	.byte 3*64+5, "cmp.y"
-	ocda:	.byte 1*64+3, "phx"
-;      (ocdb:)
-;      (ocdc:)
-	ocdd:	.byte 3*64+5, "cmp.x"
-	ocde:	.byte 3*64+5, "dec.x"
-	ocdf:	.byte 3*64+4, "bbs5"
-
-	oce0:	.byte 2*64+5, "cpx.#"
-	oce1:	.byte 2*64+7, "sbc.zxi"
-;      (oce2:)
-;      (oce3:)
-	oce4:	.byte 2*64+5, "cpx.z"
-	oce5:	.byte 2*64+5, "sbc.z"
-	oce6:	.byte 2*64+5, "inc.z"
-	oce7:	.byte 2*64+6, "smb6.z"
-	oce8:	.byte 1*64+3, "inx"
-	oce9:	.byte 2*64+5, "sbc.#"
-	ocea:	.byte 1*64+3, "nop"
-;      (oceb:)
-	ocec:	.byte 3*64+3, "cpx"
-	oced:	.byte 3*64+3, "sbc"
-	ocee:	.byte 3*64+3, "inc"
-	ocef:	.byte 3*64+4, "bbs6"
-
-	ocf0:	.byte 2*64+3, "beq"
-	ocf1:	.byte 2*64+7, "sbc.ziy"
-	ocf2:	.byte 2*64+6, "sbc.zi"
-;      (ocf3:)
-;      (ocf4:)
-	ocf5:	.byte 2*64+6, "sbc.zx"
-	ocf6:	.byte 2*64+6, "inc.zx"
-	ocf7:	.byte 2*64+6, "smb7.z"
-	ocf8:	.byte 1*64+3, "sed"
-	ocf9:	.byte 3*64+5, "sbc.y"
-	ocfa:	.byte 1*64+3, "plx"
-;      (ocfb:)
-;      (ocfc:)
-	ocfd:	.byte 3*64+5, "sbc.x"
-	ocfe:	.byte 3*64+5, "inc.x"
-	ocff:	.byte 3*64+4, "bbs7"
-
-        ; Common routine for opcodes that are not supported by the 65c02
-	oc__:	.byte 1, "?"
-
-; used to calculate size of assembled disassembler code
-disassembler_end:
+; ; used to calculate size of assembled disassembler code
+; disassembler_end:
+; .scend

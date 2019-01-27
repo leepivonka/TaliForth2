@@ -31,17 +31,23 @@
 ;             |        |  ...   | (name string does not end with a zero)
 ;          +n +--------+--------+
 ;
-; The Status Byte is created by adding the flags defined in
-; definitions.asm, which are:
+.alias nt_length 0
+.alias nt_status 1
+.alias nt_next_nt 2
+.alias nt_xt 4
+.alias nt_z 6
+.alias nt_name 8
 ;
-;       CO - Compile Only
-;       IM - Immediate Word
-;       NN - Never Native Compile (must always be called by JSR)
-;       AN - Always Native Compile (may not be called by JSR)
-;       UF - Contains underflow check
-;       HC - Has CFA (words created by CREATE and DOES> only)
-
-; Note there are currently two bits unused.
+; The Status Byte is created by adding the flags, which are:
+;
+.alias CO 1   ; Compile Only
+.alias AN 2   ; Always Native Compile (may not be called by JSR)
+.alias IM 4   ; Immediate Word
+.alias NN 8   ; Never Native Compile (must always be called by JSR)
+.alias UF 16  ; Includes Underflow Check
+.alias HC 32  ; Word has jsr Code Field Area (CFA)
+.alias R6 64  ; Includes 6 bytes of return stack maintenance that native compile can strip
+              ; other bits are unused.
 
 ; By default, all existing words can be natively compiled (compiled inline)
 ; or as a subroutine jump target; the system decides which variant to use
@@ -87,7 +93,7 @@ nt_forth:
         .byte "forth"
 
 nt_to_order:
-        .byte 6, 0
+        .byte 6, NN
         .word nt_forth, xt_to_order, z_to_order
         .byte ">order"
 
@@ -117,7 +123,7 @@ nt_editor_wordlist:     ; shares code with ONE
         .byte "editor-wordlist"
                 
 nt_assembler_wordlist:
-        .byte 18, 0
+        .byte 18, NN
         .word nt_editor_wordlist, xt_assembler_wordlist, z_assembler_wordlist
         .byte "assembler-wordlist"
 
@@ -152,7 +158,7 @@ nt_search_wordlist:
         .byte "search-wordlist"
                 
 nt_wordlist:
-        .byte 8, 0
+        .byte 8, NN
         .word nt_search_wordlist, xt_wordlist, z_wordlist
         .byte "wordlist"
 
@@ -162,7 +168,7 @@ nt_definitions:
         .byte "definitions"
 
 nt_block_ramdrive_init:
-        .byte 19, UF
+        .byte 19, UF+NN
         .word nt_definitions, xt_block_ramdrive_init, z_block_ramdrive_init
         .byte "block-ramdrive-init"
 
@@ -212,7 +218,7 @@ nt_save_buffers:
         .byte "save-buffers"
                 
 nt_block_read_vector:
-        .byte 17, HC+NN ; Deferred words need the HC (Code Field) flag.
+        .byte 17, NN
         .word nt_save_buffers, xt_block_read_vector, z_block_read_vector
         .byte "block-read-vector"
 
@@ -222,7 +228,7 @@ nt_block_read:
         .byte "block-read"
 
 nt_block_write_vector:
-        .byte 18, NN ; Deferred words need the HC (Code Field) flag.
+        .byte 18, NN
         .word nt_block_read, xt_block_write_vector, z_block_write_vector
         .byte "block-write-vector"
                 
@@ -247,27 +253,27 @@ nt_blkbuffer:
         .byte "blkbuffer"
 
 nt_buffblocknum:
-        .byte 12, 0
+        .byte 12, NN
         .word nt_blkbuffer, xt_buffblocknum, z_buffblocknum
         .byte "buffblocknum"
 
 nt_buffstatus:
-        .byte 10, 0
+        .byte 10, NN
         .word nt_buffblocknum, xt_buffstatus, z_buffstatus
         .byte "buffstatus"
 
 nt_buffer_colon:
-        .byte 7, 0
+        .byte 7, NN
         .word nt_buffstatus, xt_buffer_colon, z_buffer_colon
         .byte "buffer:"
 
 nt_useraddr:
-        .byte 8, 0
+        .byte 8, NN
         .word nt_buffer_colon, xt_useraddr, z_useraddr
         .byte "useraddr"
 
 nt_action_of:
-        .byte 9, IM
+        .byte 9, IM+NN
         .word nt_useraddr, xt_action_of, z_action_of
         .byte "action-of"
 
@@ -277,12 +283,12 @@ nt_is:
         .byte "is"
 
 nt_defer_store:
-        .byte 6, 0
+        .byte 6, NN
         .word nt_is, xt_defer_store, z_defer_store
         .byte "defer!"
 
 nt_defer_fetch:
-        .byte 6, 0
+        .byte 6, NN
         .word nt_defer_store, xt_defer_fetch, z_defer_fetch
         .byte "defer@"
 
@@ -352,12 +358,12 @@ nt_word:
         .byte "word"
 
 nt_find:
-        .byte 4, UF
+        .byte 4, UF+NN
         .word nt_word, xt_find, z_find
         .byte "find"
 
 nt_environment_q:
-        .byte 12, UF 
+        .byte 12, UF+NN
         .word nt_find, xt_environment_q, z_environment_q
         .byte "environment?"
 
@@ -371,9 +377,14 @@ nt_compare:
         .word nt_search, xt_compare, z_compare
         .byte "compare"
 
+nt_sym:
+        .byte 3,UF+NN
+        .word nt_compare, xt_sym, z_sym
+        .byte "sym"
+
 nt_disasm:
-        .byte 6, UF
-        .word nt_compare, xt_disasm, z_disasm
+        .byte 6, UF+NN
+        .word nt_sym, xt_disasm, z_disasm
         .byte "disasm"
 
 nt_dot_s:
@@ -382,12 +393,12 @@ nt_dot_s:
         .byte ".s"
 
 nt_dump:
-        .byte 4, UF
+        .byte 4, NN
         .word nt_dot_s, xt_dump, z_dump
         .byte "dump"
 
 nt_bell:
-        .byte 4, 0
+        .byte 4, NN
         .word nt_dump, xt_bell, z_bell
         .byte "bell"
 
@@ -417,7 +428,7 @@ nt_marker:
         .byte "marker"
 
 nt_at_xy:
-        .byte 5, UF
+        .byte 5, UF+NN
         .word nt_marker, xt_at_xy, z_at_xy
         .byte "at-xy"
 
@@ -427,17 +438,17 @@ nt_page:
         .byte "page"
 
 nt_cr:
-        .byte 2, 0
+        .byte 2, NN
         .word nt_page, xt_cr, z_cr
         .byte "cr"
 
 nt_input:
-        .byte 5, 0
+        .byte 5, NN
         .word nt_cr, xt_input, z_input
         .byte "input"
 
 nt_output:
-        .byte 6, 0
+        .byte 6, NN
         .word nt_input, xt_output, z_output
         .byte "output"
 
@@ -462,7 +473,7 @@ nt_number_sign_s:
         .byte "#s"
 
 nt_number_sign:
-        .byte 1, UF
+        .byte 1, UF+NN
         .word nt_number_sign_s, xt_number_sign, z_number_sign
         .byte "#"
 
@@ -472,12 +483,12 @@ nt_less_number_sign:
         .byte "<#"
 
 nt_to_in:
-        .byte 3, 0
+        .byte 3, NN
         .word nt_less_number_sign, xt_to_in, z_to_in
         .byte ">in"
 
 nt_within:
-        .byte 6, UF
+        .byte 6, UF+NN
         .word nt_to_in, xt_within, z_within
         .byte "within"
 
@@ -532,12 +543,12 @@ nt_mod:
         .byte "mod"
 
 nt_slash_mod:
-        .byte 4, UF
+        .byte 4, UF+NN
         .word nt_mod, xt_slash_mod, z_slash_mod
         .byte "/mod"
 
 nt_slash:
-        .byte 1, UF
+        .byte 1, UF+NN
         .word nt_slash_mod, xt_slash, z_slash
         .byte "/"
 
@@ -562,12 +573,12 @@ nt_star:
         .byte "*"
 
 nt_um_star:
-        .byte 3, UF
+        .byte 3, UF+NN
         .word nt_star, xt_um_star, z_um_star
         .byte "um*"
 
 nt_m_star:
-        .byte 2, UF
+        .byte 2, UF+NN
         .word nt_um_star, xt_m_star, z_m_star
         .byte "m*"
 
@@ -596,14 +607,14 @@ nt_number:
         .word nt_to_number, xt_number, z_number
         .byte "number"
 
-nt_digit_question:
-        .byte 6, UF
-        .word nt_number, xt_digit_question, z_digit_question
-        .byte "digit?"
+;nt_digit_question:
+;        .byte 6, UF
+;        .word nt_number, xt_digit_question, z_digit_question
+;        .byte "digit?"
 
 nt_base:
-        .byte 4, 0
-        .word nt_digit_question, xt_base, z_base
+        .byte 4, NN
+        .word nt_number, xt_base, z_base
         .byte "base"
 
 nt_evaluate:
@@ -617,12 +628,12 @@ nt_state:
         .byte "state"
 
 nt_again:
-        .byte 5, AN+CO+IM+UF
+        .byte 5, AN+CO+IM+UF+NN
         .word nt_state, xt_again, z_again
         .byte "again"
 
 nt_begin:
-        .byte 5, AN+CO+IM
+        .byte 5, AN+CO+IM+NN
         .word nt_again, xt_begin, z_begin
         .byte "begin"
 
@@ -637,7 +648,7 @@ nt_recurse:
         .byte "recurse"
 
 nt_leave:
-        .byte 5, AN+CO
+        .byte 5, NN+CO+IM
         .word nt_recurse, xt_leave, z_leave
         .byte "leave"
 
@@ -652,12 +663,12 @@ nt_exit:
         .byte "exit"
 
 nt_plus_loop:
-        .byte 5, CO+IM
+        .byte 5, CO+IM+NN
         .word nt_exit, xt_plus_loop, z_plus_loop
         .byte "+loop"
 
 nt_loop:
-        .byte 4, CO+IM
+        .byte 4, CO+IM+NN
         .word nt_plus_loop, xt_loop, z_loop
         .byte "loop"
 
@@ -697,7 +708,7 @@ nt_strip_underflow:
         .byte "strip-underflow"
 
 nt_nc_limit:
-        .byte 8, 0
+        .byte 8, NN
         .word nt_strip_underflow, xt_nc_limit, z_nc_limit
         .byte "nc-limit"
 
@@ -717,7 +728,7 @@ nt_never_native:
         .byte "never-native"
 
 nt_compile_only:
-        .byte 12, 0
+        .byte 12, NN
         .word nt_never_native, xt_compile_only, z_compile_only
         .byte "compile-only"
 
@@ -732,7 +743,7 @@ nt_postpone:
         .byte "postpone"
 
 nt_s_backslash_quote:
-        .byte 3, IM
+        .byte 3, IM+NN
         .word nt_postpone, xt_s_backslash_quote, z_s_backslash_quote
         .byte "s", $5C, $22
 
@@ -752,7 +763,7 @@ nt_sliteral:
         .byte "sliteral"
 
 nt_literal:
-        .byte 7, IM+CO+UF
+        .byte 7, IM+CO+UF+NN
         .word nt_sliteral, xt_literal, z_literal
         .byte "literal"
 
@@ -817,7 +828,7 @@ nt_latestxt:
         .byte "latestxt"
 
 nt_defer:
-        .byte 5, 0
+        .byte 5, NN
         .word nt_latestxt, xt_defer, z_defer
         .byte "defer"
 
@@ -832,7 +843,7 @@ nt_name_to_string:
         .byte "name>string"
 
 nt_int_to_name:
-        .byte 8, UF
+        .byte 8, UF+NN
         .word nt_name_to_string, xt_int_to_name, z_int_to_name
         .byte "int>name"
 
@@ -842,32 +853,32 @@ nt_name_to_int:
         .byte "name>int"
 
 nt_bracket_tick:
-        .byte 3, CO+IM
+        .byte 3, CO+IM+NN
         .word nt_name_to_int, xt_bracket_tick, z_bracket_tick
         .byte "[']"
 
 nt_tick:
-        .byte 1, 0
+        .byte 1, NN
         .word nt_bracket_tick, xt_tick, z_tick
         .byte "'"
 
 nt_find_name:
-        .byte 9, UF
+        .byte 9, UF+NN
         .word nt_tick, xt_find_name, z_find_name
         .byte "find-name"
 
 nt_fill:
-        .byte 4, UF
+        .byte 4, UF+NN
         .word nt_find_name, xt_fill, z_fill
         .byte "fill"
 
 nt_blank:
-        .byte 5, 0     ; underflow checked by FILL
+        .byte 5, UF+NN
         .word nt_fill, xt_blank, z_blank
         .byte "blank"
 
 nt_erase:
-        .byte 5, 0      ; underflow checked by FILL
+        .byte 5, UF+NN
         .word nt_blank, xt_erase, z_erase
         .byte "erase"
 
@@ -912,7 +923,7 @@ nt_variable:
         .byte "variable"
 
 nt_does:
-        .byte 5, CO+IM
+        .byte 5, CO+IM+NN
         .word nt_variable, xt_does, z_does
         .byte "does>"
 
@@ -977,7 +988,7 @@ nt_minus_trailing:
         .byte "-trailing"
 
 nt_bl:
-        .byte 2, 0
+        .byte 2, NN
         .word nt_minus_trailing, xt_bl, z_bl
         .byte "bl"
 
@@ -1012,12 +1023,12 @@ nt_invert:
         .byte "invert"
 
 nt_two_to_r:
-        .byte 3, CO+UF          ; native is special case
+        .byte 3, CO+UF+R6       ; native is special case
         .word nt_invert, xt_two_to_r, z_two_to_r
         .byte "2>r"
 
 nt_two_r_from:
-        .byte 3, CO             ; native is special case
+        .byte 3, CO+R6          ; native is special case
         .word nt_two_to_r, xt_two_r_from, z_two_r_from
         .byte "2r>"
 
@@ -1027,7 +1038,7 @@ nt_two_r_fetch:
         .byte "2r@"
 
 nt_two_literal:
-        .byte 8, UF+IM
+        .byte 8, UF+IM+NN
         .word nt_two_r_fetch, xt_two_literal, z_two_literal
         .byte "2literal"
 
@@ -1037,7 +1048,7 @@ nt_two_constant:
         .byte "2constant"
 
 nt_two_variable:
-        .byte 9, 0
+        .byte 9, NN
         .word nt_two_constant, xt_two_variable, z_two_variable
         .byte "2variable"
 
@@ -1157,7 +1168,7 @@ nt_cell_plus:
         .byte "cell+"
 
 nt_cells:
-        .byte 5, 0
+        .byte 5, UF
         .word nt_cell_plus, xt_two_star, z_two_star  ; same as 2*
         .byte "cells"
 
@@ -1172,7 +1183,7 @@ nt_char_plus:
         .byte "char+"
 
 nt_bracket_char:
-        .byte 6, CO+IM
+        .byte 6, CO+IM+NN
         .word nt_char_plus, xt_bracket_char, z_bracket_char
         .byte "[char]"
 
@@ -1241,14 +1252,9 @@ nt_two_dup:
         .word nt_question_dup, xt_two_dup, z_two_dup
         .byte "2dup"
 
-nt_two:
-        .byte 1, 0
-        .word nt_two_dup, xt_two, z_two
-        .byte "2"
-
 nt_one:
         .byte 1, 0
-        .word nt_two, xt_one, z_one
+        .word nt_two_dup, xt_one, z_one
         .byte "1"
 
 nt_zero:
@@ -1292,12 +1298,12 @@ nt_d_dot_r:
         .byte "d.r"
         
 nt_d_dot:     
-        .byte 2, UF
+        .byte 2, UF+NN
         .word nt_d_dot_r, xt_d_dot, z_d_dot
         .byte "d."
         
 nt_dot_r:     
-        .byte 2, UF
+        .byte 2, UF+NN
         .word nt_d_dot, xt_dot_r, z_dot_r
         .byte ".r"
         
@@ -1327,13 +1333,18 @@ nt_emit:
         .byte "emit"
 
 nt_execute:
-        .byte 7, UF
+        .byte 7, UF+NN
         .word nt_emit, xt_execute, z_execute
         .byte "execute"
 
+nt_one_plus_store:
+        .byte 3, UF
+        .word nt_execute, xt_one_plus_store, z_one_plus_store
+        .byte "1+!"
+
 nt_plus_store:
         .byte 2, UF
-        .word nt_execute, xt_plus_store, z_plus_store
+        .word nt_one_plus_store, xt_plus_store, z_plus_store
         .byte "+!"
 
 nt_c_store:
@@ -1372,17 +1383,17 @@ nt_nip:
         .byte "nip"
 
 nt_r_fetch:
-        .byte 2, CO        ; native is special case
+        .byte 2, CO+R6     ; native is special case
         .word nt_nip, xt_r_fetch, z_r_fetch
         .byte "r@"
 
 nt_r_from:
-        .byte 2, CO        ; native is special case
+        .byte 2, CO+R6     ; native is special case
         .word nt_r_fetch, xt_r_from, z_r_from
         .byte "r>"
 
 nt_to_r:
-        .byte 2, CO+UF     ; native is special case
+        .byte 2, CO+UF+R6  ; native is special case
         .word nt_r_from, xt_to_r, z_to_r
         .byte ">r"
 
@@ -1453,33 +1464,33 @@ nt_root_set_order:
 ; EDITOR-WORDLIST
 
 nt_editor_enter_screen:
-        .byte 12, 0
+        .byte 12, NN
         .word 0000, xt_editor_enter_screen, z_editor_enter_screen
         .byte "enter-screen"
 
 nt_editor_erase_screen:
-        .byte 12, 0
+        .byte 12, NN
         .word nt_editor_enter_screen, xt_editor_erase_screen, z_editor_erase_screen
         .byte "erase-screen"
 
 nt_editor_el:
-        .byte 2, 0
+        .byte 2, NN
         .word nt_editor_erase_screen, xt_editor_el, z_editor_el
         .byte "el"
 
 nt_editor_l:
-        .byte 1, 0
+        .byte 1, NN
         .word nt_editor_el, xt_editor_l, z_editor_l
         .byte "l"
 
 nt_editor_line:
-        .byte 4, UF
+        .byte 4, UF+NN
         .word nt_editor_l, xt_editor_line, z_editor_line
         .byte "line"
 
 editor_dictionary_start:
 nt_editor_o:
-        .byte 1, 0
+        .byte 1, NN
         .word nt_editor_line, xt_editor_o, z_editor_o
         .byte "o"
         
@@ -1498,1066 +1509,1066 @@ nt_editor_o:
 ; first at some point. 
 
 nt_asm_adc_h:
-		.byte 5, IM
-		.word 0000
-		.word xt_asm_adc_h, z_asm_adc_h
-		.byte "adc.#"
+                .byte 5, IM
+                .word 0000
+                .word xt_asm_adc_h, z_asm_adc_h
+                .byte "adc.#"
 
 nt_asm_adc_x:
-		.byte 5, IM
-		.word nt_asm_adc_h
-		.word xt_asm_adc_x, z_asm_adc_x
-		.byte "adc.x"
+                .byte 5, IM
+                .word nt_asm_adc_h
+                .word xt_asm_adc_x, z_asm_adc_x
+                .byte "adc.x"
 
 nt_asm_adc_y:
-		.byte 5, IM
-		.word nt_asm_adc_x
-		.word xt_asm_adc_y, z_asm_adc_y
-		.byte "adc.y"
+                .byte 5, IM
+                .word nt_asm_adc_x
+                .word xt_asm_adc_y, z_asm_adc_y
+                .byte "adc.y"
 
 nt_asm_adc_z:
-		.byte 5, IM
-		.word nt_asm_adc_y
-		.word xt_asm_adc_z, z_asm_adc_z
-		.byte "adc.z"
+                .byte 5, IM
+                .word nt_asm_adc_y
+                .word xt_asm_adc_z, z_asm_adc_z
+                .byte "adc.z"
 
 nt_asm_adc_zi:
-		.byte 6, IM
-		.word nt_asm_adc_z
-		.word xt_asm_adc_zi, z_asm_adc_zi
-		.byte "adc.zi"
+                .byte 6, IM
+                .word nt_asm_adc_z
+                .word xt_asm_adc_zi, z_asm_adc_zi
+                .byte "adc.zi"
 
 nt_asm_adc_ziy:
-		.byte 7, IM
-		.word nt_asm_adc_zi
-		.word xt_asm_adc_ziy, z_asm_adc_ziy
-		.byte "adc.ziy"
+                .byte 7, IM
+                .word nt_asm_adc_zi
+                .word xt_asm_adc_ziy, z_asm_adc_ziy
+                .byte "adc.ziy"
 
 nt_asm_adc_zx:
-		.byte 6, IM
-		.word nt_asm_adc_ziy
-		.word xt_asm_adc_zx, z_asm_adc_zx
-		.byte "adc.zx"
+                .byte 6, IM
+                .word nt_asm_adc_ziy
+                .word xt_asm_adc_zx, z_asm_adc_zx
+                .byte "adc.zx"
 
 nt_asm_adc_zxi:
-		.byte 7, IM
-		.word nt_asm_adc_zx
-		.word xt_asm_adc_zxi, z_asm_adc_zxi
-		.byte "adc.zxi"
+                .byte 7, IM
+                .word nt_asm_adc_zx
+                .word xt_asm_adc_zxi, z_asm_adc_zxi
+                .byte "adc.zxi"
 
 nt_asm_and:     ; not "and" because of conflicts with Forth word
-		.byte 4, IM
-		.word nt_asm_adc_zxi
-		.word xt_asm_and, z_asm_and
-		.byte "and."
+                .byte 4, IM
+                .word nt_asm_adc_zxi
+                .word xt_asm_and, z_asm_and
+                .byte "and."
 
 nt_asm_and_h:
-		.byte 5, IM
-		.word nt_asm_and
-		.word xt_asm_and_h, z_asm_and_h
-		.byte "and.#"
+                .byte 5, IM
+                .word nt_asm_and
+                .word xt_asm_and_h, z_asm_and_h
+                .byte "and.#"
 
 nt_asm_and_x:
-		.byte 5, IM
-		.word nt_asm_and_h
-		.word xt_asm_and_x, z_asm_and_x
-		.byte "and.x"
+                .byte 5, IM
+                .word nt_asm_and_h
+                .word xt_asm_and_x, z_asm_and_x
+                .byte "and.x"
 
 nt_asm_and_y:
-		.byte 5, IM
-		.word nt_asm_and_x
-		.word xt_asm_and_y, z_asm_and_y
-		.byte "and.y"
+                .byte 5, IM
+                .word nt_asm_and_x
+                .word xt_asm_and_y, z_asm_and_y
+                .byte "and.y"
 
 nt_asm_and_z:
-		.byte 5, IM
-		.word nt_asm_and_y
-		.word xt_asm_and_z, z_asm_and_z
-		.byte "and.z"
+                .byte 5, IM
+                .word nt_asm_and_y
+                .word xt_asm_and_z, z_asm_and_z
+                .byte "and.z"
 
 nt_asm_and_zi:
-		.byte 6, IM
-		.word nt_asm_and_z
-		.word xt_asm_and_zi, z_asm_and_zi
-		.byte "and.zi"
+                .byte 6, IM
+                .word nt_asm_and_z
+                .word xt_asm_and_zi, z_asm_and_zi
+                .byte "and.zi"
 
 nt_asm_and_ziy:
-		.byte 7, IM
-		.word nt_asm_and_zi
-		.word xt_asm_and_ziy, z_asm_and_ziy
-		.byte "and.ziy"
+                .byte 7, IM
+                .word nt_asm_and_zi
+                .word xt_asm_and_ziy, z_asm_and_ziy
+                .byte "and.ziy"
 
 nt_asm_and_zx:
-		.byte 6, IM
-		.word nt_asm_and_ziy
-		.word xt_asm_and_zx, z_asm_and_zx
-		.byte "and.zx"
+                .byte 6, IM
+                .word nt_asm_and_ziy
+                .word xt_asm_and_zx, z_asm_and_zx
+                .byte "and.zx"
 
 nt_asm_and_zxi:
-		.byte 7, IM
-		.word nt_asm_and_zx
-		.word xt_asm_and_zxi, z_asm_and_zxi
-		.byte "and.zxi"
+                .byte 7, IM
+                .word nt_asm_and_zx
+                .word xt_asm_and_zxi, z_asm_and_zxi
+                .byte "and.zxi"
 
 nt_asm_asl:
-		.byte 3, IM
-		.word nt_asm_and_zxi
-		.word xt_asm_asl, z_asm_asl
-		.byte "asl"
+                .byte 3, IM
+                .word nt_asm_and_zxi
+                .word xt_asm_asl, z_asm_asl
+                .byte "asl"
 
 nt_asm_asl_a:
-		.byte 5, IM
-		.word nt_asm_asl
-		.word xt_asm_asl_a, z_asm_asl_a
-		.byte "asl.a"
+                .byte 5, IM
+                .word nt_asm_asl
+                .word xt_asm_asl_a, z_asm_asl_a
+                .byte "asl.a"
 
 nt_asm_asl_x:
-		.byte 5, IM
-		.word nt_asm_asl_a
-		.word xt_asm_asl_x, z_asm_asl_x
-		.byte "asl.x"
+                .byte 5, IM
+                .word nt_asm_asl_a
+                .word xt_asm_asl_x, z_asm_asl_x
+                .byte "asl.x"
 
 nt_asm_asl_z:
-		.byte 5, IM
-		.word nt_asm_asl_x
-		.word xt_asm_asl_z, z_asm_asl_z
-		.byte "asl.z"
+                .byte 5, IM
+                .word nt_asm_asl_x
+                .word xt_asm_asl_z, z_asm_asl_z
+                .byte "asl.z"
 
 nt_asm_asl_zx:
-		.byte 6, IM
-		.word nt_asm_asl_z
-		.word xt_asm_asl_zx, z_asm_asl_zx
-		.byte "asl.zx"
+                .byte 6, IM
+                .word nt_asm_asl_z
+                .word xt_asm_asl_zx, z_asm_asl_zx
+                .byte "asl.zx"
 
 nt_asm_bcc:
-		.byte 3, IM
-		.word nt_asm_asl_zx
-		.word xt_asm_bcc, z_asm_bcc
-		.byte "bcc"
+                .byte 3, IM
+                .word nt_asm_asl_zx
+                .word xt_asm_bcc, z_asm_bcc
+                .byte "bcc"
 
 nt_asm_bcs:
-		.byte 3, IM
-		.word nt_asm_bcc
-		.word xt_asm_bcs, z_asm_bcs
-		.byte "bcs"
+                .byte 3, IM
+                .word nt_asm_bcc
+                .word xt_asm_bcs, z_asm_bcs
+                .byte "bcs"
 
 nt_asm_beq:
-		.byte 3, IM
-		.word nt_asm_bcs
-		.word xt_asm_beq, z_asm_beq
-		.byte "beq"
+                .byte 3, IM
+                .word nt_asm_bcs
+                .word xt_asm_beq, z_asm_beq
+                .byte "beq"
 
 nt_asm_bit:
-		.byte 3, IM
-		.word nt_asm_beq
-		.word xt_asm_bit, z_asm_bit
-		.byte "bit"
+                .byte 3, IM
+                .word nt_asm_beq
+                .word xt_asm_bit, z_asm_bit
+                .byte "bit"
 
 nt_asm_bit_h:
-		.byte 5, IM
-		.word nt_asm_bit
-		.word xt_asm_bit_h, z_asm_bit_h
-		.byte "bit.#"
+                .byte 5, IM
+                .word nt_asm_bit
+                .word xt_asm_bit_h, z_asm_bit_h
+                .byte "bit.#"
 
 nt_asm_bit_x:
-		.byte 5, IM
-		.word nt_asm_bit_h
-		.word xt_asm_bit_x, z_asm_bit_x
-		.byte "bit.x"
+                .byte 5, IM
+                .word nt_asm_bit_h
+                .word xt_asm_bit_x, z_asm_bit_x
+                .byte "bit.x"
 
 nt_asm_bit_z:
-		.byte 5, IM
-		.word nt_asm_bit_x
-		.word xt_asm_bit_z, z_asm_bit_z
-		.byte "bit.z"
+                .byte 5, IM
+                .word nt_asm_bit_x
+                .word xt_asm_bit_z, z_asm_bit_z
+                .byte "bit.z"
 
 nt_asm_bit_zx:
-		.byte 6, IM
-		.word nt_asm_bit_z
-		.word xt_asm_bit_zx, z_asm_bit_zx
-		.byte "bit.zx"
+                .byte 6, IM
+                .word nt_asm_bit_z
+                .word xt_asm_bit_zx, z_asm_bit_zx
+                .byte "bit.zx"
 
 nt_asm_bmi:
-		.byte 3, IM
-		.word nt_asm_bit_zx
-		.word xt_asm_bmi, z_asm_bmi
-		.byte "bmi"
+                .byte 3, IM
+                .word nt_asm_bit_zx
+                .word xt_asm_bmi, z_asm_bmi
+                .byte "bmi"
 
 nt_asm_bne:
-		.byte 3, IM
-		.word nt_asm_bmi
-		.word xt_asm_bne, z_asm_bne
-		.byte "bne"
+                .byte 3, IM
+                .word nt_asm_bmi
+                .word xt_asm_bne, z_asm_bne
+                .byte "bne"
 
 nt_asm_bpl:
-		.byte 3, IM
-		.word nt_asm_bne
-		.word xt_asm_bpl, z_asm_bpl
-		.byte "bpl"
+                .byte 3, IM
+                .word nt_asm_bne
+                .word xt_asm_bpl, z_asm_bpl
+                .byte "bpl"
 
 nt_asm_bra:
-		.byte 3, IM
-		.word nt_asm_bpl
-		.word xt_asm_bra, z_asm_bra
-		.byte "bra"
+                .byte 3, IM
+                .word nt_asm_bpl
+                .word xt_asm_bra, z_asm_bra
+                .byte "bra"
 
 nt_asm_brk:
-		.byte 3, IM
-		.word nt_asm_bra
-		.word xt_asm_brk, z_asm_brk
-		.byte "brk"
+                .byte 3, IM
+                .word nt_asm_bra
+                .word xt_asm_brk, z_asm_brk
+                .byte "brk"
 
 nt_asm_bvc:
-		.byte 3, IM
-		.word nt_asm_brk
-		.word xt_asm_bvc, z_asm_bvc
-		.byte "bvc"
+                .byte 3, IM
+                .word nt_asm_brk
+                .word xt_asm_bvc, z_asm_bvc
+                .byte "bvc"
 
 nt_asm_bvs:
-		.byte 3, IM
-		.word nt_asm_bvc
-		.word xt_asm_bvs, z_asm_bvs
-		.byte "bvs"
+                .byte 3, IM
+                .word nt_asm_bvc
+                .word xt_asm_bvs, z_asm_bvs
+                .byte "bvs"
 
 nt_asm_clc:
-		.byte 3, IM
-		.word nt_asm_bvs
-		.word xt_asm_clc, z_asm_clc
-		.byte "clc"
+                .byte 3, IM
+                .word nt_asm_bvs
+                .word xt_asm_clc, z_asm_clc
+                .byte "clc"
 
 nt_asm_cld:
-		.byte 3, IM
-		.word nt_asm_clc
-		.word xt_asm_cld, z_asm_cld
-		.byte "cld"
+                .byte 3, IM
+                .word nt_asm_clc
+                .word xt_asm_cld, z_asm_cld
+                .byte "cld"
 
 nt_asm_cli:
-		.byte 3, IM
-		.word nt_asm_cld
-		.word xt_asm_cli, z_asm_cli
-		.byte "cli"
+                .byte 3, IM
+                .word nt_asm_cld
+                .word xt_asm_cli, z_asm_cli
+                .byte "cli"
 
 nt_asm_clv:
-		.byte 3, IM
-		.word nt_asm_cli
-		.word xt_asm_clv, z_asm_clv
-		.byte "clv"
+                .byte 3, IM
+                .word nt_asm_cli
+                .word xt_asm_clv, z_asm_clv
+                .byte "clv"
 
 nt_asm_cmp:
-		.byte 3, IM
-		.word nt_asm_clv
-		.word xt_asm_cmp, z_asm_cmp
-		.byte "cmp"
+                .byte 3, IM
+                .word nt_asm_clv
+                .word xt_asm_cmp, z_asm_cmp
+                .byte "cmp"
 
 nt_asm_cmp_h:
-		.byte 5, IM
-		.word nt_asm_cmp
-		.word xt_asm_cmp_h, z_asm_cmp_h
-		.byte "cmp.#"
+                .byte 5, IM
+                .word nt_asm_cmp
+                .word xt_asm_cmp_h, z_asm_cmp_h
+                .byte "cmp.#"
 
 nt_asm_cmp_x:
-		.byte 5, IM
-		.word nt_asm_cmp_h
-		.word xt_asm_cmp_x, z_asm_cmp_x
-		.byte "cmp.x"
+                .byte 5, IM
+                .word nt_asm_cmp_h
+                .word xt_asm_cmp_x, z_asm_cmp_x
+                .byte "cmp.x"
 
 nt_asm_cmp_y:
-		.byte 5, IM
-		.word nt_asm_cmp_x
-		.word xt_asm_cmp_y, z_asm_cmp_y
-		.byte "cmp.y"
+                .byte 5, IM
+                .word nt_asm_cmp_x
+                .word xt_asm_cmp_y, z_asm_cmp_y
+                .byte "cmp.y"
 
 nt_asm_cmp_z:
-		.byte 5, IM
-		.word nt_asm_cmp_y
-		.word xt_asm_cmp_z, z_asm_cmp_z
-		.byte "cmp.z"
+                .byte 5, IM
+                .word nt_asm_cmp_y
+                .word xt_asm_cmp_z, z_asm_cmp_z
+                .byte "cmp.z"
 
 nt_asm_cmp_zi:
-		.byte 6, IM
-		.word nt_asm_cmp_z
-		.word xt_asm_cmp_zi, z_asm_cmp_zi
-		.byte "cmp.zi"
+                .byte 6, IM
+                .word nt_asm_cmp_z
+                .word xt_asm_cmp_zi, z_asm_cmp_zi
+                .byte "cmp.zi"
 
 nt_asm_cmp_ziy:
-		.byte 7, IM
-		.word nt_asm_cmp_zi
-		.word xt_asm_cmp_ziy, z_asm_cmp_ziy
-		.byte "cmp.ziy"
+                .byte 7, IM
+                .word nt_asm_cmp_zi
+                .word xt_asm_cmp_ziy, z_asm_cmp_ziy
+                .byte "cmp.ziy"
 
 nt_asm_cmp_zx:
-		.byte 6, IM
-		.word nt_asm_cmp_ziy
-		.word xt_asm_cmp_zx, z_asm_cmp_zx
-		.byte "cmp.zx"
+                .byte 6, IM
+                .word nt_asm_cmp_ziy
+                .word xt_asm_cmp_zx, z_asm_cmp_zx
+                .byte "cmp.zx"
 
 nt_asm_cmp_zxi:
-		.byte 7, IM
-		.word nt_asm_cmp_zx
-		.word xt_asm_cmp_zxi, z_asm_cmp_zxi
-		.byte "cmp.zxi"
+                .byte 7, IM
+                .word nt_asm_cmp_zx
+                .word xt_asm_cmp_zxi, z_asm_cmp_zxi
+                .byte "cmp.zxi"
 
 nt_asm_cpx:
-		.byte 3, IM
-		.word nt_asm_cmp_zxi
-		.word xt_asm_cpx, z_asm_cpx
-		.byte "cpx"
+                .byte 3, IM
+                .word nt_asm_cmp_zxi
+                .word xt_asm_cpx, z_asm_cpx
+                .byte "cpx"
 
 nt_asm_cpx_h:
-		.byte 5, IM
-		.word nt_asm_cpx
-		.word xt_asm_cpx_h, z_asm_cpx_h
-		.byte "cpx.#"
+                .byte 5, IM
+                .word nt_asm_cpx
+                .word xt_asm_cpx_h, z_asm_cpx_h
+                .byte "cpx.#"
 
 nt_asm_cpx_z:
-		.byte 5, IM
-		.word nt_asm_cpx_h
-		.word xt_asm_cpx_z, z_asm_cpx_z
-		.byte "cpx.z"
+                .byte 5, IM
+                .word nt_asm_cpx_h
+                .word xt_asm_cpx_z, z_asm_cpx_z
+                .byte "cpx.z"
 
 nt_asm_cpy:
-		.byte 3, IM
-		.word nt_asm_cpx_z
-		.word xt_asm_cpy, z_asm_cpy
-		.byte "cpy"
+                .byte 3, IM
+                .word nt_asm_cpx_z
+                .word xt_asm_cpy, z_asm_cpy
+                .byte "cpy"
 
 nt_asm_cpy_h:
-		.byte 5, IM
-		.word nt_asm_cpy
-		.word xt_asm_cpy_h, z_asm_cpy_h
-		.byte "cpy.#"
+                .byte 5, IM
+                .word nt_asm_cpy
+                .word xt_asm_cpy_h, z_asm_cpy_h
+                .byte "cpy.#"
 
 nt_asm_cpy_z:
-		.byte 5, IM
-		.word nt_asm_cpy_h
-		.word xt_asm_cpy_z, z_asm_cpy_z
-		.byte "cpy.z"
+                .byte 5, IM
+                .word nt_asm_cpy_h
+                .word xt_asm_cpy_z, z_asm_cpy_z
+                .byte "cpy.z"
 
 nt_asm_dec:
-		.byte 3, IM
-		.word nt_asm_cpy_z
-		.word xt_asm_dec, z_asm_dec
-		.byte "dec"
+                .byte 3, IM
+                .word nt_asm_cpy_z
+                .word xt_asm_dec, z_asm_dec
+                .byte "dec"
 
 nt_asm_dec_a:
-		.byte 5, IM
-		.word nt_asm_dec
-		.word xt_asm_dec_a, z_asm_dec_a
-		.byte "dec.a"
+                .byte 5, IM
+                .word nt_asm_dec
+                .word xt_asm_dec_a, z_asm_dec_a
+                .byte "dec.a"
 
 nt_asm_dec_x:
-		.byte 5, IM
-		.word nt_asm_dec_a
-		.word xt_asm_dec_x, z_asm_dec_x
-		.byte "dec.x"
+                .byte 5, IM
+                .word nt_asm_dec_a
+                .word xt_asm_dec_x, z_asm_dec_x
+                .byte "dec.x"
 
 nt_asm_dec_z:
-		.byte 5, IM
-		.word nt_asm_dec_x
-		.word xt_asm_dec_z, z_asm_dec_z
-		.byte "dec.z"
+                .byte 5, IM
+                .word nt_asm_dec_x
+                .word xt_asm_dec_z, z_asm_dec_z
+                .byte "dec.z"
 
 nt_asm_dec_zx:
-		.byte 6, IM
-		.word nt_asm_dec_z
-		.word xt_asm_dec_zx, z_asm_dec_zx
-		.byte "dec.zx"
+                .byte 6, IM
+                .word nt_asm_dec_z
+                .word xt_asm_dec_zx, z_asm_dec_zx
+                .byte "dec.zx"
 
 nt_asm_dex:
-		.byte 3, IM
-		.word nt_asm_dec_zx
-		.word xt_asm_dex, z_asm_dex
-		.byte "dex"
+                .byte 3, IM
+                .word nt_asm_dec_zx
+                .word xt_asm_dex, z_asm_dex
+                .byte "dex"
 
 nt_asm_dey:
-		.byte 3, IM
-		.word nt_asm_dex
-		.word xt_asm_dey, z_asm_dey
-		.byte "dey"
+                .byte 3, IM
+                .word nt_asm_dex
+                .word xt_asm_dey, z_asm_dey
+                .byte "dey"
 
 nt_asm_eor:
-		.byte 3, IM
-		.word nt_asm_dey
-		.word xt_asm_eor, z_asm_eor
-		.byte "eor"
+                .byte 3, IM
+                .word nt_asm_dey
+                .word xt_asm_eor, z_asm_eor
+                .byte "eor"
 
 nt_asm_eor_h:
-		.byte 5, IM
-		.word nt_asm_eor
-		.word xt_asm_eor_h, z_asm_eor_h
-		.byte "eor.#"
+                .byte 5, IM
+                .word nt_asm_eor
+                .word xt_asm_eor_h, z_asm_eor_h
+                .byte "eor.#"
 
 nt_asm_eor_x:
-		.byte 5, IM
-		.word nt_asm_eor_h
-		.word xt_asm_eor_x, z_asm_eor_x
-		.byte "eor.x"
+                .byte 5, IM
+                .word nt_asm_eor_h
+                .word xt_asm_eor_x, z_asm_eor_x
+                .byte "eor.x"
 
 nt_asm_eor_y:
-		.byte 5, IM
-		.word nt_asm_eor_x
-		.word xt_asm_eor_y, z_asm_eor_y
-		.byte "eor.y"
+                .byte 5, IM
+                .word nt_asm_eor_x
+                .word xt_asm_eor_y, z_asm_eor_y
+                .byte "eor.y"
 
 nt_asm_eor_z:
-		.byte 5, IM
-		.word nt_asm_eor_y
-		.word xt_asm_eor_z, z_asm_eor_z
-		.byte "eor.z"
+                .byte 5, IM
+                .word nt_asm_eor_y
+                .word xt_asm_eor_z, z_asm_eor_z
+                .byte "eor.z"
 
 nt_asm_eor_zi:
-		.byte 6, IM
-		.word nt_asm_eor_z
-		.word xt_asm_eor_zi, z_asm_eor_zi
-		.byte "eor.zi"
+                .byte 6, IM
+                .word nt_asm_eor_z
+                .word xt_asm_eor_zi, z_asm_eor_zi
+                .byte "eor.zi"
 
 nt_asm_eor_ziy:
-		.byte 7, IM
-		.word nt_asm_eor_zi
-		.word xt_asm_eor_ziy, z_asm_eor_ziy
-		.byte "eor.ziy"
+                .byte 7, IM
+                .word nt_asm_eor_zi
+                .word xt_asm_eor_ziy, z_asm_eor_ziy
+                .byte "eor.ziy"
 
 nt_asm_eor_zx:
-		.byte 6, IM
-		.word nt_asm_eor_ziy
-		.word xt_asm_eor_zx, z_asm_eor_zx
-		.byte "eor.zx"
+                .byte 6, IM
+                .word nt_asm_eor_ziy
+                .word xt_asm_eor_zx, z_asm_eor_zx
+                .byte "eor.zx"
 
 nt_asm_eor_zxi:
-		.byte 7, IM
-		.word nt_asm_eor_zx
-		.word xt_asm_eor_zxi, z_asm_eor_zxi
-		.byte "eor.zxi"
+                .byte 7, IM
+                .word nt_asm_eor_zx
+                .word xt_asm_eor_zxi, z_asm_eor_zxi
+                .byte "eor.zxi"
 
 nt_asm_inc:
-		.byte 3, IM
-		.word nt_asm_eor_zxi
-		.word xt_asm_inc, z_asm_inc
-		.byte "inc"
+                .byte 3, IM
+                .word nt_asm_eor_zxi
+                .word xt_asm_inc, z_asm_inc
+                .byte "inc"
 
 nt_asm_inc_a:
-		.byte 5, IM
-		.word nt_asm_inc
-		.word xt_asm_inc_a, z_asm_inc_a
-		.byte "inc.a"
+                .byte 5, IM
+                .word nt_asm_inc
+                .word xt_asm_inc_a, z_asm_inc_a
+                .byte "inc.a"
 
 nt_asm_inc_x:
-		.byte 5, IM
-		.word nt_asm_inc_a
-		.word xt_asm_inc_x, z_asm_inc_x
-		.byte "inc.x"
+                .byte 5, IM
+                .word nt_asm_inc_a
+                .word xt_asm_inc_x, z_asm_inc_x
+                .byte "inc.x"
 
 nt_asm_inc_z:
-		.byte 5, IM
-		.word nt_asm_inc_x
-		.word xt_asm_inc_z, z_asm_inc_z
-		.byte "inc.z"
+                .byte 5, IM
+                .word nt_asm_inc_x
+                .word xt_asm_inc_z, z_asm_inc_z
+                .byte "inc.z"
 
 nt_asm_inc_zx:
-		.byte 6, IM
-		.word nt_asm_inc_z
-		.word xt_asm_inc_zx, z_asm_inc_zx
-		.byte "inc.zx"
+                .byte 6, IM
+                .word nt_asm_inc_z
+                .word xt_asm_inc_zx, z_asm_inc_zx
+                .byte "inc.zx"
 
 nt_asm_inx:
-		.byte 3, IM
-		.word nt_asm_inc_zx
-		.word xt_asm_inx, z_asm_inx
-		.byte "inx"
+                .byte 3, IM
+                .word nt_asm_inc_zx
+                .word xt_asm_inx, z_asm_inx
+                .byte "inx"
 
 nt_asm_iny:
-		.byte 3, IM
-		.word nt_asm_inx
-		.word xt_asm_iny, z_asm_iny
-		.byte "iny"
+                .byte 3, IM
+                .word nt_asm_inx
+                .word xt_asm_iny, z_asm_iny
+                .byte "iny"
 
 nt_asm_jmp:
-		.byte 3, IM
-		.word nt_asm_iny
-		.word xt_asm_jmp, z_asm_jmp
-		.byte "jmp"
+                .byte 3, IM
+                .word nt_asm_iny
+                .word xt_asm_jmp, z_asm_jmp
+                .byte "jmp"
 
 nt_asm_jmp_i:
-		.byte 5, IM
-		.word nt_asm_jmp
-		.word xt_asm_jmp_i, z_asm_jmp_i
-		.byte "jmp.i"
+                .byte 5, IM
+                .word nt_asm_jmp
+                .word xt_asm_jmp_i, z_asm_jmp_i
+                .byte "jmp.i"
 
 nt_asm_jmp_xi:
-		.byte 6, IM
-		.word nt_asm_jmp_i
-		.word xt_asm_jmp_xi, z_asm_jmp_xi
-		.byte "jmp.xi"
+                .byte 6, IM
+                .word nt_asm_jmp_i
+                .word xt_asm_jmp_xi, z_asm_jmp_xi
+                .byte "jmp.xi"
 
 nt_asm_jsr:
-		.byte 3, IM
-		.word nt_asm_jmp_xi
-		.word xt_asm_jsr, z_asm_jsr
-		.byte "jsr"
+                .byte 3, IM
+                .word nt_asm_jmp_xi
+                .word xt_asm_jsr, z_asm_jsr
+                .byte "jsr"
 
 nt_asm_lda:
-		.byte 3, IM
-		.word nt_asm_jsr
-		.word xt_asm_lda, z_asm_lda
-		.byte "lda"
+                .byte 3, IM
+                .word nt_asm_jsr
+                .word xt_asm_lda, z_asm_lda
+                .byte "lda"
 
 nt_asm_lda_h:
-		.byte 5, IM
-		.word nt_asm_lda
-		.word xt_asm_lda_h, z_asm_lda_h
-		.byte "lda.#"
+                .byte 5, IM
+                .word nt_asm_lda
+                .word xt_asm_lda_h, z_asm_lda_h
+                .byte "lda.#"
 
 nt_asm_lda_x:
-		.byte 5, IM
-		.word nt_asm_lda_h
-		.word xt_asm_lda_x, z_asm_lda_x
-		.byte "lda.x"
+                .byte 5, IM
+                .word nt_asm_lda_h
+                .word xt_asm_lda_x, z_asm_lda_x
+                .byte "lda.x"
 
 nt_asm_lda_y:
-		.byte 5, IM
-		.word nt_asm_lda_x
-		.word xt_asm_lda_y, z_asm_lda_y
-		.byte "lda.y"
+                .byte 5, IM
+                .word nt_asm_lda_x
+                .word xt_asm_lda_y, z_asm_lda_y
+                .byte "lda.y"
 
 nt_asm_lda_z:
-		.byte 5, IM
-		.word nt_asm_lda_y
-		.word xt_asm_lda_z, z_asm_lda_z
-		.byte "lda.z"
+                .byte 5, IM
+                .word nt_asm_lda_y
+                .word xt_asm_lda_z, z_asm_lda_z
+                .byte "lda.z"
 
 nt_asm_lda_zi:
-		.byte 6, IM
-		.word nt_asm_lda_z
-		.word xt_asm_lda_zi, z_asm_lda_zi
-		.byte "lda.zi"
+                .byte 6, IM
+                .word nt_asm_lda_z
+                .word xt_asm_lda_zi, z_asm_lda_zi
+                .byte "lda.zi"
 
 nt_asm_lda_ziy:
-		.byte 7, IM
-		.word nt_asm_lda_zi
-		.word xt_asm_lda_ziy, z_asm_lda_ziy
-		.byte "lda.ziy"
+                .byte 7, IM
+                .word nt_asm_lda_zi
+                .word xt_asm_lda_ziy, z_asm_lda_ziy
+                .byte "lda.ziy"
 
 nt_asm_lda_zx:
-		.byte 6, IM
-		.word nt_asm_lda_ziy
-		.word xt_asm_lda_zx, z_asm_lda_zx
-		.byte "lda.zx"
+                .byte 6, IM
+                .word nt_asm_lda_ziy
+                .word xt_asm_lda_zx, z_asm_lda_zx
+                .byte "lda.zx"
 
 nt_asm_lda_zxi:
-		.byte 7, IM
-		.word nt_asm_lda_zx
-		.word xt_asm_lda_zxi, z_asm_lda_zxi
-		.byte "lda.zxi"
+                .byte 7, IM
+                .word nt_asm_lda_zx
+                .word xt_asm_lda_zxi, z_asm_lda_zxi
+                .byte "lda.zxi"
 
 nt_asm_ldx:
-		.byte 3, IM
-		.word nt_asm_lda_zxi
-		.word xt_asm_ldx, z_asm_ldx
-		.byte "ldx"
+                .byte 3, IM
+                .word nt_asm_lda_zxi
+                .word xt_asm_ldx, z_asm_ldx
+                .byte "ldx"
 
 nt_asm_ldx_h:
-		.byte 5, IM
-		.word nt_asm_ldx
-		.word xt_asm_ldx_h, z_asm_ldx_h
-		.byte "ldx.#"
+                .byte 5, IM
+                .word nt_asm_ldx
+                .word xt_asm_ldx_h, z_asm_ldx_h
+                .byte "ldx.#"
 
 nt_asm_ldx_y:
-		.byte 5, IM
-		.word nt_asm_ldx_h
-		.word xt_asm_ldx_y, z_asm_ldx_y
-		.byte "ldx.y"
+                .byte 5, IM
+                .word nt_asm_ldx_h
+                .word xt_asm_ldx_y, z_asm_ldx_y
+                .byte "ldx.y"
 
 nt_asm_ldx_z:
-		.byte 5, IM
-		.word nt_asm_ldx_y
-		.word xt_asm_ldx_z, z_asm_ldx_z
-		.byte "ldx.z"
+                .byte 5, IM
+                .word nt_asm_ldx_y
+                .word xt_asm_ldx_z, z_asm_ldx_z
+                .byte "ldx.z"
 
 nt_asm_ldx_zy:
-		.byte 6, IM
-		.word nt_asm_ldx_z
-		.word xt_asm_ldx_zy, z_asm_ldx_zy
-		.byte "ldx.zy"
+                .byte 6, IM
+                .word nt_asm_ldx_z
+                .word xt_asm_ldx_zy, z_asm_ldx_zy
+                .byte "ldx.zy"
 
 nt_asm_ldy:
-		.byte 3, IM
-		.word nt_asm_ldx_zy
-		.word xt_asm_ldy, z_asm_ldy
-		.byte "ldy"
+                .byte 3, IM
+                .word nt_asm_ldx_zy
+                .word xt_asm_ldy, z_asm_ldy
+                .byte "ldy"
 
 nt_asm_ldy_h:
-		.byte 5, IM
-		.word nt_asm_ldy
-		.word xt_asm_ldy_h, z_asm_ldy_h
-		.byte "ldy.#"
+                .byte 5, IM
+                .word nt_asm_ldy
+                .word xt_asm_ldy_h, z_asm_ldy_h
+                .byte "ldy.#"
 
 nt_asm_ldy_x:
-		.byte 5, IM
-		.word nt_asm_ldy_h
-		.word xt_asm_ldy_x, z_asm_ldy_x
-		.byte "ldy.x"
+                .byte 5, IM
+                .word nt_asm_ldy_h
+                .word xt_asm_ldy_x, z_asm_ldy_x
+                .byte "ldy.x"
 
 nt_asm_ldy_z:
-		.byte 5, IM
-		.word nt_asm_ldy_x
-		.word xt_asm_ldy_z, z_asm_ldy_z
-		.byte "ldy.z"
+                .byte 5, IM
+                .word nt_asm_ldy_x
+                .word xt_asm_ldy_z, z_asm_ldy_z
+                .byte "ldy.z"
 
 nt_asm_ldy_zx:
-		.byte 6, IM
-		.word nt_asm_ldy_z
-		.word xt_asm_ldy_zx, z_asm_ldy_zx
-		.byte "ldy.zx"
+                .byte 6, IM
+                .word nt_asm_ldy_z
+                .word xt_asm_ldy_zx, z_asm_ldy_zx
+                .byte "ldy.zx"
 
 nt_asm_lsr:
-		.byte 3, IM
-		.word nt_asm_ldy_zx
-		.word xt_asm_lsr, z_asm_lsr
-		.byte "lsr"
+                .byte 3, IM
+                .word nt_asm_ldy_zx
+                .word xt_asm_lsr, z_asm_lsr
+                .byte "lsr"
 
 nt_asm_lsr_a:
-		.byte 5, IM
-		.word nt_asm_lsr
-		.word xt_asm_lsr_a, z_asm_lsr_a
-		.byte "lsr.a"
+                .byte 5, IM
+                .word nt_asm_lsr
+                .word xt_asm_lsr_a, z_asm_lsr_a
+                .byte "lsr.a"
 
 nt_asm_lsr_x:
-		.byte 5, IM
-		.word nt_asm_lsr_a
-		.word xt_asm_lsr_x, z_asm_lsr_x
-		.byte "lsr.x"
+                .byte 5, IM
+                .word nt_asm_lsr_a
+                .word xt_asm_lsr_x, z_asm_lsr_x
+                .byte "lsr.x"
 
 nt_asm_lsr_z:
-		.byte 5, IM
-		.word nt_asm_lsr_x
-		.word xt_asm_lsr_z, z_asm_lsr_z
-		.byte "lsr.z"
+                .byte 5, IM
+                .word nt_asm_lsr_x
+                .word xt_asm_lsr_z, z_asm_lsr_z
+                .byte "lsr.z"
 
 nt_asm_lsr_zx:
-		.byte 6, IM
-		.word nt_asm_lsr_z
-		.word xt_asm_lsr_zx, z_asm_lsr_zx
-		.byte "lsr.zx"
+                .byte 6, IM
+                .word nt_asm_lsr_z
+                .word xt_asm_lsr_zx, z_asm_lsr_zx
+                .byte "lsr.zx"
 
 nt_asm_nop:
-		.byte 3, IM
-		.word nt_asm_lsr_zx
-		.word xt_asm_nop, z_asm_nop
-		.byte "nop"
+                .byte 3, IM
+                .word nt_asm_lsr_zx
+                .word xt_asm_nop, z_asm_nop
+                .byte "nop"
 
 nt_asm_ora:
-		.byte 3, IM
-		.word nt_asm_nop
-		.word xt_asm_ora, z_asm_ora
-		.byte "ora"
+                .byte 3, IM
+                .word nt_asm_nop
+                .word xt_asm_ora, z_asm_ora
+                .byte "ora"
 
 nt_asm_ora_h:
-		.byte 5, IM
-		.word nt_asm_ora
-		.word xt_asm_ora_h, z_asm_ora_h
-		.byte "ora.#"
+                .byte 5, IM
+                .word nt_asm_ora
+                .word xt_asm_ora_h, z_asm_ora_h
+                .byte "ora.#"
 
 nt_asm_ora_x:
-		.byte 5, IM
-		.word nt_asm_ora_h
-		.word xt_asm_ora_x, z_asm_ora_x
-		.byte "ora.x"
+                .byte 5, IM
+                .word nt_asm_ora_h
+                .word xt_asm_ora_x, z_asm_ora_x
+                .byte "ora.x"
 
 nt_asm_ora_y:
-		.byte 5, IM
-		.word nt_asm_ora_x
-		.word xt_asm_ora_y, z_asm_ora_y
-		.byte "ora.y"
+                .byte 5, IM
+                .word nt_asm_ora_x
+                .word xt_asm_ora_y, z_asm_ora_y
+                .byte "ora.y"
 
 nt_asm_ora_z:
-		.byte 5, IM
-		.word nt_asm_ora_y
-		.word xt_asm_ora_z, z_asm_ora_z
-		.byte "ora.z"
+                .byte 5, IM
+                .word nt_asm_ora_y
+                .word xt_asm_ora_z, z_asm_ora_z
+                .byte "ora.z"
 
 nt_asm_ora_zi:
-		.byte 6, IM
-		.word nt_asm_ora_z
-		.word xt_asm_ora_zi, z_asm_ora_zi
-		.byte "ora.zi"
+                .byte 6, IM
+                .word nt_asm_ora_z
+                .word xt_asm_ora_zi, z_asm_ora_zi
+                .byte "ora.zi"
 
 nt_asm_ora_ziy:
-		.byte 7, IM
-		.word nt_asm_ora_zi
-		.word xt_asm_ora_ziy, z_asm_ora_ziy
-		.byte "ora.ziy"
+                .byte 7, IM
+                .word nt_asm_ora_zi
+                .word xt_asm_ora_ziy, z_asm_ora_ziy
+                .byte "ora.ziy"
 
 nt_asm_ora_zx:
-		.byte 6, IM
-		.word nt_asm_ora_ziy
-		.word xt_asm_ora_zx, z_asm_ora_zx
-		.byte "ora.zx"
+                .byte 6, IM
+                .word nt_asm_ora_ziy
+                .word xt_asm_ora_zx, z_asm_ora_zx
+                .byte "ora.zx"
 
 nt_asm_ora_zxi:
-		.byte 7, IM
-		.word nt_asm_ora_zx
-		.word xt_asm_ora_zxi, z_asm_ora_zxi
-		.byte "ora.zxi"
+                .byte 7, IM
+                .word nt_asm_ora_zx
+                .word xt_asm_ora_zxi, z_asm_ora_zxi
+                .byte "ora.zxi"
 
 nt_asm_pha:
-		.byte 3, IM
-		.word nt_asm_ora_zxi
-		.word xt_asm_pha, z_asm_pha
-		.byte "pha"
+                .byte 3, IM
+                .word nt_asm_ora_zxi
+                .word xt_asm_pha, z_asm_pha
+                .byte "pha"
 
 nt_asm_php:
-		.byte 3, IM
-		.word nt_asm_pha
-		.word xt_asm_php, z_asm_php
-		.byte "php"
+                .byte 3, IM
+                .word nt_asm_pha
+                .word xt_asm_php, z_asm_php
+                .byte "php"
 
 nt_asm_phx:
-		.byte 3, IM
-		.word nt_asm_php
-		.word xt_asm_phx, z_asm_phx
-		.byte "phx"
+                .byte 3, IM
+                .word nt_asm_php
+                .word xt_asm_phx, z_asm_phx
+                .byte "phx"
 
 nt_asm_phy:
-		.byte 3, IM
-		.word nt_asm_phx
-		.word xt_asm_phy, z_asm_phy
-		.byte "phy"
+                .byte 3, IM
+                .word nt_asm_phx
+                .word xt_asm_phy, z_asm_phy
+                .byte "phy"
 
 nt_asm_pla:
-		.byte 3, IM
-		.word nt_asm_phy
-		.word xt_asm_pla, z_asm_pla
-		.byte "pla"
+                .byte 3, IM
+                .word nt_asm_phy
+                .word xt_asm_pla, z_asm_pla
+                .byte "pla"
 
 nt_asm_plp:
-		.byte 3, IM
-		.word nt_asm_pla
-		.word xt_asm_plp, z_asm_plp
-		.byte "plp"
+                .byte 3, IM
+                .word nt_asm_pla
+                .word xt_asm_plp, z_asm_plp
+                .byte "plp"
 
 nt_asm_plx:
-		.byte 3, IM
-		.word nt_asm_plp
-		.word xt_asm_plx, z_asm_plx
-		.byte "plx"
+                .byte 3, IM
+                .word nt_asm_plp
+                .word xt_asm_plx, z_asm_plx
+                .byte "plx"
 
 nt_asm_ply:
-		.byte 3, IM
-		.word nt_asm_plx
-		.word xt_asm_ply, z_asm_ply
-		.byte "ply"
+                .byte 3, IM
+                .word nt_asm_plx
+                .word xt_asm_ply, z_asm_ply
+                .byte "ply"
 
 nt_asm_rol:
-		.byte 3, IM
-		.word nt_asm_ply
-		.word xt_asm_rol, z_asm_rol
-		.byte "rol"
+                .byte 3, IM
+                .word nt_asm_ply
+                .word xt_asm_rol, z_asm_rol
+                .byte "rol"
 
 nt_asm_rol_a:
-		.byte 5, IM
-		.word nt_asm_rol
-		.word xt_asm_rol_a, z_asm_rol_a
-		.byte "rol.a"
+                .byte 5, IM
+                .word nt_asm_rol
+                .word xt_asm_rol_a, z_asm_rol_a
+                .byte "rol.a"
 
 nt_asm_rol_x:
-		.byte 5, IM
-		.word nt_asm_rol_a
-		.word xt_asm_rol_x, z_asm_rol_x
-		.byte "rol.x"
+                .byte 5, IM
+                .word nt_asm_rol_a
+                .word xt_asm_rol_x, z_asm_rol_x
+                .byte "rol.x"
 
 nt_asm_rol_z:
-		.byte 5, IM
-		.word nt_asm_rol_x
-		.word xt_asm_rol_z, z_asm_rol_z
-		.byte "rol.z"
+                .byte 5, IM
+                .word nt_asm_rol_x
+                .word xt_asm_rol_z, z_asm_rol_z
+                .byte "rol.z"
 
 nt_asm_rol_zx:
-		.byte 6, IM
-		.word nt_asm_rol_z
-		.word xt_asm_rol_zx, z_asm_rol_zx
-		.byte "rol.zx"
+                .byte 6, IM
+                .word nt_asm_rol_z
+                .word xt_asm_rol_zx, z_asm_rol_zx
+                .byte "rol.zx"
 
 nt_asm_ror:
-		.byte 3, IM
-		.word nt_asm_rol_zx
-		.word xt_asm_ror, z_asm_ror
-		.byte "ror"
+                .byte 3, IM
+                .word nt_asm_rol_zx
+                .word xt_asm_ror, z_asm_ror
+                .byte "ror"
 
 nt_asm_ror_a:
-		.byte 5, IM
-		.word nt_asm_ror
-		.word xt_asm_ror_a, z_asm_ror_a
-		.byte "ror.a"
+                .byte 5, IM
+                .word nt_asm_ror
+                .word xt_asm_ror_a, z_asm_ror_a
+                .byte "ror.a"
 
 nt_asm_ror_x:
-		.byte 5, IM
-		.word nt_asm_ror_a
-		.word xt_asm_ror_x, z_asm_ror_x
-		.byte "ror.x"
+                .byte 5, IM
+                .word nt_asm_ror_a
+                .word xt_asm_ror_x, z_asm_ror_x
+                .byte "ror.x"
 
 nt_asm_ror_z:
-		.byte 5, IM
-		.word nt_asm_ror_x
-		.word xt_asm_ror_z, z_asm_ror_z
-		.byte "ror.z"
+                .byte 5, IM
+                .word nt_asm_ror_x
+                .word xt_asm_ror_z, z_asm_ror_z
+                .byte "ror.z"
 
 nt_asm_ror_zx:
-		.byte 6, IM
-		.word nt_asm_ror_z
-		.word xt_asm_ror_zx, z_asm_ror_zx
-		.byte "ror.zx"
+                .byte 6, IM
+                .word nt_asm_ror_z
+                .word xt_asm_ror_zx, z_asm_ror_zx
+                .byte "ror.zx"
 
 nt_asm_rti:
-		.byte 3, IM
-		.word nt_asm_ror_zx
-		.word xt_asm_rti, z_asm_rti
-		.byte "rti"
+                .byte 3, IM
+                .word nt_asm_ror_zx
+                .word xt_asm_rti, z_asm_rti
+                .byte "rti"
 
 nt_asm_rts:
-		.byte 3, IM
-		.word nt_asm_rti
-		.word xt_asm_rts, z_asm_rts
-		.byte "rts"
+                .byte 3, IM
+                .word nt_asm_rti
+                .word xt_asm_rts, z_asm_rts
+                .byte "rts"
 
 nt_asm_sbc:
-		.byte 3, IM
-		.word nt_asm_rts
-		.word xt_asm_sbc, z_asm_sbc
-		.byte "sbc"
+                .byte 3, IM
+                .word nt_asm_rts
+                .word xt_asm_sbc, z_asm_sbc
+                .byte "sbc"
 
 nt_asm_sbc_h:
-		.byte 5, IM
-		.word nt_asm_sbc
-		.word xt_asm_sbc_h, z_asm_sbc_h
-		.byte "sbc.#"
+                .byte 5, IM
+                .word nt_asm_sbc
+                .word xt_asm_sbc_h, z_asm_sbc_h
+                .byte "sbc.#"
 
 nt_asm_sbc_x:
-		.byte 5, IM
-		.word nt_asm_sbc_h
-		.word xt_asm_sbc_x, z_asm_sbc_x
-		.byte "sbc.x"
+                .byte 5, IM
+                .word nt_asm_sbc_h
+                .word xt_asm_sbc_x, z_asm_sbc_x
+                .byte "sbc.x"
 
 nt_asm_sbc_y:
-		.byte 5, IM
-		.word nt_asm_sbc_x
-		.word xt_asm_sbc_y, z_asm_sbc_y
-		.byte "sbc.y"
+                .byte 5, IM
+                .word nt_asm_sbc_x
+                .word xt_asm_sbc_y, z_asm_sbc_y
+                .byte "sbc.y"
 
 nt_asm_sbc_z:
-		.byte 5, IM
-		.word nt_asm_sbc_y
-		.word xt_asm_sbc_z, z_asm_sbc_z
-		.byte "sbc.z"
+                .byte 5, IM
+                .word nt_asm_sbc_y
+                .word xt_asm_sbc_z, z_asm_sbc_z
+                .byte "sbc.z"
 
 nt_asm_sbc_zi:
-		.byte 6, IM
-		.word nt_asm_sbc_z
-		.word xt_asm_sbc_zi, z_asm_sbc_zi
-		.byte "sbc.zi"
+                .byte 6, IM
+                .word nt_asm_sbc_z
+                .word xt_asm_sbc_zi, z_asm_sbc_zi
+                .byte "sbc.zi"
 
 nt_asm_sbc_ziy:
-		.byte 7, IM
-		.word nt_asm_sbc_zi
-		.word xt_asm_sbc_ziy, z_asm_sbc_ziy
-		.byte "sbc.ziy"
+                .byte 7, IM
+                .word nt_asm_sbc_zi
+                .word xt_asm_sbc_ziy, z_asm_sbc_ziy
+                .byte "sbc.ziy"
 
 nt_asm_sbc_zx:
-		.byte 6, IM
-		.word nt_asm_sbc_ziy
-		.word xt_asm_sbc_zx, z_asm_sbc_zx
-		.byte "sbc.zx"
+                .byte 6, IM
+                .word nt_asm_sbc_ziy
+                .word xt_asm_sbc_zx, z_asm_sbc_zx
+                .byte "sbc.zx"
 
 nt_asm_sbc_zxi:
-		.byte 7, IM
-		.word nt_asm_sbc_zx
-		.word xt_asm_sbc_zxi, z_asm_sbc_zxi
-		.byte "sbc.zxi"
+                .byte 7, IM
+                .word nt_asm_sbc_zx
+                .word xt_asm_sbc_zxi, z_asm_sbc_zxi
+                .byte "sbc.zxi"
 
 nt_asm_sec:
-		.byte 3, IM
-		.word nt_asm_sbc_zxi
-		.word xt_asm_sec, z_asm_sec
-		.byte "sec"
+                .byte 3, IM
+                .word nt_asm_sbc_zxi
+                .word xt_asm_sec, z_asm_sec
+                .byte "sec"
 
 nt_asm_sed:
-		.byte 3, IM
-		.word nt_asm_sec
-		.word xt_asm_sed, z_asm_sed
-		.byte "sed"
+                .byte 3, IM
+                .word nt_asm_sec
+                .word xt_asm_sed, z_asm_sed
+                .byte "sed"
 
 nt_asm_sei:
-		.byte 3, IM
-		.word nt_asm_sed
-		.word xt_asm_sei, z_asm_sei
-		.byte "sei"
+                .byte 3, IM
+                .word nt_asm_sed
+                .word xt_asm_sei, z_asm_sei
+                .byte "sei"
 
 nt_asm_sta:
-		.byte 3, IM
-		.word nt_asm_sei
-		.word xt_asm_sta, z_asm_sta
-		.byte "sta"
+                .byte 3, IM
+                .word nt_asm_sei
+                .word xt_asm_sta, z_asm_sta
+                .byte "sta"
 
 nt_asm_sta_x:
-		.byte 5, IM
-		.word nt_asm_sta
-		.word xt_asm_sta_x, z_asm_sta_x
-		.byte "sta.x"
+                .byte 5, IM
+                .word nt_asm_sta
+                .word xt_asm_sta_x, z_asm_sta_x
+                .byte "sta.x"
 
 nt_asm_sta_y:
-		.byte 5, IM
-		.word nt_asm_sta_x
-		.word xt_asm_sta_y, z_asm_sta_y
-		.byte "sta.y"
+                .byte 5, IM
+                .word nt_asm_sta_x
+                .word xt_asm_sta_y, z_asm_sta_y
+                .byte "sta.y"
 
 nt_asm_sta_z:
-		.byte 5, IM
-		.word nt_asm_sta_y
-		.word xt_asm_sta_z, z_asm_sta_z
-		.byte "sta.z"
+                .byte 5, IM
+                .word nt_asm_sta_y
+                .word xt_asm_sta_z, z_asm_sta_z
+                .byte "sta.z"
 
 nt_asm_sta_zi:
-		.byte 6, IM
-		.word nt_asm_sta_z
-		.word xt_asm_sta_zi, z_asm_sta_zi
-		.byte "sta.zi"
+                .byte 6, IM
+                .word nt_asm_sta_z
+                .word xt_asm_sta_zi, z_asm_sta_zi
+                .byte "sta.zi"
 
 nt_asm_sta_ziy:
-		.byte 7, IM
-		.word nt_asm_sta_zi
-		.word xt_asm_sta_ziy, z_asm_sta_ziy
-		.byte "sta.ziy"
+                .byte 7, IM
+                .word nt_asm_sta_zi
+                .word xt_asm_sta_ziy, z_asm_sta_ziy
+                .byte "sta.ziy"
 
 nt_asm_sta_zx:
-		.byte 6, IM
-		.word nt_asm_sta_ziy
-		.word xt_asm_sta_zx, z_asm_sta_zx
-		.byte "sta.zx"
+                .byte 6, IM
+                .word nt_asm_sta_ziy
+                .word xt_asm_sta_zx, z_asm_sta_zx
+                .byte "sta.zx"
 
 nt_asm_sta_zxi:
-		.byte 7, IM
-		.word nt_asm_sta_zx
-		.word xt_asm_sta_zxi, z_asm_sta_zxi
-		.byte "sta.zxi"
+                .byte 7, IM
+                .word nt_asm_sta_zx
+                .word xt_asm_sta_zxi, z_asm_sta_zxi
+                .byte "sta.zxi"
 
 nt_asm_stx:
-		.byte 3, IM
-		.word nt_asm_sta_zxi
-		.word xt_asm_stx, z_asm_stx
-		.byte "stx"
+                .byte 3, IM
+                .word nt_asm_sta_zxi
+                .word xt_asm_stx, z_asm_stx
+                .byte "stx"
 
 nt_asm_stx_z:
-		.byte 5, IM
-		.word nt_asm_stx
-		.word xt_asm_stx_z, z_asm_stx_z
-		.byte "stx.z"
+                .byte 5, IM
+                .word nt_asm_stx
+                .word xt_asm_stx_z, z_asm_stx_z
+                .byte "stx.z"
 
 nt_asm_stx_zy:
-		.byte 6, IM
-		.word nt_asm_stx_z
-		.word xt_asm_stx_zy, z_asm_stx_zy
-		.byte "stx.zy"
+                .byte 6, IM
+                .word nt_asm_stx_z
+                .word xt_asm_stx_zy, z_asm_stx_zy
+                .byte "stx.zy"
 
 nt_asm_sty:
-		.byte 3, IM
-		.word nt_asm_stx_zy
-		.word xt_asm_sty, z_asm_sty
-		.byte "sty"
+                .byte 3, IM
+                .word nt_asm_stx_zy
+                .word xt_asm_sty, z_asm_sty
+                .byte "sty"
 
 nt_asm_sty_z:
-		.byte 5, IM
-		.word nt_asm_sty
-		.word xt_asm_sty_z, z_asm_sty_z
-		.byte "sty.z"
+                .byte 5, IM
+                .word nt_asm_sty
+                .word xt_asm_sty_z, z_asm_sty_z
+                .byte "sty.z"
 
 nt_asm_sty_zx:
-		.byte 6, IM
-		.word nt_asm_sty_z
-		.word xt_asm_sty_zx, z_asm_sty_zx
-		.byte "sty.zx"
+                .byte 6, IM
+                .word nt_asm_sty_z
+                .word xt_asm_sty_zx, z_asm_sty_zx
+                .byte "sty.zx"
 
 nt_asm_stz:
-		.byte 3, IM
-		.word nt_asm_sty_zx
-		.word xt_asm_stz, z_asm_stz
-		.byte "stz"
+                .byte 3, IM
+                .word nt_asm_sty_zx
+                .word xt_asm_stz, z_asm_stz
+                .byte "stz"
 
 nt_asm_stz_x:
-		.byte 5, IM
-		.word nt_asm_stz
-		.word xt_asm_stz_x, z_asm_stz_x
-		.byte "stz.x"
+                .byte 5, IM
+                .word nt_asm_stz
+                .word xt_asm_stz_x, z_asm_stz_x
+                .byte "stz.x"
 
 nt_asm_stz_z:
-		.byte 5, IM
-		.word nt_asm_stz_x
-		.word xt_asm_stz_z, z_asm_stz_z
-		.byte "stz.z"
+                .byte 5, IM
+                .word nt_asm_stz_x
+                .word xt_asm_stz_z, z_asm_stz_z
+                .byte "stz.z"
 
 nt_asm_stz_zx:
-		.byte 6, IM
-		.word nt_asm_stz_z
-		.word xt_asm_stz_zx, z_asm_stz_zx
-		.byte "stz.zx"
+                .byte 6, IM
+                .word nt_asm_stz_z
+                .word xt_asm_stz_zx, z_asm_stz_zx
+                .byte "stz.zx"
 
 nt_asm_tax:
-		.byte 3, IM
-		.word nt_asm_stz_zx
-		.word xt_asm_tax, z_asm_tax
-		.byte "tax"
+                .byte 3, IM
+                .word nt_asm_stz_zx
+                .word xt_asm_tax, z_asm_tax
+                .byte "tax"
 
 nt_asm_tay:
-		.byte 3, IM
-		.word nt_asm_tax
-		.word xt_asm_tay, z_asm_tay
-		.byte "tay"
+                .byte 3, IM
+                .word nt_asm_tax
+                .word xt_asm_tay, z_asm_tay
+                .byte "tay"
 
 nt_asm_trb:
-		.byte 3, IM
-		.word nt_asm_tay
-		.word xt_asm_trb, z_asm_trb
-		.byte "trb"
+                .byte 3, IM
+                .word nt_asm_tay
+                .word xt_asm_trb, z_asm_trb
+                .byte "trb"
 
 nt_asm_trb_z:
-		.byte 5, IM
-		.word nt_asm_trb
-		.word xt_asm_trb_z, z_asm_trb_z
-		.byte "trb.z"
+                .byte 5, IM
+                .word nt_asm_trb
+                .word xt_asm_trb_z, z_asm_trb_z
+                .byte "trb.z"
 
 nt_asm_tsb:
-		.byte 3, IM
-		.word nt_asm_trb_z
-		.word xt_asm_tsb, z_asm_tsb
-		.byte "tsb"
+                .byte 3, IM
+                .word nt_asm_trb_z
+                .word xt_asm_tsb, z_asm_tsb
+                .byte "tsb"
 
 nt_asm_tsb_z:
-		.byte 5, IM
-		.word nt_asm_tsb
-		.word xt_asm_tsb_z, z_asm_tsb_z
-		.byte "tsb.z"
+                .byte 5, IM
+                .word nt_asm_tsb
+                .word xt_asm_tsb_z, z_asm_tsb_z
+                .byte "tsb.z"
 
 nt_asm_tsx:
-		.byte 3, IM
-		.word nt_asm_tsb_z
-		.word xt_asm_tsx, z_asm_tsx
-		.byte "tsx"
+                .byte 3, IM
+                .word nt_asm_tsb_z
+                .word xt_asm_tsx, z_asm_tsx
+                .byte "tsx"
 
 nt_asm_txa:
-		.byte 3, IM
-		.word nt_asm_tsx
-		.word xt_asm_txa, z_asm_txa
-		.byte "txa"
+                .byte 3, IM
+                .word nt_asm_tsx
+                .word xt_asm_txa, z_asm_txa
+                .byte "txa"
 
 nt_asm_txs:
-		.byte 3, IM
-		.word nt_asm_txa
-		.word xt_asm_txs, z_asm_txs
-		.byte "txs"
+                .byte 3, IM
+                .word nt_asm_txa
+                .word xt_asm_txs, z_asm_txs
+                .byte "txs"
 
 nt_asm_tya:
-		.byte 3, IM
-		.word nt_asm_txs
-		.word xt_asm_tya, z_asm_tya
-		.byte "tya"
+                .byte 3, IM
+                .word nt_asm_txs
+                .word xt_asm_tya, z_asm_tya
+                .byte "tya"
 
 ; Assembler pseudo-instructions, directives and macros
 ;
@@ -2577,11 +2588,11 @@ nt_asm_arrow:   ; uses same code as HERE, but immediate
                 .byte 2, IM
                 .word nt_asm_back_branch
                 .word xt_asm_arrow, z_asm_arrow   
-                .byte "->"
+                .byte "--->" ; was "->", conflicts with tester.fs
 
 assembler_dictionary_start:
 nt_asm_push_a:
-                .byte 6, IM
+                .byte 6, IM+NN
                 .word nt_asm_arrow
                 .word xt_asm_push_a, z_asm_push_a
                 .byte "push-a"

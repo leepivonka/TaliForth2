@@ -80,69 +80,16 @@ cmpl_a:
                 bne _done
                 inc cp+1
 _done:
-		rts
+                rts
+                
+cmpl_drop:      ; compile DROP
+                lda #$e8                ;opcode for INX
+                tay
+                bra cmpl_word
 .scend
 
 ; =====================================================================
 ; CODE FIELD ROUTINES
-
-doconst:
-        ; """Execute a CONSTANT: Push the data in the first two bytes of
-        ; the Data Field onto the Data Stack
-        ; """
-                dex             ; make room for constant
-                dex
-
-                ; The value we need is stored in the two bytes after the
-                ; JSR return address, which in turn is what is on top of
-                ; the Return Stack
-                pla             ; LSB of return address
-                sta tmp1
-                pla             ; MSB of return address
-                sta tmp1+1
-
-                ; start LDY with 1 instead of 0 because of how JSR stores
-                ; the return address on the 65c02
-                ldy #1
-                lda (tmp1),y
-                sta 0,x
-                iny
-                lda (tmp1),y
-                sta 1,x
-
-                ; this takes us back to the original caller, not the
-                ; DOCONST caller
-                rts
-
-
-dodefer:
-.scope
-        ; """Execute a DEFER statement at runtime: Execute the address we
-        ; find after the caller in the Data Field
-        ; """
-                ; The xt we need is stored in the two bytes after the JSR
-                ; return address, which is what is on top of the Return
-                ; Stack. So all we have to do is replace our return jump
-                ; with what we find there
-		pla             ; LSB
-                sta tmp1
-                pla             ; MSB
-                sta tmp1+1
-
-                ldy #1
-                lda (tmp1),y
-                sta tmp2
-                iny
-                lda (tmp1),y
-                sta tmp2+1
-
-                jmp (tmp2)      ; This is actually a jump to the new target
-.scend
-
-defer_error:
-                ; """Error routine for undefined DEFER: Complain and abort"""
-                lda #err_defer
-                jmp error
 
 dodoes:
 .scope
@@ -150,34 +97,33 @@ dodoes:
         ; docs/create-does.txt for details and
         ; http://www.bradrodriguez.com/papers/moving3.htm
         ; """
-  		; Assumes the address of the CFA of the original defining word
+                ; Assumes the address of the CFA of the original defining word
                 ; (say, CONSTANT) is on the top of the Return Stack. Save it
                 ; for a later jump, adding one byte because of the way the
                 ; 6502 works
-                ply             ; LSB
-                pla             ; MSB
-                iny
-                bne +
+                pla             ; LSB
+                ply             ; MSB
                 inc
+                bne +
+                iny
 *
-                sty tmp2
-                sta tmp2+1
+                sta tmp2
+                sty tmp2+1
                
                 ; Next on the Return Stack should be the address of the PFA of
                 ; the calling defined word (say, the name of whatever constant we
                 ; just defined). Move this to the Data Stack, again adding one.
-                dex
-                dex
                 
-                ply
                 pla
-                iny
-                clc
-                bne +
+                ply
                 inc
+                bne +
+                iny
 *
-                sty 0,x         ; LSB
-                sta 1,x         ; MSB
+                dex
+                dex
+                sta 0,x         ; LSB
+                sty 1,x         ; MSB
 
                 ; This leaves the return address from the original main routine
                 ; on top of the Return Stack. We leave that untouched and jump
@@ -198,18 +144,16 @@ dovar:
         ; """
                 ; Pull the return address off the machine's stack, adding
                 ; one because of the way the 65c02 handles subroutines
-                ply             ; LSB
-                pla             ; MSB
-                iny
-                bne +
+                pla             ; LSB
+                ply             ; MSB
                 inc
+                bne +
+                iny
 *
                 dex
                 dex
-
-                sta 1,x
-                tya
                 sta 0,x
+                sty 1,x
                 
                 rts
 .scend
@@ -239,10 +183,8 @@ _nibble_to_ascii:
                 cmp #$3a        ; '9+1
                 bcc +
                 adc #$06
-
-*               jmp emit_a
-
-        	rts
+*
+                jmp emit_a
 .scend
 
 compare_16bit:
@@ -297,7 +239,6 @@ current_to_dp:
                 asl             ; turn it into an offset (in cells)
 
                 ; get the dictionary pointer for that wordlist.
-                clc
                 adc #wordlists_offset   ; add offset to wordlists base.
                 tay
                 lda (up),y              ; get the dp for that wordlist.
@@ -318,7 +259,6 @@ dp_to_current:
                 asl             ; turn it into an offset (in cells)
 
                 ; get the dictionary pointer for that wordlist.
-                clc
                 adc #wordlists_offset   ; add offset to wordlists base.
                 tay
                 lda dp
@@ -355,8 +295,7 @@ _loop:
                 jsr xt_find_name        ; ( addr u addr u -- addr u nt|0 )
 
                 ; a zero signals that we didn't find a word in the Dictionary
-                lda 0,x
-                ora 1,x
+                lda 1,x		; we assume nt won't be in zero page
                 bne _got_name_token
 
                 ; We didn't get any nt we know of, so let's see if this is
@@ -368,7 +307,7 @@ _loop:
                 ; complaining for us
                 jsr xt_number           ; ( addr u -- u|d ) 
 
-                ; Otherweise, if we're interpreting, we're done
+                ; Otherwise, if we're interpreting, we're done
                 lda state
                 beq _loop
 
@@ -379,26 +318,13 @@ _loop:
                 bit status
                 beq _single_number
 
-                ; It's a double cell number.  If we swap the
-                ; upper and lower half, we can use the literlal_runtime twice
-                ; to compile it into the dictionary.
-                jsr xt_swap
-                ldy #>literal_runtime
-                lda #<literal_runtime
-                jsr cmpl_subroutine
-                
-                ; compile our number
-                jsr xt_comma
-                
-                ; Fall into _single_number to process the other half.
+                ; It's a double cell number.
+                jsr xt_two_literal
+                bra _loop
+                                
 _single_number: 
-                ldy #>literal_runtime
-                lda #<literal_runtime
-                jsr cmpl_subroutine
+                jsr xt_literal
 
-                ; compile our number
-                jsr xt_comma
-     
                 ; That was so much fun, let's do it again!
                 bra _loop
 
@@ -406,65 +332,45 @@ _got_name_token:
                 ; We have a known word's nt TOS. We're going to need its xt
                 ; though, which is four bytes father down. 
                 
-                ; we arrive here with ( addr u nt ), so we NIP twice
-                lda 0,x
-                sta 4,x
-                lda 1,x
-                sta 5,x
+                ; we arrive here with ( addr u nt )
+                jsr xt_nip
+                jsr xt_nip               ; ( nt ) 
 
-                inx
-                inx
-                inx
-                inx                     ; ( nt ) 
+                jsr xt_name_to_int      ; ( nt - xt ) & tmp3 = nt
+
+                ldy #nt_status          ; A = word status
+                lda (tmp3),y
                 
-                ; Save a version of nt for error handling and compilation stuff
-                lda 0,x
-                sta tmpbranch
-                lda 1,x
-                sta tmpbranch+1
-
-                jsr xt_name_to_int      ; ( nt - xt ) 
-
                 ; See if we are in interpret or compile mode, 0 is interpret
-                lda state
+                ldy state
                 bne _compile
 
                 ; We are interpreting, so EXECUTE the xt that is TOS. First,
                 ; though, see if this isn't a compile-only word, which would be
                 ; illegal. The status byte is the second one of the header.
-                ldy #1
-                lda (tmpbranch),y
-                and #CO                 ; mask everything but Compile Only bit
+                bit #CO                 ; mask everything but Compile Only bit
                 beq _interpret
-
                 ; TODO see if we can print offending word first
                 lda #err_compileonly
                 jmp error
 
-_interpret:
-                ; We JSR to EXECUTE instead of calling the xt directly because
+_interpret:     ; We JSR to EXECUTE instead of calling the xt directly because
                 ; the RTS of the word we're executing will bring us back here,
                 ; skipping EXECUTE completely during RTS. If we were to execute
                 ; xt directly, we have to fool around with the Return Stack
                 ; instead, which is actually slightly slower
-                jsr xt_execute
+                jsr execute_nouf
 
                 ; That's quite enough for this word, let's get the next one
-                jmp _loop
+                bra _loop
 
 _compile:
-                ; We're compiling! However, we need to see if this is an
-                ; IMMEDIATE word, which would mean we execute it right now even
-                ; during compilation mode. Fortunately, we saved the nt so life
-                ; is easier. The flags are in the second byte of the header
-                ldy #1
-                lda (tmpbranch),y
-                and #IM                 ; Mask all but IM bit
+                bit #IM
                 bne _interpret          ; IMMEDIATE word, execute right now
 
                 ; Compile the xt into the Dictionary with COMPILE,
                 jsr xt_compile_comma
-                jmp _loop
+                bra _loop
 
 _line_done:
                 ; drop stuff from PARSE_NAME
@@ -485,14 +391,11 @@ is_printable:
         ; is printable. Keeps A. See 
         ; http://www.obelisk.me.uk/6502/algorithms.html for a
         ; discussion of various ways to do this
-                cmp #AscSP              ; $20
-                bcc _done
                 cmp #'~ + 1             ; $7E
                 bcs _failed
-                sec
-                bra _done
-_failed:
-                clc
+                cmp #AscSP              ; $20
+                bcs _done
+_failed:        clc
 _done:       
                 rts
 .scend
@@ -506,17 +409,20 @@ is_whitespace:
         ; 0 (clear) is no, it isn't whitespace, while 1 (set) means
         ; that it is whitespace. See PARSE and PARSE-NAME for
         ; a discussion of the uses. Does not change A or Y.
-                cmp #00                 ; explicit comparison
-                bcc _done
                 cmp #AscSP + 1
                 bcs _failed
                 sec
-                bra _done
-_failed:
-                clc
-_done:
+                rts
+
+_failed:        clc
                 rts
 .scend
+
+
+defer_error:
+                ; """Error routine for undefined DEFER: Complain and abort"""
+                lda #err_defer
+                bra error
 
 
 ; Underflow tests. We jump to the label with the number of cells (not: bytes)
@@ -553,14 +459,13 @@ error:
         ; """
                 asl
                 tay
-                lda error_table,y
-                sta tmp3                ; lsb
-                iny
-                lda error_table,y
-                sta tmp3+1              ; msb
-
+                lda error_table+1,y     ; msb
+                pha
+                lda error_table+0,y     ; lsb
+                ply
                 jsr print_common
-        	jmp xt_abort            ; no jsr, as we clobber return stack
+
+                jmp xt_abort
 
 
 print_string: 
@@ -571,41 +476,39 @@ print_string:
         ; """
                 asl
                 tay
-                lda string_table,y
-                sta tmp3                ; lsb
-                iny
-                lda string_table,y
-                sta tmp3+1              ; msb
+                lda string_table+1,y    ; msb
+                pha
+                lda string_table+0,y    ; lsb
+                ply
 
                 ; falls through to print_common
 
 print_common:
         ; """common print loop for print_string and print_error. assumes
-        ; zero-terminated address of string to be printed is in tmp3. 
+        ; zero-terminated address of string to be printed is in YA.
         ; adds lf
         ; """
                 jsr print_common_no_lf
+                jmp xt_cr
 
-                lda #asclf
-                jsr emit_a
-
-        	rts
 
 print_common_no_lf:
         ; """common print loop with no line feed at the end. assumes
-        ; address of zero-terminated string to be printed is in tmp3.
+        ; address of zero-terminated string to be printed is in YA.
         ; used by print_common
         ; """
 .scope
+                sta tmp3
+                sty tmp3+1
+
                 ldy #0
-_loop:
-                lda (tmp3),y
-                beq _done               ; strings are zero-terminated
-                jsr emit_a              ; allows vectoring via output
+                bra _test
+
+_loop:          jsr emit_a
                 iny
-                bra _loop
-_done:
-        	rts
+_test:          lda (tmp3),y
+                bne _loop               ; strings are zero-terminated
+                rts
 .scend
 
 
@@ -624,9 +527,7 @@ print_u:
                 jsr xt_less_number_sign         ; <#
                 jsr xt_number_sign_s            ; #s
                 jsr xt_number_sign_greater      ; #>
-                jsr xt_type                     ; type
-        
-                rts
+                jmp xt_type                     ; type
 .scend
                
         

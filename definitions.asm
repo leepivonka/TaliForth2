@@ -8,35 +8,36 @@
 ; memory map are kept in the platform folder.
 
 
-; ZERO PAGE ADDRESSES/VARIABLES
+ .text ZeroPage ; ZERO PAGE ADDRESSES/VARIABLES ---------------------------------
+        .org user0
 
 ; These are kept at the top of Zero Page, with the most important variables at
 ; the top because the Data Stack grows towards this area from dsp0: If there is
 ; an overflow, the lower, less important variables will be clobbered first,
 ; giving the system a chance to recover. In other words, they are part of the
 ; floodplain.
+; This layout duplicated in cold_zp_table.
 
+ .space cp      2          ; Compiler Pointer
+ .space dp      2          ; Dictionary Pointer
+ .space workword 2         ; nt (not xt!) of word being compiled, except in
+                           ; a :NONAME declared word (see status)
 ; The four variables insrc, cib, ciblen, and toin must stay together in this
 ; sequence for the words INPUT>R and R>INPUT to work correctly. 
-
-.alias cp        user0+0   ; Compiler Pointer
-.alias dp        user0+2   ; Dictionary Pointer
-.alias workword  user0+4   ; nt (not xt!) of word being compiled, except in
-                           ; a :NONAME declared word (see status)
-.alias insrc     user0+6   ; input Source for SOURCE-ID
-.alias cib       user0+8   ; address of current input buffer
-.alias ciblen    user0+10  ; length of current input buffer
-.alias toin      user0+12  ; pointer to CIB (>IN in Forth)
-.alias ip        user0+14  ; Instruction Pointer (current xt)
-.alias output    user0+16  ; vector for EMIT
-.alias input     user0+18  ; vector for KEY
-.alias havekey   user0+20  ; vector for KEY?
-.alias state     user0+22  ; STATE: -1 compile, 0 interpret
-.alias base      user0+24  ; number radix, default 10
-.alias nc_limit  user0+26  ; limit for Native Compile size
-.alias uf_strip  user0+28  ; flag to strip underflow detection code
-.alias up        user0+30  ; User Pointer (Address of user variables)
-.alias status    user0+32  ; internal status information
+ .space insrc   2          ; input Source for SOURCE-ID
+ .space cib     2          ; address of current input buffer
+ .space ciblen  2          ; length of current input buffer
+ .space toin    2          ; pointer to CIB (>IN in Forth)
+ .space tmp0    2          ; temporary storage
+ .space output  2          ; vector for EMIT
+ .space input   2          ; vector for KEY
+ .space havekey 2          ; vector for KEY?
+ .space state   2          ; STATE: -1 compile, 0 interpret
+ .space base    2          ; number radix, default 10
+ .space nc_limit 2         ; limit for Native Compile size
+ .space uf_strip 2         ; flag to strip underflow detection code
+ .space up      2          ; User Pointer (Address of user variables)
+ .space status  2          ; internal status information
                            ; (used by : :NONAME ; ACCEPT)
                            ; Bit 7 = Redefined word message postpone
                            ;         When set before calling CREATE, it will
@@ -58,53 +59,51 @@
                            ; Bit 1 = Current history buffer (0-7, wraps)
                            ; Bit 0 = Current history buffer lsb
                            ; status+1 is used by ACCEPT to hold history lengths.
-.alias tmpbranch user0+34  ; temp storage for 0BRANCH, BRANCH only
-.alias tmp1      user0+36  ; temporary storage
-.alias tmp2      user0+38  ; temporary storage
-.alias tmp3      user0+40  ; temporary storage (especially for print)
-.alias tmpdsp    user0+42  ; temporary DSP (X) storage (two bytes)
-.alias tmptos    user0+44  ; temporary TOS storage
-.alias editor1   user0+46  ; temporary for editors
-.alias editor2   user0+48  ; temporary for editors
-.alias editor3   user0+50  ; temporary for editors
-.alias tohold    user0+52  ; pointer for formatted output 
-.alias scratch   user0+54  ; 8 byte scratchpad (see UM/MOD)
-        
+ .space tmp4    2          ; temporary storage
+ .space tmp1    2          ; temporary storage
+ .space tmp2    2          ; temporary storage
+ .space tmp3    2          ; temporary storage (especially for print)
+ .space tmpdsp  2          ; temporary DSP (X) storage (two bytes)
+ .space tmptos  2          ; temporary TOS storage
+ .space editor1 2          ; temporary for editors
+ .space editor2 2          ; temporary for editors
+ .space editor3 2          ; temporary for editors
+ .alias leave_anchor editor1 ; head of LEAVE resolve chain, used by DO LEAVE LOOP
+ .space tohold  2          ; pointer for formatted output 
+ .space scratch 8          ; 8 byte scratchpad (see UM/MOD)
 
-; Zero Page:                
-; Bytes used for variables: 62 ($0000-$003D) 
-; First usable Data Stack location: $003E (decimal 62) 
-; Bytes avaible for Data Stack: 128-62 = 66 --> 33 16-bit cells
+ .space dsp     56        ; Data stack, 28 16-bit cells
+dsp0:                     ; Empty value of Data Stack Pointer
 
-.alias dsp0      $78            ; initial Data Stack Pointer, see docs/stack.md
 
-; User Variables:
-; Block variables                
-.alias blk_offset 0        ; BLK : UP + 0
-.alias scr_offset 2        ; SCR : UP + 2
+ .text UserVariables ; User Variables:------------------------------------------
+ ; This layout duplicated in cold_user_table.
+        .org 0
+; Block variables
+ .space blk_offset 2        ; BLK
+ .space scr_offset 2        ; SCR
 
-; Wordlists                
-.alias current_offset 4    ; CURRENT (byte) : UP + 4 (Compilation wordlist)
-.alias num_wordlists_offset 5
-                           ; #WORDLISTS (byte) : UP + 5
-.alias wordlists_offset 6  ; WORDLISTS (cells) : UP + 6 to UP + 29
-                           ;             (FORTH, EDITOR, ASSEMBLER, ROOT, +8 more)
-.alias num_order_offset 30 ; #ORDER (byte) : UP + 30
-                           ;          (Number of wordlists in search order)
-.alias search_order_offset 31
-                           ; SEARCH-ORDER (bytes) : UP + 31 to UP + 39
-                           ; Allowing for 9 to keep offsets even.
-.alias max_wordlists 12    ; Maximum number of wordlists supported
+; Wordlists
+ .space current_offset 1    ; CURRENT  (Compilation wordlist)
+ .space num_wordlists_offset 1 ; #WORDLISTS
+ .alias max_wordlists 12   ; Maximum number of wordlists supported
                            ; 4 Tali built-ins + 8 user wordlists 
+ .space wordlists_offset 24 ;2*max_wordlists  ; WORDLISTS (cells)
+			    ;             (FORTH, EDITOR, ASSEMBLER, ROOT, +8 more)
+ .space num_order_offset 1 ; #ORDER (Number of wordlists in search order)
+ .space search_order_offset 9 ; SEARCH-ORDER (bytes)
+                           ; Allowing for 9 to keep offsets even.
 
 ; Buffer variables
-.alias blkbuffer_offset    40   ; Address of buffer
-.alias buffblocknum_offset 42   ; Block number current in buffer
-.alias buffstatus_offset   44   ; Status of buffer (bit 0 = used, bit 1 = dirty)
+ .space blkbuffer_offset 2  ; Address of buffer
+ .space buffblocknum_offset 2   ; Block number current in buffer
+ .space buffstatus_offset 2   ; Status of buffer (bit 0 = used, bit 1 = dirty)
 ; Block I/O vectors
-.alias blockread_offset    46   ; Vector to block reading routine
-.alias blockwrite_offset   48   ; Vector to block writing routine
+ .space blockread_offset  2   ; Vector to block reading routine
+ .space blockwrite_offset 2   ; Vector to block writing routine
        
+ .text
+ 
 
 ; ASCII CHARACTERS
 
@@ -118,17 +117,6 @@
 .alias AscDEL  $7f  ; delete (CTRL-h)
 .alias AscCP   $10  ; CTRL-p (used to recall previous input history)
 .alias AscCN   $0e  ; CTRL-n (used to recall next input history)
-
-; DICTIONARY FLAGS
-
-; The first three bits are currently unused
-
-.alias CO 1  ; Compile Only
-.alias AN 2  ; Always Native Compile
-.alias IM 4  ; Immediate Word
-.alias NN 8  ; Never Native Compile
-.alias UF 16 ; Includes Underflow Check (RESERVED)
-.alias HC 32 ; Word has Code Field Area (CFA)
 
 
 ; VARIOUS
