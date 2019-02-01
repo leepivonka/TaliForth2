@@ -17,7 +17,7 @@ forth:
 
 .require "native_words.asm"     ; Native Forth words. Starts with COLD
 .require "assembler.asm"        ; SAN assembler
-.require "disassembler.asm"     ; SAN disassembler 
+.require "disassembler.asm"     ; SAN disassembler
 .require "ed.asm"               ; Line-based editor ed6502
 
 ; High-level Forth words, see forth_code/README.md
@@ -37,10 +37,10 @@ user_words_end:
 ; =====================================================================
 ; COMPILE WORDS, JUMPS and SUBROUTINE JUMPS INTO CODE
 
-; These three routines compile instructions such as "jsr xt_words" into a 
-; word at compile time so they are available at run time. Words that use 
-; this routine may not be natively compiled. We use "cmpl" as not to 
-; confuse these routines with the COMPILE, word. Always call this with a 
+; These three routines compile instructions such as "jsr xt_words" into a
+; word at compile time so they are available at run time. Words that use
+; this routine may not be natively compiled. We use "cmpl" as not to
+; confuse these routines with the COMPILE, word. Always call this with a
 ; subroutine jump, which means combining JSR/RTS to JMP in those cases is
 ; not okay. To use, load the LSB of the address in A and the MSB in Y:
 ;
@@ -81,7 +81,7 @@ cmpl_a:
                 inc cp+1
 _done:
                 rts
-                
+
 cmpl_drop:      ; compile DROP
                 lda #$e8                ;opcode for INX
                 tay
@@ -109,11 +109,11 @@ dodoes:
 *
                 sta tmp2
                 sty tmp2+1
-               
+
                 ; Next on the Return Stack should be the address of the PFA of
                 ; the calling defined word (say, the name of whatever constant we
                 ; just defined). Move this to the Data Stack, again adding one.
-                
+
                 pla
                 ply
                 inc
@@ -139,7 +139,7 @@ dovar:
         ; the Data Field onto the stack. This is called with JSR so we
         ; can pick up the address of the calling variable off the 65c02's
         ; stack. The final RTS takes us to the original caller of the
-        ; routine that itself called DOVAR. This is the default 
+        ; routine that itself called DOVAR. This is the default
         ; routine installed with CREATE.
         ; """
                 ; Pull the return address off the machine's stack, adding
@@ -154,7 +154,7 @@ dovar:
                 dex
                 sta 0,x
                 sty 1,x
-                
+
                 rts
 .scend
 
@@ -191,7 +191,7 @@ compare_16bit:
         ; """Compare TOS/NOS and return results in form of the 65c02 flags
         ; Adapted from Leventhal "6502 Assembly Language Subroutines", see
         ; also http://www.6502.org/tutorials/compare_beyond.html
-        ; For signed numbers, Z signals equality and N which number is larger: 
+        ; For signed numbers, Z signals equality and N which number is larger:
         ;       if TOS = NOS: Z=1 and N=0
         ;       if TOS > NOS: Z=0 and N=0
         ;       if TOS < NOS: Z=0 and N=1
@@ -199,7 +199,7 @@ compare_16bit:
         ;       if TOS = NOS: Z=1 and N=0
         ;       if TOS > NOS: Z=0 and C=1
         ;       if TOS < NOS: Z=0 and C=0
-        ; Compared to the book routine, WORD1 (MINUED) is TOS 
+        ; Compared to the book routine, WORD1 (MINUED) is TOS
         ;                               WORD2 (SUBTRAHEND) is NOS
         ; """
 .scope
@@ -222,7 +222,7 @@ _equal:
 _overflow:
                 ; handle overflow because we use signed numbers
                 eor #$80                ; complement negative flag
-_not_equal:     
+_not_equal:
                 ora #1                  ; if overflow, we can't be eqal
 _done:
                 rts
@@ -267,7 +267,7 @@ dp_to_current:
                 lda dp+1
                 sta (up),y
                 rts
- 
+
 interpret:
 .scope
         ; """Core routine for the interpreter called by EVALUATE and QUIT.
@@ -280,7 +280,7 @@ interpret:
                 ; delimiters per default and skips any leading spaces, which
                 ; PARSE doesn't
 _loop:
-                jsr xt_parse_name       ; ( "string" -- addr u ) 
+                jsr xt_parse_name       ; ( "string" -- addr u )
 
                 ; If PARSE-NAME returns 0 (empty line), no characters were left
                 ; in the line and we need to go get a new line
@@ -291,21 +291,21 @@ _loop:
                 ; Go to FIND-NAME to see if this is a word we know. We have to
                 ; make a copy of the address in case it isn't a word we know and
                 ; we have to go see if it is a number
-                jsr xt_two_dup          ; ( addr u -- addr u addr u ) 
+                jsr xt_two_dup          ; ( addr u -- addr u addr u )
                 jsr xt_find_name        ; ( addr u addr u -- addr u nt|0 )
 
                 ; a zero signals that we didn't find a word in the Dictionary
-                lda 1,x		; we assume nt won't be in zero page
+                lda 1,x     ; we assume nt won't be in zero page
                 bne _got_name_token
 
                 ; We didn't get any nt we know of, so let's see if this is
-                ; a number. 
+                ; a number.
                 inx                     ; ( addr u 0 -- addr u )
                 inx
 
                 ; If the number conversion doesn't work, NUMBER will do the
                 ; complaining for us
-                jsr xt_number           ; ( addr u -- u|d ) 
+                jsr xt_number           ; ( addr u -- u|d )
 
                 ; Otherwise, if we're interpreting, we're done
                 lda state
@@ -321,8 +321,8 @@ _loop:
                 ; It's a double cell number.
                 jsr xt_two_literal
                 bra _loop
-                                
-_single_number: 
+
+_single_number:
                 jsr xt_literal
 
                 ; That was so much fun, let's do it again!
@@ -330,17 +330,17 @@ _single_number:
 
 _got_name_token:
                 ; We have a known word's nt TOS. We're going to need its xt
-                ; though, which is four bytes father down. 
-                
+                ; though, which is four bytes father down.
+
                 ; we arrive here with ( addr u nt )
                 jsr xt_nip
-                jsr xt_nip               ; ( nt ) 
+                jsr xt_nip               ; ( nt )
 
                 jsr xt_name_to_int      ; ( nt - xt ) & tmp3 = nt
 
                 ldy #nt_status          ; A = word status
                 lda (tmp3),y
-                
+
                 ; See if we are in interpret or compile mode, 0 is interpret
                 ldy state
                 bne _compile
@@ -388,7 +388,7 @@ is_printable:
         ; """Given a character in A, check if it is a printable ASCII
         ; character in the range from $20 to $7E inclusive. Returns the
         ; result in the Carry Flag: 0 (clear) is not printable, 1 (set)
-        ; is printable. Keeps A. See 
+        ; is printable. Keeps A. See
         ; http://www.obelisk.me.uk/6502/algorithms.html for a
         ; discussion of various ways to do this
                 cmp #'~ + 1             ; $7E
@@ -396,7 +396,7 @@ is_printable:
                 cmp #AscSP              ; $20
                 bcs _done
 _failed:        clc
-_done:       
+_done:
                 rts
 .scend
 
@@ -405,7 +405,7 @@ is_whitespace:
 .scope
         ; """Given a character in A, check if it is a whitespace
         ; character, that is, an ASCII value from 0 to 32 (where
-        ; 32 is SPACE). Returns the result in the Carry Flag: 
+        ; 32 is SPACE). Returns the result in the Carry Flag:
         ; 0 (clear) is no, it isn't whitespace, while 1 (set) means
         ; that it is whitespace. See PARSE and PARSE-NAME for
         ; a discussion of the uses. Does not change A or Y.
@@ -449,12 +449,12 @@ underflow_4:
                 bpl underflow_error
                 rts
 
-underflow_error:      
+underflow_error:
                 ; Entry for COLD/ABORT/QUIT
                 lda #err_underflow      ; fall through to error
 
-error: 
-        ; """Given the error number in a, print the associated error string and 
+error:
+        ; """Given the error number in a, print the associated error string and
         ; call abort. uses tmp3.
         ; """
                 asl
@@ -463,53 +463,69 @@ error:
                 pha
                 lda error_table+0,y     ; lsb
                 ply
-                jsr print_common
+                jsr print_common_no_lf_YA
+                jsr xt_cr
 
                 jmp xt_abort
 
 
-print_string: 
-        ; """print a zero-terminated string to the console/screen, adding a
-        ; lf. we are given the string number, which functions as an index to
-        ; the string table. we do not check to see if the index is out of
-        ; range. uses tmp3.
+; =====================================================================
+; PRINTING ROUTINES
+
+; We distinguish two types of print calls, both of which take the string offset
+; (see strings.asm) in Y:
+
+;       print_string_Y       - with a line feed
+;       print_string_no_lf_Y - without a line feed
+
+; In addition, print_common provides a lower-level alternative for error
+; handling and anything else that provides the address of the
+; zero-terminated string directly in tmp3. All of those routines assume that
+; printing should be more concerned with size than speed, because anything to
+; do with humans reading text is going to be slow.
+
+        ; """Given the offset of a zero-terminated string in Y, print it to the
+        ; current output without adding a LF.
         ; """
-                asl
-                tay
-                lda string_table+1,y    ; msb
-                pha
-                lda string_table+0,y    ; lsb
-                ply
+.scope
+_2:             jsr emit_a
+                iny
+print_string_no_lf_Y:
+                lda string0,y
+                bne _2
+                rts
+.scend
 
-                ; falls through to print_common
 
-print_common:
-        ; """common print loop for print_string and print_error. assumes
-        ; zero-terminated address of string to be printed is in YA.
-        ; adds lf
+print_string_Y:
+        ; """Print a zero-terminated string to the console/screen, adding a LF.
+        ; We do not check to see if the index is out of range.
         ; """
-                jsr print_common_no_lf
-                jmp xt_cr
+                jsr print_string_no_lf_Y
+                jmp xt_cr               ; JSR/RTS because never compiled
 
 
-print_common_no_lf:
-        ; """common print loop with no line feed at the end. assumes
-        ; address of zero-terminated string to be printed is in YA.
-        ; used by print_common
+print_common_no_lf_YA:
+        ; """Common print routine used by both the print functions and
+        ; the error printing routine. Assumes string address is in tmp3. Uses
+        ; Y.
         ; """
 .scope
                 sta tmp3
                 sty tmp3+1
 
                 ldy #0
-                bra _test
+_loop:
+                lda (tmp3),y
+                beq _done               ; strings are zero-terminated
 
-_loop:          jsr emit_a
+                jsr emit_a              ; allows vectoring via output
                 iny
-_test:          lda (tmp3),y
-                bne _loop               ; strings are zero-terminated
+                bra _loop
+_done:
                 rts
 .scend
+
 
 
 print_u:
@@ -529,6 +545,6 @@ print_u:
                 jsr xt_number_sign_greater      ; #>
                 jmp xt_type                     ; type
 .scend
-               
-        
+
+
 ; END
