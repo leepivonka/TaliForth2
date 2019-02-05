@@ -1,7 +1,7 @@
 ; List of Strings for Tali Forth 2
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 01. Apr 2016 (for Liara Forth)
-; This version: 10. Oct 2018
+; This version: 10. Oct 2018 forked
 
 ; This file is included by taliforth.asm
 
@@ -71,20 +71,20 @@ _blockwords:  .byte "Please assign vectors BLOCK-READ-VECTOR and BLOCK-WRITE-VEC
 ; These are used by the ENVIRONMENT? word and stored in the old string
 ; format: Length byte first, then the string itself that is not rpt. not
 ; zero-terminated. Note these are uppercase by ANS defintion.
-; All start with "envs_".
-
+envs_tbl: ; synchronized with _results in xt_environment_q
 ; These return a single-cell number
-envs_cs:        .byte 15, "/COUNTED-STRING"
-envs_hold:      .byte 5, "/HOLD"
-envs_pad:       .byte 4, "/PAD"
-envs_aub:       .byte 17, "ADDRESS-UNIT-BITS"
-envs_floored:   .byte 7, "FLOORED"
-envs_max_char:  .byte 8, "MAX-CHAR"
-envs_max_n:     .byte 5, "MAX-N"
-envs_max_u:     .byte 5, "MAX-U"
-envs_rsc:       .byte 18, "RETURN-STACK-CELLS"
-envs_sc:        .byte 11, "STACK-CELLS"
-envs_wl:        .byte 9, "WORDLISTS"
+                .byte 15, "/COUNTED-STRING"
+                .byte 5, "/HOLD"
+                .byte 4, "/PAD"
+                .byte 17, "ADDRESS-UNIT-BITS"
+                .byte 7, "FLOORED"
+                .byte 8, "MAX-CHAR"
+                .byte 5, "MAX-N"
+                .byte 5, "MAX-U"
+                .byte 18, "RETURN-STACK-CELLS"
+                .byte 11, "STACK-CELLS"
+                .byte 9, "WORDLISTS"
 ; These return a double-cell number
-envs_max_d:     .byte 5, "MAX-D"
-envs_max_ud:    .byte 6, "MAX-UD"
+                .byte 5, "MAX-D"
+                .byte 6, "MAX-UD"
+                .byte 0 ; end-of-list

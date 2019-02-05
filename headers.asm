@@ -1,7 +1,7 @@
 ; Dictionary Headers for Tali Forth 2
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 05. Dec 2016 (Liara Forth)
-; This version: 25. Dec 2018
+; This version: 25. Dec 2018 forked
 
 ; Dictionary headers are kept separately from the code, which allows various
 ; tricks in the code. We roughly follow the Gforth terminology: The Execution
@@ -56,8 +56,8 @@
 ; always-native word just after defining their new word.
 ; The NN flag forbids native compiling, the AN flag forces it.
 
-; The last word (top word in code) is always BYE. It is marked as the last word
-; by its value of 0000 in its Next Header field. The words are sorted with the
+; The last word in a wordlist is marked
+; by its value of 0 in its Next Header field. The words are sorted with the
 ; more common ones first (further down in code) so they are found earlier.
 ; Anything to do with output comes later (further up) because things will
 ; always be slow if there is a human involved.
@@ -172,9 +172,14 @@ nt_definitions:
         .word nt_wordlist, xt_definitions, z_definitions
         .byte "definitions"
 
+nt_ramdrive:
+        .byte 8, NN
+        .word nt_definitions, xt_ramdrive, z_ramdrive
+        .byte "ramdrive"
+
 nt_block_ramdrive_init:
         .byte 19, UF+NN
-        .word nt_definitions, xt_block_ramdrive_init, z_block_ramdrive_init
+        .word nt_ramdrive, xt_block_ramdrive_init, z_block_ramdrive_init
         .byte "block-ramdrive-init"
 
 nt_list:

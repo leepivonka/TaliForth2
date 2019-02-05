@@ -2,7 +2,7 @@
 ; Tali Forth 2 for the 65c02
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 19. Jan 2014
-; This version: 24. Dec 2018
+; This version: 24. Dec 2018 forked
 
 ; This list is ordered alphabetically by the names of the words, not their
 ; strings (so "!" is sorted as "STORE"). However, we start off with COLD,
@@ -189,7 +189,7 @@ z_quit:         ; no RTS required
 ; This table is used by COLD.
 ; This duplicates the ZeroPage layout in definitions.asm .
 cold_zp_table:
-        .word cp0+256+1024      ; cp moved to make room for user vars and block buffer.
+        .word cp0+256+1024      ; cp moved to make room for user vars (uv_dim) and block buffer.
         .word dictionary_start  ; dp
         .word 0                 ; workword
         .word 0                 ; insrc (SOURCE-ID is 0 for keyboard)
@@ -938,7 +938,7 @@ z_blk:          rts
 xt_blkbuffer:
                 ldy #blkbuffer_offset  ; blkbuffer address is at UP + blkbuffer_offset.
 
-                ; Unlike some of the other user variables, we actually
+Psu_up_Y:       ; Unlike some of the other user variables, we actually
                 ; want to push the address stored here, which will
                 ; point to somewhere outside of the user variables.
                 dex
@@ -961,6 +961,7 @@ xt_block:
                 ; See if the block requested is the same as the one
                 ; we currently have in the buffer.
                 ; Check the LSB.
+
                 ldy #buffblocknum_offset
                 lda (up),y
                 cmp 0,x
@@ -1030,6 +1031,13 @@ z_block:        rts
 .scend
 
 
+; RAMDRIVE ( -- addr ) "Push ptr to ramdrive buffer"
+xt_ramdrive:
+                ldy #uv_ramdrive
+                bra Psu_up_Y
+z_ramdrive:
+
+
 ; ## BLOCK_RAMDRIVE_INIT ( u -- ) "Create a ramdrive for blocks"
 ; ## "block-ramdrive-init"  auto  Tali block
         ; """Create a RAM drive, with the given number of
@@ -1041,32 +1049,63 @@ z_block:        rts
 xt_block_ramdrive_init:
                 jsr underflow_1
 
-                ; Store the string to run here as a string literal.
-                ; See SLITERAL for the format information. This way, we
-                ; don't have the words defined below in the Dictionary until
-                ; we really use them.
-                jsr sliteral_runtime2
-                jmp +
-        .byte "base @ swap decimal"
-        .byte " 1024 *" ; ( Calculate how many bytes are needed for numblocks blocks )
-        .byte " dup"    ; ( Save a copy for formatting it at the end )
-        .byte " buffer: ramdrive" ; ( Create ramdrive )
+                lda cp                  ; remember start of ramdrive buffer
+                ldy #uv_ramdrive
+                sta (up),y
+                lda cp+1
+                iny
+                sta (up),y
 
-        ; ( These routines just copy between the buffer and the ramdrive blocks )
-        .byte " : block-read-ramdrive"  ; ( addr u -- )
-        .byte " ramdrive swap 1024 * + swap 1024 move ;"
-        .byte " : block-write-ramdrive" ; ( addr u -- )
-        .byte " ramdrive swap 1024 * + 1024 move ;"
-        .byte " ' block-read-ramdrive block-read-vector !" ; ( Replace I/O vectors )
-        .byte " ' block-write-ramdrive block-write-vector !"
-        .byte " ramdrive swap blank base !"
-*
+                lda 0,x                 ; Calculate how many bytes are needed for numblocks blocks
+                asl
+                asl
+                sta 1,x
+                stz 0,x
+                jsr xt_allot            ; Create ramdrive
 
-                ; The address and length of the ramdrive code is now on the
-                ; stack. Call EVALUATE to run it.
-                jmp xt_evaluate
+                ldy #blockread_offset   ; replace read vector
+                lda #<_block_read_ramdrive
+                sta (up),y
+                iny
+                lda #>_block_read_ramdrive
+                sta (up),y
 
-z_block_ramdrive_init:
+                ldy #blockwrite_offset  ; replace write vector
+                lda #<_block_write_ramdrive
+                sta (up),y
+                iny
+                lda #>_block_write_ramdrive
+                sta (up),y
+
+z_block_ramdrive_init: rts
+
+        ; These routines just copy between the buffer and the ramdrive blocks
+_block_read_ramdrive:           ; ( addr u -- )
+                jsr _block_u
+                                ; ( addr u*1024+ramdrive )
+                jsr xt_swap
+                                ; ( u*1024+ramdrive addr )
+_block_mov:     lda #<1024
+                ldy #>1024
+                jsr PsuYA
+                jmp xt_move
+
+_block_write_ramdrive: ; ( addr u -- )
+                jsr _block_u
+                                        ; ( addr u*1024+ramdrive )
+                bra _block_mov
+
+_block_u:       lda 0,x         ; 1024 *
+                asl
+                asl
+                ldy #uv_ramdrive+1
+                adc (up),y              ; ramdrive @ +
+                sta 1,x
+                dey
+                lda (up),y
+                sta 0,x
+                rts
+
 .scend
 
 
@@ -3022,12 +3061,7 @@ _byte_loop:
                 jsr byte_to_ascii
                 jsr xt_space
 
-                inc 2,x                 ; increment address
-                bne +
-                inc 3,x
-*
-
-                jsr one_minus_nouf      ; decrement length
+                jsr decinc              ; decrement length, increment address
 
                 iny
                 cpy #16
@@ -3259,7 +3293,7 @@ z_endcase:      rts
         ; """
 .scope
 xt_environment_q:
-                jsr underflow_1
+                jsr underflow_2
 
                 ; This code is table-driven: We walk through the list of
                 ; strings until we find one that matches, and then we take
@@ -3269,94 +3303,82 @@ xt_environment_q:
 
                 ldy 3,x     ; setup tmp2 for string compare
                 lda 2,x
-                bne +
-                dey
-*               dec
                 sta tmp2
                 sty tmp2+1
+                lda 0,x
+                sta tmp3
+
+                phx
 
                 ; Search the table for a string match
-                ldy #$fe                ; index for table
-_search_loop:   iny
-                iny
+                ldx #$ff                ; index for table
+                stx tmp1                ; init entry #
 
-                ; Get address of string to check from table
-                lda _table+1,y
-                beq _no_match           ; end_of_table?
-                sta tmp1+1
-                lda _table+0,y
-                sta tmp1
+_search_loop:   inx                     ; skip to next entry
+                lda envs_tbl,x
+                beq _no_match
+                cmp #$20
+                bcs _search_loop
+                inc tmp1                ; increment entry #
 
-                lda (tmp1)              ; strings equal length?
-                cmp 0,x
+                cmp tmp3                ; strings equal length?
                 bne _search_loop
 
-                phy                     ; strings equal?
-                tay
+                ldy #0                  ; strings equal?
+_compare_loop:  inx
+                lda (tmp2),y
+                cmp envs_tbl,x
+                bne _search_loop
                 iny
-_compare_loop:  dey
-                beq _compare_found
-                lda (tmp1),y
-                cmp (tmp2),y
-                beq _compare_loop
-                ply
-                bra _search_loop
+                cpy tmp3
+                bcc _compare_loop
+
+                ; found!
+                plx
+                ; We arrive here with ( addr u ) and know that we've found
+                ; a match.
+                lda tmp1                ; The index of the match is in A.
+
+                ; See if this is a single-cell word.
+                asl
+                tay
+                cmp #_double_start*2
+                bcc _single
+
+                ; This is a double-celled result, which means we have to
+                ; fool around with the index some more.
+                asl
+                sbc #[_double_start*2]-1
+                tay
+
+                ; We also need a further cell on the stack
+                dex                     ; ( addr u ? )
+                dex
+
+                lda _results+2,y
+                sta 4,x
+                lda _results+3,y
+                sta 5,x                 ; ( res res ? )
+
+_single:        ; Copy 1st cell of result
+                lda _results+0,y
+                sta 2,x
+                lda _results+1,y
+                sta 3,x
+
+                lda #$ff
+                sta 0,x
+                sta 1,x                 ; ( res f )
+                rts
+
 
 _no_match:      ; Bummer, not found. We arrive here with
                 ; ( addr u ) and need to return just a zero
+                plx
                 inx
                 inx
                 stz 0,x
                 stz 1,x
-                rts
-
-_compare_found: ply
-                ; We arrive here with ( addr u ) and know that we've found
-                ; a match. The index of the match is in Y.
-
-                ; See if this is a single-cell word.
-                tya
-                sec
-                sbc #_table_double-_table
-                bcs _double_result
-
-                ; Single-cell result
-                lda _results_single+0,y
-                sta 2,x
-                lda _results_single+1,y
-                sta 3,x                 ; ( res u )
-
-                bra _set_flag
-
-_double_result:
-                ; This is a double-celled result, which means we have to
-                ; fool around with the index some more. We also need a
-                ; further cell on the stack
-                dex                     ; ( addr u ? )
-                dex
-
-                ; We have four bytes per entry in the table, but the index
-                ; keeps increasing by two, so we only have to multiply by
-                ; two (shift left once) to get the right result
-                asl
-                tay
-
-                lda _results_double+0,y
-                sta 2,x
-                lda _results_double+1,y
-                sta 3,x                 ; ( res u ? )
-
-                lda _results_double+2,y
-                sta 4,x
-                lda _results_double+3,y
-                sta 5,x                 ; ( res res ? )
-
-                ; fall through to _set_flag
-_set_flag:
-                lda #$ff
-                sta 0,x
-                sta 1,x                 ; ( res f )
-
 z_environment_q: rts
 
 ; Tables for ENVIRONMENT?. We use two separate ones, one for the single-cell
@@ -3366,15 +3388,9 @@ z_environment_q: rts
 ; have to adapt the result code for double printout, where we subtract 22
 ; (two bytes each single-cell string and two bytes for the end-of-table
 ; marker 0000
-_table:
-        .word envs_cs, envs_hold, envs_pad, envs_aub, envs_floored
-        .word envs_max_char, envs_max_n, envs_max_u, envs_rsc
-        .word envs_sc, envs_wl
-_table_double:
-        .word envs_max_d, envs_max_ud
-        .word 0     ; end_of_table
 
-_results_single:
+_results: ; these are synchronized with envs_tbl
+        ; single --------
         .word $7FFF     ; /COUNTED-STRING
         .word $00FF     ; /HOLD
         .word 84        ; /PAD (this is 84 decimal)
@@ -3386,8 +3402,7 @@ _results_single:
         .word $80       ; RETURN-STACK-CELLS
         .word $20       ; STACK-CELLS (from definitions.asm)
         .word 9         ; WORDLISTS
-
-_results_double:
+ .alias _double_start [^-_results]/2
         .word $7FFF, $FFFF      ; MAX-D
         .word $FFFF, $FFFF      ; MAX-UD
 
@@ -4018,8 +4033,7 @@ _loop:
 
                 ; Prepare the conversion of the number.
                 jsr xt_two_to_r
-                jsr xt_zero
-                jsr xt_zero
+                jsr xt_zero_dot
                 jsr xt_two_r_from       ; ( addr1 u1 0 0 addr3 u3 ) ( R: addr2 addr2 )
                 jsr xt_to_number        ; ( addr1 u1 n n addr4 u4 ) ( R: addr2 addr2 )
 
@@ -5744,6 +5758,13 @@ z_one_minus:    rts
 .scend
 
 
+xt_two_plus_nouf:
+                inc 0,x
+                bne one_plus_nouf
+                inc 1,x
+                ; fall thru to xt_one_plus
+
+
 ; ## ONE_PLUS ( u -- u+1 ) "Increase TOS by one"
 ; ## "1+"  auto  ANS core
         ; """https://forth-standard.org/standard/core/OnePlus
@@ -5985,8 +6006,7 @@ xt_page:
                 jsr emit_a
 
                 ; move cursor to top left of screen
-                jsr xt_zero
-                jsr xt_zero
+                jsr xt_zero_dot
                 jsr xt_at_xy
 
 z_page:         rts
@@ -7696,7 +7716,7 @@ _colonword:
                 ; word, where the first byte is the length of the string
                 ; We can't use LATESTNT because we haven't added the new
                 ; word to the Dictionary yet
-                lda (workword)			; nt_length
+                lda (workword)          ; nt_length
                 jsr PsuZA
 
                 ; Now we print the offending word.
@@ -7874,14 +7894,7 @@ _string_loop:   lda 0,x
                 lda (2,x)
                 jsr cmpl_a
 
-                inc 2,x
-                bne +
-                inc 3,x
-*
-                lda 0,x
-                bne +
-                dec 1,x
-*               dec 0,x
+                jsr decinc
                 bra _string_loop
 _string_end:
 
@@ -8468,8 +8481,7 @@ xt_to:
                 lda 0,x
                 jsr cmpl_word
 
-                jsr xt_one_plus         ; step xt to VALUE's n MSB
-                jsr xt_one_plus
+                jsr xt_two_plus_nouf    ; step xt to VALUE's n MSB
                 lda #$8C                ; Code for STY abs
                 jsr cmpl_a
                 jmp xt_comma            ; MSB goes in Y
@@ -8596,7 +8608,7 @@ _digit_ok:      cmp base
                 sta tmp2
                 lda 7,x
                 sta tmp2+1
-                stz 4,x                 ;  ud = 0
+                stz 4,x                 ; ud = 0
                 stz 5,x
                 stz 6,x
                 stz 7,x
@@ -9194,15 +9206,8 @@ _loop:
                 lda (2,x)           ; Send the current character
                 jsr emit_a
 
-                inc 2,x             ; Move the address along
-                bne +
-                inc 3,x
-*
-                ; Reduce the count (on the data stack)
-                lda 0,x
-                bne +
-                dec 1,x
-*               dec 0,x
+                jsr decinc          ; Move the address along
+                                    ; Reduce the count (on the data stack)
 
                 ; done if length is zero
 _test:          lda 0,x
@@ -9216,6 +9221,18 @@ _test:          lda 0,x
 
 z_type:         rts
 .scend
+
+
+decinc:         inc 2,x
+                bne +
+                inc 3,x
+*
+                lda 0,x
+                bne +
+                dec 1,x
+*               dec 0,x
+
+                rts
 
 
 ; ## U_DOT ( u -- ) "Print TOS as unsigned number"
@@ -9841,8 +9858,7 @@ _loop:
                 jsr xt_space
 
                 ; get next word, which begins two down
-                jsr xt_one_plus         ; 1+
-                jsr xt_one_plus         ; 1+
+                jsr xt_two_plus_nouf    ; 1+ 1+
                 jsr xt_fetch            ; @ ( nt+1 )
 
                 ; if next address is zero, we're done
@@ -9938,6 +9954,12 @@ z_case:
 z_forth_wordlist:
 z_zero:
                 rts
+
+
+; ## ZERO. ( -- 0 0 ) "Push 0. to Data Stack"
+xt_zero_dot:    jsr xt_zero
+                bra xt_zero
+
 
 ; ## ZERO_EQUAL ( n -- f ) "Check if TOS is zero"
 ; ## "0="  auto  ANS core

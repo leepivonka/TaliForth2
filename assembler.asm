@@ -1,7 +1,7 @@
 ; Assembler for Tali Forth 2 
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 07. Nov 2014 (as tasm65c02)
-; This version: 18. Dez 2018
+; This version: 18. Dez 2018 forked
 
 ; This is the built-in assembler for Tali Forth 2. Once the assembler wordlist
 ; is included with

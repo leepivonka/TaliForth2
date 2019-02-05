@@ -1,7 +1,7 @@
 ; Definitions for Tali Forth 2
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 01. Apr 2016 (Liara Forth)
-; This version: 24. Dec 2018
+; This version: 24. Dec 2018 forked
 
 ; This file is included by taliforth.asm. These are the general
 ; definitions; platform-specific definitions such as the
@@ -23,7 +23,7 @@
  .space workword 2         ; nt (not xt!) of word being compiled, except in
                            ; a :NONAME declared word (see status)
 ; The four variables insrc, cib, ciblen, and toin must stay together in this
-; sequence for the words INPUT>R and R>INPUT to work correctly. 
+; sequence for the words INPUT>R and R>INPUT to work correctly.
  .space insrc   2          ; input Source for SOURCE-ID
  .space cib     2          ; address of current input buffer
  .space ciblen  2          ; length of current input buffer
@@ -59,6 +59,7 @@
                            ; Bit 1 = Current history buffer (0-7, wraps)
                            ; Bit 0 = Current history buffer lsb
                            ; status+1 is used by ACCEPT to hold history lengths.
+        ; cold_zp_table initialize ends here
  .space tmp4    2          ; temporary storage
  .space tmp1    2          ; temporary storage
  .space tmp2    2          ; temporary storage
@@ -69,7 +70,7 @@
  .space editor2 2          ; temporary for editors
  .space editor3 2          ; temporary for editors
  .alias leave_anchor editor1 ; head of LEAVE resolve chain, used by DO LEAVE LOOP
- .space tohold  2          ; pointer for formatted output 
+ .space tohold  2          ; pointer for formatted output
  .space scratch 8          ; 8 byte scratchpad (see UM/MOD)
 
  .space dsp     56        ; Data stack, 28 16-bit cells
@@ -87,9 +88,9 @@ dsp0:                     ; Empty value of Data Stack Pointer
  .space current_offset 1    ; CURRENT  (Compilation wordlist)
  .space num_wordlists_offset 1 ; #WORDLISTS
  .alias max_wordlists 12   ; Maximum number of wordlists supported
-                           ; 4 Tali built-ins + 8 user wordlists 
+                           ; 4 Tali built-ins + 8 user wordlists
  .space wordlists_offset 24 ;2*max_wordlists  ; WORDLISTS (cells)
-			    ;             (FORTH, EDITOR, ASSEMBLER, ROOT, +8 more)
+                            ;             (FORTH, EDITOR, ASSEMBLER, ROOT, +8 more)
  .space num_order_offset 1 ; #ORDER (Number of wordlists in search order)
  .space search_order_offset 9 ; SEARCH-ORDER (bytes)
                            ; Allowing for 9 to keep offsets even.
@@ -101,15 +102,18 @@ dsp0:                     ; Empty value of Data Stack Pointer
 ; Block I/O vectors
  .space blockread_offset  2   ; Vector to block reading routine
  .space blockwrite_offset 2   ; Vector to block writing routine
-       
+ .space uv_ramdrive 2      ; ramdrive buffer ptr
+
+ uv_dim: ; dimension of UserVariable block
  .text
- 
+
 
 ; ASCII CHARACTERS
 
 .alias AscCC   $03  ; break (CTRL-c)
 .alias AscBELL $07  ; bell sound
-.alias AscBS   $08  ; backspace 
+.alias AscBS   $08  ; backspace
+.alias AscTAB  $09  ; horz tab
 .alias AscLF   $0a  ; line feed
 .alias AscCR   $0d  ; carriage return
 .alias AscESC  $1b  ; escape

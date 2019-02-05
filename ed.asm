@@ -1,7 +1,7 @@
-; ed6502 - Ed-like line-based editor for Tali Forth 2 
+; ed6502 - Ed-like line-based editor for Tali Forth 2
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 13. Okt 2018
-; This version: 23. Nov 2018
+; This version: 23. Nov 2018 forked
 
 ; Ed is a line-orientated editor for Tali Forth 2 based on the classic Unix
 ; editor of the same name. It is included because a) I like line editors and
@@ -15,12 +15,12 @@
 ;   https://sanctum.geek.nz/arabesque/actually-using-ed/
 ;   http://www.psue.uni-hannover.de/wise2017_2018/material/ed.pdf
 
-; We start editor from Forth with 
+; We start editor from Forth with
 ;
 ;       ed ( -- addr u )
 ;
 ; The return values ( addr u ) are the address and length of the text written.
-; If no text was written, u is zero. 
+; If no text was written, u is zero.
 
 ; In the working memory, the text is stored as a simple linked list of lines.
 ; Each node consists of three 16-bit entries:
@@ -43,7 +43,7 @@
 ;       NOS: parameter 1 (before the comma)
 
 ; The third and fourth entries on the stack are the ( addr-t u-t ) entries the
-; text will be/has been written to, or u as 0 if nothing was defined. 
+; text will be/has been written to, or u as 0 if nothing was defined.
 
 ; We also need a pointer to the beginning of the text (first node of the list),
 ; the number of the current line, and a flag to mark if the text has been
@@ -53,8 +53,8 @@
 
 .alias ed_head     editor1   ; pointer to first list element (addr) (2 bytes)
 .alias ed_cur      editor2   ; current line number (1 is first line) (2 bytes)
-.alias ed_flags    editor3   ; Flags used by ed, where 
-;       bit 7 parameters - 0: none, 1: have at least one parameter 
+.alias ed_flags    editor3   ; Flags used by ed, where
+;       bit 7 parameters - 0: none, 1: have at least one parameter
 ;       bit 6 changed    - 0: text not changed, 1: text was changed
 ;       bit 0 printing   - 0: no line numbers (p), 1: with line numbers (n)
 
@@ -80,12 +80,11 @@ ed6502:
                 ; (the "target") on the stack. Because the stack picture is
                 ; going to get very confusing very fast, we'll mark them
                 ; specially with "-t" suffixes in the stack comments.
-                jsr xt_zero
-                jsr xt_zero             ; ( addr-t u-t )
+                jsr xt_zero_dot			; ( addr-t u-t )
 
                 jsr xt_cr
 
-_input_loop: 
+_input_loop:
                 ; Set parameter flag to none (bit 7); default printing is
                 ; without line numbers (bit 0). We leave the changed flag (bit
                 ; 6) because we might be coming from a previous add
@@ -104,13 +103,10 @@ _input_loop:
 
                 ; We were given an empty line. Advance one line, print it, and
                 ; make it the new current line
-                dex
-                dex                     ; ( addr-t u-t ? )
 
                 lda ed_cur
-                sta 0,x
-                lda ed_cur+1
-                sta 1,x                 ; ( addr-t u-t u )
+                ldy ed_cur+1
+                jsr PsuYA               ; ( addr-t u-t u )
 
                 ; This counts as having a parameter
                 lda #%10000000
@@ -119,7 +115,7 @@ _input_loop:
                 jsr xt_one_plus         ; ( addr-t u-t u+1 )
                 jsr _is_valid_line
                 bcs +
-                
+
                 ; New line number is not legal, abort
                 jmp _error_1drop
 *
@@ -137,9 +133,8 @@ _command_mode:
                 ; not weird computer people. Some commands like "a" will take a
                 ; "line 0", however. We use the ed_flags bit 7 to signal if
                 ; we are without parameters.
-                jsr xt_zero             ; parameter 1 is NOS ( addr-t u-t 0 )
-                jsr xt_zero             ; parameter 2 is TOS ( addr-t u-t 0 0 )
-                
+                jsr xt_zero_dot         ; parameter 2 is TOS ( addr-t u-t 0 0 )
+
                 ; We start off taking care of any parameters. These can be '%'
                 ; for the complete text, '$' for the last line, a line number,
                 ; or a line number followed by a ',' and then either the '$' for
@@ -161,14 +156,14 @@ _command_mode:
                 ;        case char = ';': TODO
                 ;              para1 = current line
                 ;              para2 = last line
-                ;       
+                ;
                 ;        case number:
                 ;              para1 = number
                 ;              get next char
-                ;       
+                ;
                 ;              if char = ',':
                 ;                      get next char
-                ;       
+                ;
                 ;                      case char = '$':
                 ;                              para2 = last line
                 ;
@@ -176,11 +171,11 @@ _command_mode:
                 ;                              para2 = number
                 ;
                 ;                      else error
-                ;              
+                ;
                 ;              else get previous char
                 ;
                 ;        else error
-                ;       
+                ;
                 ;        get next char
                 ;        prococess command char
 
@@ -196,20 +191,20 @@ _command_mode:
                 ; efficiently with a loop construct similar to the way the
                 ; commands are taken care of below. We'll revisit this once ed
                 ; is feature complete, because of the evils of premature
-                ; optimization and whatnot. 
+                ; optimization and whatnot.
 
 _prefix_dot:
                 ; --- . --- Designate current line for further operations
                 lda (cib)
                 cmp #$2e                ; ASCII '.'
                 bne _prefix_dollar
-                
+
                 jsr _have_text
 
                 lda ed_cur
                 sta 2,x
                 lda ed_cur+1
-                sta 3,x                 ; ( addr-t u-t cur 0 ) 
+                sta 3,x                 ; ( addr-t u-t cur 0 )
 
                 ; We have a parameter
                 lda #%10000000
@@ -232,31 +227,22 @@ _prefix_dot:
                 ; more than just a dot here. We now need to see if the next
                 ; character is a comma or a command character. To do this, we
                 ; need to modify the stack to ( addr-t u-t para1 0 addr u )
-                dex
-                dex
-                dex
-                dex
 
                 lda cib
-                sta 2,x
-                lda cib+1
-                sta 3,x
+                ldy cib+1
+                jsr PsuYA
 
                 lda ciblen
-                sta 0,x
-                lda ciblen+1
-                sta 1,x
+                ldy ciblen+1
+                jsr PsuYA
 
-                jsr xt_one_minus        ; ( addr-t u-t para1 0 addr u-1 )
-                jsr xt_swap             ; ( addr-t u-t para1 0 u-1 addr )
-                jsr xt_one_plus         ; ( addr-t u-t para1 0 u-1 addr+1 )
-                jsr xt_swap             ; ( addr-t u-t para1 0 addr+1 u-1 )
-                
+                jsr decinc              ; ( addr-t u-t para1 0 addr+1 u-1 )
+
                 jmp _check_for_para2
 
 _prefix_dollar:
                 ; --- $ --- Designate last line for further operations
-                lda (cib) 
+                lda (cib)
                 cmp #'$
                 bne _prefix_percent
 
@@ -266,7 +252,7 @@ _prefix_dollar:
                 inx                     ; ( addr-t u-t 0 )
 
                 jsr _last_line          ; ( addr-t u-t 0 para1 )
-                jsr xt_swap             ; SWAP ( addr-t u-t para1 0 ) 
+                jsr xt_swap             ; SWAP ( addr-t u-t para1 0 )
 
                 ; We have a parameter
                 lda #%10000000
@@ -286,7 +272,7 @@ _prefix_dollar:
                 jmp _line_number_only_from_external
 *
                 ; We are one character into the input buffer CIB, so we advace
-                ; Y as the index accordingly 
+                ; Y as the index accordingly
                 ldy #01
 
                 jmp _check_command
@@ -315,13 +301,13 @@ _semicolon_entry:
                 inx
                 inx                     ; DROP ( addr-t u-t para1 )
                 jsr _last_line          ; ( addr-t u-t para1 para2 )
-                
+
                 ; We have a parameter
                 lda #%10000000
                 tsb ed_flags
 
                 ; We are one character into the input buffer CIB, so we advance
-                ; Y as the index accordingly 
+                ; Y as the index accordingly
                 ldy #01
 
                 jmp _check_command
@@ -331,14 +317,14 @@ _prefix_semicolon:
                 lda (cib)
                 cmp #$3b                ; ASCII ';'
                 bne _prefix_number
-                
+
                 jsr _have_text
 
                 ; The first parameter is the current line
                 lda ed_cur
                 sta 2,x
                 lda ed_cur+1
-                sta 3,x                 ; ( addr-t u-t cur 0 ) 
+                sta 3,x                 ; ( addr-t u-t cur 0 )
 
                 ; The second parameter is the last line. We've done this part
                 ; before for the '%' and ',' parameters, so we reuse that code
@@ -358,25 +344,17 @@ _prefix_number:
                 ; Set up >NUMBER using CIB and CIBLEN as the location of the
                 ; string to check. First, though, add the "accumulator" as
                 ; a double number
-                jsr xt_zero
-                jsr xt_zero             ; ( addr-t u-t 0 0 0 0 )
-
-                dex                     
-                dex
-                dex
-                dex                     ; ( addr-t u-t 0 0 0 0 ? ? )
+                jsr xt_zero_dot         ; ( addr-t u-t 0 0 0 0 )
 
                 lda cib
-                sta 2,x
-                lda cib+1
-                sta 3,x                 ; ( addr-t u-t 0 0 0 0 cib ? )
+                ldy cib+1
+                jsr PsuYA               ; ( addr-t u-t 0 0 0 0 cib ? )
 
                 lda ciblen
-                sta 0,x
-                lda ciblen+1
-                sta 1,x                 ; ( addr-t u-t 0 0 0 0 cib ciblen )
+                ldy ciblen+1
+                jsr PsuYA               ; ( addr-t u-t 0 0 0 0 cib ciblen )
 
-                jsr xt_to_number        ; ( addr-t u-t 0 0 ud addr2 u2 ) 
+                jsr xt_to_number        ; ( addr-t u-t 0 0 ud addr2 u2 )
 
                 ; If we converted all the characters in the string (u2 is
                 ; zero), then the user just gave us a line number to
@@ -409,7 +387,7 @@ _line_number_only_from_external:
                 jmp _error_2drop
 *
                 ; Legal line number, so make it the current number
-                jsr xt_swap             ; ( addr-t u-t u 0 ) 
+                jsr xt_swap             ; ( addr-t u-t u 0 )
                 jsr _para1_to_cur
 
                 ; We have a parameter
@@ -426,15 +404,12 @@ _have_unconverted_chars:
                 ; characters is equal to the length of the string.
 
                 ; TODO Deal with '+' and '-' as instructions
- 
+
                 jsr xt_dup              ; ( addr-t u-t 0 0 ud addr2 u2 u2 )
-                
-                dex
-                dex                     ; ( addr-t u-t 0 0 ud addr2 u2 u2 ? )
+
                 lda ciblen
-                sta 0,x
-                lda ciblen+1
-                sta 1,x                 ; ( addr-t u-t 0 0 ud addr2 u2 u2 ciblen )
+                ldy ciblen+1
+                jsr PsuYA               ; ( addr-t u-t 0 0 ud addr2 u2 u2 ciblen )
 
                 jsr xt_equal            ; ( addr-t u-t 0 0 ud addr2 u2 f )
 
@@ -443,10 +418,10 @@ _have_unconverted_chars:
                 beq _no_command_yet
 
                 ; The length of the input string is equal to the length of
-                ; the unprocessed string that >NUMBER returned. Put 
+                ; the unprocessed string that >NUMBER returned. Put
                 ; differently, the first character isn't a number. We know that
                 ; it isn't '$' or '%' either, so we assume that it's a command
-                ; character. 
+                ; character.
 
                 ; Clear up the stack and process that command character
                 txa
@@ -464,18 +439,18 @@ _have_unconverted_chars:
                 ldy #00
 
                 jmp _check_command
-                
+
 _no_command_yet:
                 ; There actually seems to be a parameter number present.
                 ; Save the number we converted as the first parameter. We
-                ; arrive here with ( addr-t u-t 0 0 ud addr2 u2 f ) from 
+                ; arrive here with ( addr-t u-t 0 0 ud addr2 u2 f ) from
                 ; >NUMBER. To avoid too long stack comments, we leave the
                 ; target addresses out in this next code segment.
                 inx
                 inx                     ; ( ... 0 0 ud addr2 u2 )
 
                 jsr xt_to_r             ; >R ( ... 0 0 ud addr2 ) (R: u2)
-                jsr xt_not_rote         ; -ROT ( ... 0 0 addr2 ud ) (R: u2) 
+                jsr xt_not_rote         ; -ROT ( ... 0 0 addr2 ud ) (R: u2)
                 jsr xt_d_to_s           ; D>S  ( ... 0 0 addr2 para1 ) (R: u2)
 
                 lda 0,x                 ; LSB
@@ -522,15 +497,7 @@ _got_comma:
                 ; It's a comma, so we have a second parameter. The next
                 ; character can either be '$' to signal the end of the text
                 ; or another number. First, though, move to that next char
-                inc 2,x
-                bne +
-                inc 3,x                 ; ( addr-t u-t para1 0 addr2+1 u2 )
-*
-                lda 1,x
-                beq +
-                dec 1,x
-*
-                dec 0,x                 ; ( addr-t u-t para1 0 addr2+1 u2-1 )
+                jsr decinc              ; ( addr-t u-t para1 0 addr2+1 u2-1 )
 
                 ; See if this is an end-of-line '$'
                 lda (2,x)
@@ -538,7 +505,7 @@ _got_comma:
                 bne _para2_not_dollar
 
                 ; It's a dollar sign, which means para2 is the number
-                ; of the last line of the text. 
+                ; of the last line of the text.
 
                 ; Now we need to adjust Y as the offset. We assume that
                 ; no command line will be longer than 255 characters in ed so we
@@ -558,8 +525,8 @@ _got_comma:
                 txa
                 clc
                 adc #06
-                tax                     ; ( addr-t u-t para1 ) 
-               
+                tax                     ; ( addr-t u-t para1 )
+
                 jsr _last_line          ; ( addr-t u-t para1 para2 )
 
                 ply
@@ -573,8 +540,7 @@ _para2_not_dollar:
                 ; first mystery character after the comma. Again, we skip
                 ; the ( addr-t u-t at the beginning of the stack comment here.
                 jsr xt_to_r             ; >R ( ... para1 0 addr2+1 ) (R: u2-1)
-                jsr xt_zero             ; 0 ( ... para1 0 addr2+1 0 ) (R: u2-1)
-                jsr xt_zero             ; 0 ( ... para1 0 addr2+1 0 0 ) (R: u2-1)
+                jsr xt_zero_dot         ; 0. ( ... para1 0 addr2+1 0 0 ) (R: u2-1)
                 jsr xt_rot              ; ROT ( ... para1 0 0 0 addr2+1 ) (R: u2-1)
                 jsr xt_r_from           ; R> ( ... para1 0 0 0 addr2+1 u2-1)
 
@@ -601,7 +567,7 @@ _para2_not_dollar:
                 txa
                 clc
                 adc #12
-                tax                     ; back to ( addr-t u-t ) 
+                tax                     ; back to ( addr-t u-t )
 
                 jmp _error
 
@@ -614,7 +580,7 @@ _second_number:
                 ; Calculate the offset for Y
                 sec
                 lda ciblen
-                sbc 0,x                 
+                sbc 0,x
                 pha
 
                 ; Clean up the stack
@@ -669,7 +635,7 @@ _check_command:
                 lda ed_cur              ; don't need MSB for testing
                 jsr byte_to_ascii
 
-                lda #$29 
+                lda #$29
                 jsr emit_a
 
                 ply                     ; Restore the offset
@@ -710,7 +676,7 @@ _found_cmd:
                 ; We have a command match. Because this is the 65c02 and not
                 ; the 65816, we can only use JMP (addr,x) and not a subroutine
                 ; jump. That sucks.
-                txa                     
+                txa
                 asl
                 tax                     ; X * 2 for table
 
@@ -727,13 +693,13 @@ _next_command:
                 inx
                 inx
                 inx
-                inx                     ; ( addr-t u-t ) Fall through 
+                inx                     ; ( addr-t u-t ) Fall through
 
 _next_command_empty:
                 ; The beginning of the input loop takes care of resetting the
                 ; parameter flag
                 jmp _input_loop
-                
+
 _all_done:
 
                 ; That's enough for ed today. We have to clear out the input
@@ -741,7 +707,7 @@ _all_done:
                 ; last input command
                 stz ciblen
                 stz ciblen+1
-                
+
                 ; Clean up the stack
                 jsr xt_two_drop                 ; 2DROP ( addr-t u-t )
 
@@ -792,7 +758,7 @@ _entry_cmd_i:
                 sta 1,x                 ;  ( addr-t u-t cur ) drop through
 
 _cmd_a_have_para:
-                jsr _num_to_addr        ;  ( addr-t u-t addr1 ) 
+                jsr _num_to_addr        ;  ( addr-t u-t addr1 )
                 jsr xt_cr
 
 _next_string_loop:
@@ -815,7 +781,7 @@ _next_string_loop:
                 ldy ciblen+1
                 bne _add_line
 
-                ; Yes, it is a dot, so we're done adding lines. 
+                ; Yes, it is a dot, so we're done adding lines.
                 inx
                 inx
 
@@ -827,14 +793,14 @@ _next_string_loop:
                 jsr xt_cr
 
                 jmp _input_loop
-               
+
 _add_line:
                 ; Break the linked list so we can insert another node
                 jsr xt_dup              ; DUP ( addr-t u-t addr1 addr1 )
                 jsr xt_here             ; HERE ( addr-t u-t addr1 addr1 here )
                 jsr xt_swap             ; SWAP ( addr-t u-t addr1 here addr1 )
                 jsr xt_fetch            ; @  ( addr-t u-t addr1 here addr2 )
-                jsr xt_comma            ; ,  ( addr-t u-t addr1 here ) 
+                jsr xt_comma            ; ,  ( addr-t u-t addr1 here )
 
                 ; We're going to need that HERE for the next line if more
                 ; than one line is added. This is a good time to save it on
@@ -843,8 +809,8 @@ _add_line:
 
                 ; We have now saved the link to the next node at HERE, which is
                 ; where the CP was pointing. CP has now been advanced by one cell,
-                ; but we still have the original as HERE on the stack. That 
-                ; address now has to go where addr2 was before. 
+                ; but we still have the original as HERE on the stack. That
+                ; address now has to go where addr2 was before.
                 jsr xt_swap             ; SWAP ( addr-t u-t here here addr1 )
                 jsr xt_store            ; ! ( addr-t u-t here )
 
@@ -872,28 +838,22 @@ _add_line:
 *
                 ; We have the new line sitting in ( cib ciblin ) and need to
                 ; 1) move it somewhere safe and 2) get ready for the next
-                ; line. We arrive here with ( addr-t u-t here here2 ), where here2 
+                ; line. We arrive here with ( addr-t u-t here here2 ), where here2
                 ; is where the new string needs to be. The MOVE command we're
                 ; going to use has the format ( addr1 addr2 u )
 
                 jsr xt_here     ; HERE ( addr-t u-t here here2 here3 )
                 jsr xt_dup      ; DUP ( addr-t u-t here here2 here3 here3 )
 
-                dex
-                dex             ; ( addr-t u-t here here2 here3 here3 ? )
                 lda cib
-                sta 0,x
-                lda cib+1
-                sta 1,x         ; ( addr-t u-t here here2 here3 here3 cib )
+                ldy cib+1
+                jsr PsuYA       ; ( addr-t u-t here here2 here3 here3 cib )
 
                 jsr xt_swap     ; SWAP ( addr-t u-t here here2 here3 cib here3 )
 
-                dex
-                dex             ; ( addr-t u-t here here2 here3 cib here3 ? )
                 lda ciblen
-                sta 0,x
-                lda ciblen+1
-                sta 1,x         ; ( addr-t u-t here here2 here3 cib here3 ciblen )
+                ldy ciblen+1
+                jsr PsuYA       ; ( addr-t u-t here here2 here3 cib here3 ciblen )
 
                 jsr xt_move     ; ( addr-t u-t here here2 here3 )
 
@@ -913,8 +873,7 @@ _add_line:
                 jsr xt_over             ; OVER ( addr-t u-t here here2 here3 here2 )
                 jsr xt_store            ; ! ( addr-t u-t here here2 )
 
-                jsr xt_one_plus         ; 1+
-                jsr xt_one_plus         ; 1+ ( addr-t u-t here here2+2 )
+                jsr xt_two_plus_nouf    ; 1+ ( addr-t u-t here here2+2 )
                 jsr xt_dup              ; DUP ( addr-t u-t here here2+2 here2+2 )
 
                 lda ciblen
@@ -922,8 +881,8 @@ _add_line:
                 lda ciblen+1
                 sta 3,x                 ; ( addr-t u-t here ciblen here2+2 )
 
-                jsr xt_store            ; ! ( addr-t u-t here ) 
-                
+                jsr xt_store            ; ! ( addr-t u-t here )
+
                 ; Add a line feed for visuals
                 jsr xt_cr
 
@@ -940,7 +899,7 @@ _cmd_d:
         ; the loop for 'p'. Once this is all working, we should consider
         ; a common, higher level structure. We arrive here with ( addr-t u-t
         ; para1 para2 )
-                plx 
+                plx
 
                 jsr _have_text
                 jsr _no_line_zero
@@ -993,15 +952,15 @@ _cmd_d_loop:
 
 _cmd_d_done_with_flag:
                 inx                     ; ( addr-t u-t para1 para2 )
-                inx                     
-                
+                inx
+
                 ; The current line is set to the first line minus
                 ; one. Since we don't accept '0d', this at least
                 ; hast to be one
                 lda 2,x
                 bne +
                 dec 3,x
-*       
+*
                 dec 2,x
 
                 lda 2,x
@@ -1025,24 +984,24 @@ _cmd_d_common:
         ; for setting ed_changed. We arrive here with ( u )
 
                 jsr xt_dup              ; DUP ( addr-t u-t u u )
-                jsr _num_to_addr        ; ( addr-t u-t u addr ) 
-                jsr xt_fetch            ; ( addr-t u-t u addr1 ) 
+                jsr _num_to_addr        ; ( addr-t u-t u addr )
+                jsr xt_fetch            ; ( addr-t u-t u addr1 )
                 jsr xt_swap             ; SWAP ( addr-t u-t addr1 u )
                 jsr xt_one_minus        ; 1- ( addr-t u-t addr1 u-1 )
                 jsr _num_to_addr        ; ( addr-t u-t addr1 addr-1 )
-                jsr xt_store            ; ! ( addr-t u-t ) 
+                jsr xt_store            ; ! ( addr-t u-t )
 
                 rts
 
 ; -------------------------
-_cmd_e: 
+_cmd_e:
         ; e -- Load memory area into buffer for editing, replacing old buffer
         ; Will destroy contents of current buffer if present. Use an address
         ; and length pair separated by a comma to load a block from memory,
         ; such as "5000,100e".
         ; TODO consider a plain "e" will load from the ( addr u ) combination
         ; that was at the top of the stack when ed was started
-        
+
                 plx
 
                 jsr _no_line_zero
@@ -1055,7 +1014,7 @@ _cmd_e:
                 tsb ed_flags
 
                 jmp _next_command
-        
+
 
 ; -------------------------
 _cmd_equ:
@@ -1071,12 +1030,9 @@ _cmd_equ:
                 bit ed_flags
                 bmi _cmd_equ_have_para
 
-                dex
-                dex                     ; ( addr-t u-t para1 para2 ? )
                 lda ed_cur
-                sta 0,x
-                lda ed_cur+1
-                sta 1,x
+                ldy ed_cur+1
+                jsr PsuYA
 
                 bra _cmd_equ_done       ; ( addr-t u-t para1 para2 cur )
 
@@ -1096,7 +1052,7 @@ _cmd_equ_have_para:
 
 _cmd_equ_two_paras:
                 jsr xt_dup              ; ( addr-t u-t para1 para2 para2) drop through
-                
+
 _cmd_equ_done:
                 jsr xt_u_dot            ; ( addr-t u-t para1 para2 )
                 jsr xt_cr
@@ -1105,7 +1061,7 @@ _cmd_equ_done:
 
 
 ; -------------------------
-_cmd_f: 
+_cmd_f:
         ; f -- Print the address that a write command ("w") will go to or set
         ; it. If no parameter was passed, we print the address we have on hand,
         ; with a parameter, we set that to the new address. We accept a zero,
@@ -1169,7 +1125,7 @@ _cmd_i:
                 jsr xt_zero             ; ( addr-t u-t para2 para1-1 0 )
                 jsr xt_max              ; ( addr-t u-t para2 para1-1 | 0 )
                 jsr xt_swap             ; ( addr-t u-t para1 para2 )
-                
+
                 jmp _entry_cmd_i
 
 
@@ -1195,7 +1151,7 @@ _cmd_p:
         ; that long; I'm really sure Leo Tolstoy would not have managed "War
         ; and Peace" on a 65c02.
 
-                plx 
+                plx
 
 _cmd_p_from_external:
                 ; This is coming from p, the variant without line numbers. We
@@ -1219,28 +1175,25 @@ _cmd_p_entry_for_cmd_n:
                 ; Print a single line and be done with it. We could use
                 ; DROP here and leave immediately but we want this routine
                 ; to have a single exit at the bottom.
-                jsr xt_over             ; ( addr-t u-t para1 para2 para1 )
                 jsr _cmd_p_common       ; ( addr-t u-t para1 para2 )
 
-                bra _cmd_p_all_done
+_cmd_p_all_done:
+                jmp _next_command
 
 _cmd_p_loop:
                 ; We are being asked to print more than one line, which
                 ; is a bit trickier. If para1 is larger than para2, we're
                 ; done. Note that Unix ed throws an error if we start out
                 ; that way, we might do that in future as well
-                jsr xt_two_dup          ; 2DUP ( addr-t u-t para1 para2 para1 para2 )
-                jsr xt_greater_than     ; > ( addr-t u-t para1 para2 f )
-
-                lda 0,x
-                ora 1,x
-                bne _cmd_p_done
+                                        ; ( addr-t u-t para1 para2 )
+                lda 0,x                 ; 2DUP > pop
+                cmp 2,x
+                lda 1,x
+                sbc 3,x
+                bcc _cmd_p_all_done
 
                 ; Para2 is still larger or the same size as para1, so we
                 ; continue
-                inx
-                inx                     ; Get rid of the flag from >
-                jsr xt_over             ; ( addr-t u-t para1 para2 para1 )
                 jsr _cmd_p_common       ; ( addr-t u-t para1 para2 )
 
                 inc 2,x
@@ -1249,19 +1202,14 @@ _cmd_p_loop:
 *
                 bra _cmd_p_loop
 
-_cmd_p_done:
-                ; We arrive here with ( addr-t u-t para1 para2 f )
-                inx
-                inx                     ; fall through to _cmp_p_all_done
-_cmd_p_all_done:
-                jmp _next_command
-
 
 _cmd_p_common:
         ; Internal subroutine to print a single line when given the line number
-        ; TOS. Consumes TOS. Used by both n and p. We arrive here with 
-        ; ( addr-t u-t para1 ) as the line number
-               
+        ; NOS. Used by both n and p. We arrive here with
+        ; ( addr-t u-t para1 para2 ) as the line number
+
+                jsr xt_over             ; ( addr-t u-t para1 para2 para1 )
+
                 ; See if we're coming from p (no line numbers, ed_flag is zero)
                 ; or from n (line numbers and a TAB, ed_flag is $FF)
                 lda ed_flags
@@ -1270,31 +1218,27 @@ _cmd_p_common:
 
                 ; Bit 0 is set, this is coming from n. Print the line number
                 ; followed by a tab
-                jsr xt_dup              ; DUP ( addr-t u-t para1 para1 )
-                jsr xt_u_dot            ; U. ( addr-t u-t para1 )
+                jsr xt_dup              ; DUP ( addr-t u-t para1 para2 para1 para1 )
+                jsr xt_u_dot            ; U. ( addr-t u-t para1 para2 para1 )
 
-                lda #$09                 ; ASCII for Tab
+                lda #AscTAB
                 jsr emit_a
 
 _cmd_p_common_no_num:
                 ; One way or the other, print the the node's string
-                jsr _num_to_addr        ; ( addr-t u-t addr )
-                jsr _print_addr 
-
-                rts
+                jsr _num_to_addr        ; ( addr-t u-t para1 para2 addr )
+                jmp _print_addr
 
 
 ; -------------------------
 _cmd_q:
         ; q -- Quit if all work as been saved, complain otherwise
-                
-                plx 
 
                 bit ed_flags            ; bit 6 is change flag
-                bvc +
+                bvc _cmd_qq
+
+                plx
                 jmp _error_2drop
-*
-                jmp _all_done            ; can't fall thru because of PLX
 
 
 ; -------------------------
@@ -1302,7 +1246,7 @@ _cmd_qq:
         ; Q -- Quit unconditionally, dumping any work that is unsaved
         ; without any warning. We can't just jump to all done because
         ; of the PLX, which is cleaner to keep here.
-                plx 
+                plx
 
                 jmp _all_done
 
@@ -1315,8 +1259,8 @@ _cmd_w:
         ; 'f'. To prevent a common, but potentially common error, we do not
         ; allow writing to the first page ($0000 to $00FF) unless the address
         ; was specificially passed as a parameter. Currently, we can only enter
-        ; the address in decimal. 
-                plx 
+        ; the address in decimal.
+                plx
 
                 jsr _have_text
 
@@ -1334,13 +1278,13 @@ _cmd_w:
                 ; It's a zero, generate an error to protect the users from
                 ; themselves
                 jmp _error_2drop
-* 
+*
                 ; Not a zero, we assume user knows what they are doing. Get the
                 ; address.
                 lda 6,x
                 sta 2,x
                 lda 7,x
-                sta 3,x                 ; ( addr-t u-t addr-t ? ) 
+                sta 3,x                 ; ( addr-t u-t addr-t ? )
 
                 bra _cmd_w_para_ready
 
@@ -1376,31 +1320,29 @@ _cmd_w_loop:
 
                 ; If we're at the end of the list, quit. For the next block of text,
                 ; we ignore the ( addr-t u-t ) at the beginning
-                lda 0,x 
+                lda 0,x
                 ora 1,x
                 beq _cmd_w_eol
 
                 jsr xt_two_dup          ; 2DUP ( addr-t addr-1 addr-t addr-1 ) ( R: addr-t addr-1 addr-t )
-                jsr xt_two_to_r         ; 2>R  ( addr-t addr-1 ) (R: ... ) 
+                jsr xt_two_to_r         ; 2>R  ( addr-t addr-1 ) (R: ... )
 
                                 ; Get the address and length of the string from the header
                 ; of this node
-                jsr xt_one_plus         ; 1+ ( addr-t addr1+1 ) (R: ... ) 
-                jsr xt_one_plus         ; 1+ ( addr-t addr1+2 ) (R: ... ) 
-                jsr xt_dup              ; DUP ( addr-t addr1+2 addr1+2 ) ( R: ... ) 
-                jsr xt_fetch            ; @ ( addr-t addr1+2 addr-s ) ( R: ... ) 
-                jsr xt_swap             ; SWAP ( addr-t addr-s addr1+2 ) ( R: ... ) 
-                jsr xt_one_plus         ; 1+ ( addr-t addr-s addr1+1 ) (R: ... ) 
-                jsr xt_one_plus         ; 1+ ( addr-t addr-s addr1+2 ) (R: ... ) 
-                jsr xt_fetch            ; @ ( addr-t addr-s u-s ) ( R: ... ) 
-                jsr xt_not_rote         ; -ROT ( u-s addr-t addr-s ) ( R: ... ) 
-                jsr xt_swap             ; SWAP ( u-s addr-s addr-t ) ( R: ... ) 
-                jsr xt_rot              ; ROT (addr-s addr-t u-s ) ( R: ... ) 
+                jsr xt_two_plus_nouf    ; 1+ ( addr-t addr1+2 ) (R: ... )
+                jsr xt_dup              ; DUP ( addr-t addr1+2 addr1+2 ) ( R: ... )
+                jsr xt_fetch            ; @ ( addr-t addr1+2 addr-s ) ( R: ... )
+                jsr xt_swap             ; SWAP ( addr-t addr-s addr1+2 ) ( R: ... )
+                jsr xt_two_plus_nouf    ; 1+ ( addr-t addr-s addr1+2 ) (R: ... )
+                jsr xt_fetch            ; @ ( addr-t addr-s u-s ) ( R: ... )
+                jsr xt_not_rote         ; -ROT ( u-s addr-t addr-s ) ( R: ... )
+                jsr xt_swap             ; SWAP ( u-s addr-s addr-t ) ( R: ... )
+                jsr xt_rot              ; ROT (addr-s addr-t u-s ) ( R: ... )
 
                 ; We need a copy of the string length u-s to adjust the pointer
                 ; to the store area later
-                jsr xt_dup              ; DUP (addr-s addr-t u-s u-s ) ( R: ... ) 
-                jsr xt_to_r             ; >R (addr-s addr-t u-s ) ( R: ... u-s ) 
+                jsr xt_dup              ; DUP (addr-s addr-t u-s u-s ) ( R: ... )
+                jsr xt_to_r             ; >R (addr-s addr-t u-s ) ( R: ... u-s )
 
                 jsr xt_move             ; MOVE ( )( R: addr-t addr-1 addr-t )
 
@@ -1415,16 +1357,10 @@ _cmd_w_loop:
 
                 ; But wait, our strings are terminated by Line Feeds in
                 ; memory, so we need to add one
-                jsr xt_dup              ; DUP ( addr-h addr-t1 addr-t1 ) ( R: addr-t )
 
-                dex
-                dex                     ; ( addr-h addr-t1 addr-t1 ? ) ( R: addr-t )
                 lda #AscLF              ; ASCII for LF
-                sta 0,x
-                stz 1,x                 ; ( addr-h addr-t1 addr-t1 c ) ( R: addr-t )
+                sta (0,x)
 
-                jsr xt_swap             ; SWAP ( addr-h addr-t1 c addr-t1 ) ( R: addr-t )
-                jsr xt_store            ; ! ( addr-h addr-t1 ) ( R: addr-t )
                 jsr xt_one_plus         ; 1+ ( addr-h addr-t1+1 ) ( R: addr-t )
 
                 ; Now we can handle the next line
@@ -1437,9 +1373,9 @@ _cmd_w_eol:
                 ; ( addr-tn addr-n ) ( R: addr-t ) What we do now is calculate
                 ; the number of characters saved and put that value in the 3OS
                 ; position
-                jsr xt_swap             ; SWAP ( addr-t u-t addr-n addr-tn ) ( R: addr-t ) 
-                jsr xt_r_from           ; R> ( addr-t u-t addr-n addr-tn addr-t ) 
-                jsr xt_minus            ; - ( addr-t u-t addr-n u ) 
+                jsr xt_swap             ; SWAP ( addr-t u-t addr-n addr-tn ) ( R: addr-t )
+                jsr xt_r_from           ; R> ( addr-t u-t addr-n addr-tn addr-t )
+                jsr xt_minus            ; - ( addr-t u-t addr-n u )
 
                 lda 0,x
                 sta 4,x
@@ -1449,8 +1385,8 @@ _cmd_w_eol:
                 ; Unix ed puts the number of characters on a new line, so we
                 ; do as well
                 jsr xt_cr
-                jsr xt_dup              ; DUP ( addr-t u addr-n u u ) 
-                jsr xt_u_dot            ; U. ( addr-t u addr-n u ) 
+                jsr xt_dup              ; DUP ( addr-t u addr-n u u )
+                jsr xt_u_dot            ; U. ( addr-t u addr-n u )
                 jsr xt_cr
 
                 ; Reset the changed flag
@@ -1509,7 +1445,7 @@ _get_input:
                 jmp _error_1drop
 *
                 ; Drop the flag
-                inx                     
+                inx
                 inx
 
                 rts
@@ -1582,13 +1518,9 @@ _last_line:
                 stz tmp1
                 stz tmp1+1
 
-                dex
-                dex                     ; ( ? )
-        
                 lda #<ed_head
-                sta 0,x
-                lda #>ed_head
-                sta 1,x                 ; ( addr )
+                ldy #>ed_head
+                jsr PsuYA               ; ( addr )
 
 _last_line_loop:
                 jsr xt_fetch            ; ( addr | 0 )
@@ -1604,12 +1536,12 @@ _last_line_loop:
                 inc tmp1+1
 *
                 bra _last_line_loop
- 
+
 _last_line_done:
                 lda tmp1
                 sta 0,x
                 lda tmp1+1
-                sta 1,x                 ; ( u ) 
+                sta 1,x                 ; ( u )
 
                 rts
 
@@ -1630,7 +1562,7 @@ _no_line_zero:
                 ; parameter
                 bit ed_flags
                 bpl _no_line_zero_done
-                
+
                 jmp _error_2drop
 
 _no_line_zero_done:
@@ -1642,19 +1574,15 @@ _num_to_addr:
         ; Given a line number as TOS, replace it by the address of the node.
         ; If the line number is zero, we return the address of the header
         ; node. If the line number is beyond the last line, we return a
-        ; zero, though we're assuming the user will check for a legal 
+        ; zero, though we're assuming the user will check for a legal
         ; line number before calling this routine. Assumes we have checked that
         ; we have a text at all.
 
-                ; One way or another we're going to start with the 
+                ; One way or another we're going to start with the
                 ; address of the pointer to the head of the list
-                dex
-                dex                     ; ( u ? )
-        
                 lda #<ed_head
-                sta 0,x
-                lda #>ed_head
-                sta 1,x                 ; ( u addr-h )
+                ldy #>ed_head
+                jsr PsuYA               ; ( u addr-h )
 
                 ; Handle the case where the line number is zero.
                 lda 2,x
@@ -1673,8 +1601,8 @@ _num_to_addr_loop:
                 lda 0,x
                 ora 1,x
                 bne +
- 
-                jsr xt_nip              ; NIP ( addr1 ) 
+
+                jsr xt_nip              ; NIP ( addr1 )
                 bra _num_to_addr_done
 *
                 ; It's not zero. See if this is the nth element we're looking
@@ -1690,7 +1618,7 @@ _num_to_addr_loop:
                 jsr xt_swap             ; SWAP ( u-1 addr1 )
 
                 bra _num_to_addr_loop
-                
+
 _num_to_addr_finished:
                 ; We arrive here with ( addr u )
                 inx
@@ -1718,13 +1646,11 @@ _print_addr:
         ; Assumes we have made sure that this address exists. It would be
         ; nice to put the CR at the beginning, but that doesn't work with
         ; the n commands, so at the end it goes. Consumes TOS.
-                jsr xt_one_plus
-                jsr xt_one_plus         ; ( addr+2 )
+                jsr xt_two_plus_nouf    ; ( addr+2 )
 
                 jsr xt_dup              ; ( addr+2 addr+2 )
 
-                jsr xt_one_plus
-                jsr xt_one_plus         ; ( addr+2 addr+4 )
+                jsr xt_two_plus_nouf    ; ( addr+2 addr+4 )
 
                 jsr xt_fetch            ; ( addr+2 u-s )
                 jsr xt_swap             ; ( u-s addr+2 )
@@ -1753,4 +1679,5 @@ ed_cmd_table:
                 .word _cmd_equ, _cmd_w, _cmd_q, _cmd_qq
 
 .scend
+
 ed6502_end:     ; Used to calculate size of editor code
