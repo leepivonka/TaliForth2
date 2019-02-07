@@ -333,32 +333,21 @@ z_abs:          rts
 xt_accept:
                 jsr underflow_2
 
-                ; Abort if we were asked to receive 0 chars
-                lda 0,x
-                ora 1,x
-                bne _not_zero
-
-                inx
-                inx
-                stz 0,x
-                stz 1,x
-
-                jmp _done
-
-_not_zero:
                 lda 0,x         ; number of chars to get in tmp2 ...
+                inx
+                inx
                 sta tmp2
-                stz tmp2+1      ; ... but we only accept max 255 chars
+                                ; ... but we only accept max 255 chars
 
-                lda 2,x         ; address of buffer is NOS, to tmp1
+                lda 0,x         ; address of buffer is NOS, to tmp1
+                ldy 1,x
                 sta tmp1
-                lda 3,x
-                sta tmp1+1
-
-                inx
-                inx
+                sty tmp1+1
 
                 ldy #0
+
+                lda tmp2        ; Abort if we were asked to receive 0 chars
+                beq _buffer_full
 
                 ; Select the next history buffer
                 ; Clear bit 3 first (so overflow from bit 2 to 3 is OK)
@@ -424,9 +413,8 @@ _backspace:     ; Handle backspace and delete key, which currently do the same
                 tya             ; buffer empty?
                 bne +
 
-                lda #AscBELL    ; complain and don't delete beyond the start of line
-                jsr emit_a
-                iny
+                jsr xt_bell     ; complain and don't delete beyond the start of line
+                bra _loop
 *
                 dey
                 lda #AscBS      ; move back one
@@ -488,13 +476,13 @@ _recall_history:
 
                 ; Clear the line by sending CR, Y spaces, then CR.
                 jsr _emit_cr
-input_clear:
+_input_clear:
                 tya
-                beq input_cleared
+                beq _input_cleared
                 jsr xt_space
                 dey
-                bra input_clear
-input_cleared:
+                bra _input_clear
+_input_cleared:
                 jsr _emit_cr
 
                 ; Save the history length byte
@@ -555,15 +543,15 @@ _done:
 *
                 ; Copy the characters from the input buffer to the
                 ; history buffer.
-                ldy #0
+                ldy status+1
+                bra _save_history_2
 _save_history_loop:
-                cpy status+1
-                beq _save_history_done
+                dey
                 lda (tmp1),y
                 sta (tmp3),y
-                iny
-                bra _save_history_loop
-_save_history_done:
+ _save_history_2:
+                tya
+                bne _save_history_loop
 
 z_accept:       rts
 
@@ -3616,7 +3604,7 @@ z_false:        rts
         ; """https://forth-standard.org/standard/core/Fetch"""
 xt_fetch:
                 jsr underflow_1
-
+fetch_nouf:
                 lda (0,x)               ; LSB
                 tay
                 inc 0,x
@@ -4169,29 +4157,24 @@ z_if:
 
 .scope
 cmpl_0branch:
-                ldy #>_zero_branch_runtime
-                lda #<_zero_branch_runtime
-                jsr cmpl_subroutine
-                lda #$d0        ; opcode for bne
-                ldy #3
-                jsr cmpl_word
-                lda #$4c        ; opcode for jmp abs
-                jmp cmpl_a
-
-
-_zero_branch_runtime:
-        ; """In some Forths, this is called (0BRANCH). Tali Forth originally
-        ; included 0BRANCH as a high-level word that inserted this code at
-        ; runtime.
-        ; """
-                ; See if the flag is zero, which is the whole purpose of
-                ; this all
-                lda 0,x
-                ora 1,x
-                inx
-                inx
-                tay             ;set Z flag
+                ldy #$100-[_0branch_runtime_end-_0branch_runtime]
+_c2:            lda _0branch_runtime_end-$100,y
+                jsr cmpl_a
+                iny
+                bne _c2
                 rts
+
+
+_0branch_runtime:
+        ; """In some Forths, this is called (0BRANCH).
+        ; """
+                inx
+                inx
+                lda $fe,x       ; direct page wrapping won't work in 65816 native mode
+                ora $ff,x
+                bne ^+5
+                .byte $4c       ; opcode for "jmp abs"
+_0branch_runtime_end:
 .scend
 
 
@@ -4434,13 +4417,8 @@ xt_key:
         ; input without echoing.
         ; """
                 jsr key_a               ; returns char in A
-
-                dex
-                dex
-                sta 0,x
-                stz 1,x
-
-z_key:          rts
+                jmp PsuZA
+z_key:
 
 key_a:
         ; The 65c02 doesn't have a JSR (ADDR,X) instruction like the
@@ -8061,8 +8039,7 @@ xt_spaces:
                 bra _b
 
 _c:             dec 1,x
-_a:             lda #AscSP
-                jsr emit_a
+_a:             jsr xt_space
                 dey
 _b:             bne _a
 
@@ -8156,7 +8133,7 @@ z_state:        rts
 .scope
 xt_store:
                 jsr underflow_2
-
+store_nouf:
                 lda 2,x         ; LSB
                 sta (0,x)
 

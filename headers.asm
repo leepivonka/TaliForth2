@@ -953,7 +953,7 @@ nt_allot:
         .byte "allot"
 
 nt_key:
-        .byte 3, 0
+        .byte 3, NN
         .word nt_allot, xt_key, z_key
         .byte "key"
 
@@ -1193,7 +1193,7 @@ nt_chars:
         .byte "chars"
 
 nt_char_plus:
-        .byte 5, 0
+        .byte 5, UF
         .word nt_chars, xt_one_plus, z_one_plus ; same as 1+
         .byte "char+"
 
