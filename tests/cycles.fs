@@ -13,37 +13,19 @@ testing cycle counts
 
 hex
 
-\ The location of the result
-F008 constant cycles
-
-\ direct byte compiled
-\  lda $f006
-\  lda $f007
-: cycles_overhead [ AD c, 06 c, F0 c, AD c, 07 c, F0 c, ] cycles 2@ ;
-
-\ direct byte compiled
-\  lda $F006
-\  jsr (xt on stack goes here)
-\  lda $f007
-\ then forth code to fetch and print results.
-: cycle_test_runtime
-    [ AD c, 06 c, F0 c,    \ lda $F006
-      20 c,  0000 ,        \ jsr (address to be filled in)
-      AD c, 07 c, F0 c, ]  \ lda $F007
-    cycles 2@              \ fetch result
-    cycles_overhead d-     \ subtract overhead
-    ." CYCLES: " 6 ud.r    \ print results
-;
-
-\ cycle_test updates the address of the given xt in cycle_test_runtime
-\ then it runs the test.
+2Variable T0
 
 \ To test a word, put any arguments it needs on the stack, use tick
 \ (') on the word to get it's execution token (xt) and then put
 \ cycle_test, then any stack cleanup.
 \ eg. 5 ' dup cycle_test 2drop
 : cycle_test ( xt -- )
-    [ ' cycle_test_runtime 4 + ] literal ! cycle_test_runtime ;
+  PopYA [ Here #16 + sta  Here #14 + sty ]   \ patch JSR
+  CC@ T0 2!
+  [ Here Jsr ]  \ address patched
+  CC@ T0 2@ D- -#194 M+ UD. ;  See cycle_test
+
+' NoOp cycle_test
 
 \ Some test leave lots of stuff on the stack.
 \ These words help clean up the mess.
@@ -108,7 +90,7 @@ here         ' count         cycle_test 2drop
              ' decimal       cycle_test           
 \ skipping     defer
              ' depth         cycle_test drop      
-char w       ' digit?        cycle_test 2drop     
+\ char w       ' digit?        cycle_test 2drop     
 \ skipping     disasm
 5.           ' dnegate       cycle_test 2drop     
 \ skipping     ?do

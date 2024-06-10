@@ -103,7 +103,6 @@ T{  lo-2int  hi-2int d- -> min-2int 1. d+ }T
 T{ min-2int min-2int d- -> 0. }T
 T{ min-2int  lo-2int d- -> lo-2int }T
 
-( TODO m*/ not implemented ) 
 
 \ max-2int 71 73 m*/ 2constant dbl1 
 \ min-2int 73 79 m*/ 2constant dbl2
@@ -129,12 +128,83 @@ T{ min-2int  lo-2int d- -> lo-2int }T
 
 \ T{ doubleoutput -> }T
 
-( TODO D0< not implemented yet )
-( TODO D0= not implemented yet )
-( TODO D2* not implemented yet )
-( TODO D2/ not implemented yet )
-( TODO D< not implemented yet )
-( TODO D= not implemented yet )
+T{        123456789. D0< ->  false  }T
+T{       -123456789. D0< ->  true   }T
+T{                0. D0< -> <FALSE> }T
+T{                1. D0< -> <FALSE> }T
+T{  MIN-INT        0 D0< -> <FALSE> }T
+T{        0  MAX-INT D0< -> <FALSE> }T
+T{          MAX-2INT D0< -> <FALSE> }T
+T{               -1. D0< -> <TRUE>  }T
+T{          MIN-2INT D0< -> <TRUE>  }T
+
+T{       123456789. D0= ->  false  }T
+T{      -123456789. D0= ->  false  }T
+T{               1. D0= -> <FALSE> }T
+T{ MIN-INT        0 D0= -> <FALSE> }T
+T{         MAX-2INT D0= -> <FALSE> }T
+T{      -1  MAX-INT D0= -> <FALSE> }T
+T{               0. D0= -> <TRUE>  }T
+T{              -1. D0= -> <FALSE> }T
+T{       0  MIN-INT D0= -> <FALSE> }T
+
+T{      123456789. D2* -> 246913578. }T
+T{              0. D2* ->         0. }T
+T{ MIN-INT       0 D2* -> 0 1 }T
+T{         HI-2INT D2* -> MAX-2INT 1. D- }T
+T{         LO-2INT D2* -> MIN-2INT }T
+
+T{  246913578. D2/ -> 123456789. }T
+T{          0. D2/ -> 0.         }T
+T{          1. D2/ -> 0.         }T
+T{         0 1 D2/ -> MIN-INT 0  }T
+T{    MAX-2INT D2/ -> HI-2INT    }T
+T{         -1. D2/ -> -1.        }T
+T{    MIN-2INT D2/ -> LO-2INT    }T
+
+T{      -1.      -1. D= -> <TRUE>  }T
+T{      -1.       0. D= -> <FALSE> }T
+T{      -1.       1. D= -> <FALSE> }T
+T{       0.      -1. D= -> <FALSE> }T
+T{       0.       0. D= -> <TRUE>  }T
+T{       0.       1. D= -> <FALSE> }T
+T{       1.      -1. D= -> <FALSE> }T
+T{       1.       0. D= -> <FALSE> }T
+T{       1.       1. D= -> <TRUE>  }T
+T{   0   -1    0  -1 D= -> <TRUE>  }T
+T{   0   -1    0   0 D= -> <FALSE> }T
+T{   0   -1    0   1 D= -> <FALSE> }T
+T{   0    0    0  -1 D= -> <FALSE> }T
+T{   0    0    0   0 D= -> <TRUE>  }T
+T{   0    0    0   1 D= -> <FALSE> }T
+T{   0    1    0  -1 D= -> <FALSE> }T
+T{   0    1    0   0 D= -> <FALSE> }T
+T{   0    1    0   1 D= -> <TRUE>  }T
+
+T{ MAX-2INT MIN-2INT D= -> <FALSE> }T
+T{ MAX-2INT       0. D= -> <FALSE> }T
+T{ MAX-2INT MAX-2INT D= -> <TRUE>  }T
+T{ MAX-2INT HI-2INT  D= -> <FALSE> }T
+T{ MAX-2INT MIN-2INT D= -> <FALSE> }T
+T{ MIN-2INT MIN-2INT D= -> <TRUE>  }T
+T{ MIN-2INT LO-2INT  D= -> <FALSE> }T
+T{ MIN-2INT MAX-2INT D= -> <FALSE> }T
+
+
+T{       0.       1. D< -> <TRUE>  }T
+T{       0.       0. D< -> <FALSE> }T
+T{       1.       0. D< -> <FALSE> }T
+T{      -1.       1. D< -> <TRUE>  }T
+T{      -1.       0. D< -> <TRUE>  }T
+T{      -2.      -1. D< -> <TRUE>  }T
+T{      -1.      -2. D< -> <FALSE> }T
+T{      -1. MAX-2INT D< -> <TRUE>  }T
+T{ MIN-2INT MAX-2INT D< -> <TRUE>  }T
+T{ MAX-2INT      -1. D< -> <FALSE> }T
+T{ MAX-2INT MIN-2INT D< -> <FALSE> }T
+T{ MAX-2INT 2DUP -1. D+ D< -> <FALSE> }T
+T{ MIN-2INT 2DUP  1. D+ D< -> <TRUE>  }T
+
 
 T{    1234  0 d>s ->  1234   }T 
 T{   -1234 -1 d>s -> -1234   }T 
@@ -146,8 +216,42 @@ T{      -1. dabs -> 1.       }T
 T{ max-2int dabs -> max-2int }T 
 T{ min-2int 1. d+ dabs -> max-2int }T
 
-( TODO DMAX not implemented yet )
-( TODO DMIN not implemented yet )
+T{       1.       2. DMAX ->  2.      }T
+T{       1.       0. DMAX ->  1.      }T
+T{       1.      -1. DMAX ->  1.      }T
+T{       1.       1. DMAX ->  1.      }T
+T{       0.       1. DMAX ->  1.      }T
+T{       0.      -1. DMAX ->  0.      }T
+T{      -1.       1. DMAX ->  1.      }T
+T{      -1.      -2. DMAX -> -1.      }T
+T{ MAX-2INT  HI-2INT DMAX -> MAX-2INT }T
+T{ MAX-2INT MIN-2INT DMAX -> MAX-2INT }T
+T{ MIN-2INT MAX-2INT DMAX -> MAX-2INT }T
+T{ MIN-2INT  LO-2INT DMAX -> LO-2INT  }T
+
+T{ MAX-2INT       1. DMAX -> MAX-2INT }T
+T{ MAX-2INT      -1. DMAX -> MAX-2INT }T
+T{ MIN-2INT       1. DMAX ->  1.      }T
+T{ MIN-2INT      -1. DMAX -> -1.      }T
+
+T{       1.       2. DMIN ->  1.      }T
+T{       1.       0. DMIN ->  0.      }T
+T{       1.      -1. DMIN -> -1.      }T
+T{       1.       1. DMIN ->  1.      }T
+T{       0.       1. DMIN ->  0.      }T
+T{       0.      -1. DMIN -> -1.      }T
+T{      -1.       1. DMIN -> -1.      }T
+T{      -1.      -2. DMIN -> -2.      }T
+T{ MAX-2INT  HI-2INT DMIN -> HI-2INT  }T
+T{ MAX-2INT MIN-2INT DMIN -> MIN-2INT }T
+T{ MIN-2INT MAX-2INT DMIN -> MIN-2INT }T
+T{ MIN-2INT  LO-2INT DMIN -> MIN-2INT }T
+
+T{ MAX-2INT       1. DMIN ->  1.      }T
+T{ MAX-2INT      -1. DMIN -> -1.      }T
+T{ MIN-2INT       1. DMIN -> MIN-2INT }T
+T{ MIN-2INT      -1. DMIN -> MIN-2INT }T
+
 
 T{ 0. dnegate -> 0. }T
 T{ 1. dnegate -> -1. }T
@@ -155,11 +259,34 @@ T{ -1. dnegate -> 1. }T
 T{ max-2int dnegate -> min-2int swap 1+ swap }T
 T{ min-2int swap 1+ swap dnegate -> max-2int }T
 
+( TODO m*/ not implemented ) 
 ( TODO M*/ not implemented yet )
-( TODO M+ not implemented yet )
-( TODO 2ROT not implemented yet )
-( TODO 2VALUE not implemented yet )
-( TODO DU< not implemented yet )
+
+T{ HI-2INT   1 M+ -> HI-2INT   1. D+ }T
+T{ MAX-2INT -1 M+ -> MAX-2INT -1. D+ }T
+T{ MIN-2INT  1 M+ -> MIN-2INT  1. D+ }T
+T{ LO-2INT  -1 M+ -> LO-2INT  -1. D+ }T
+
+T{       1.       2. 3. 2ROT ->       2. 3.       1. }T
+T{ MAX-2INT MIN-2INT 1. 2ROT -> MIN-2INT 1. MAX-2INT }T
+
+T{ 1 2 2VALUE t2val -> }T
+T{ t2val -> 1 2 }T
+T{ 3 4 TO t2val -> }T
+T{ t2val -> 3 4 }T
+: sett2val t2val 2SWAP TO t2val ;
+T{ 5 6 sett2val t2val -> 3 4 5 6 }T
+
+T{       1.       1. DU< -> <FALSE> }T
+T{       1.      -1. DU< -> <TRUE>  }T
+T{      -1.       1. DU< -> <FALSE> }T
+T{      -1.      -2. DU< -> <FALSE> }T
+T{ MAX-2INT  HI-2INT DU< -> <FALSE> }T
+T{  HI-2INT MAX-2INT DU< -> <TRUE>  }T
+T{ MAX-2INT MIN-2INT DU< -> <TRUE>  }T
+T{ MIN-2INT MAX-2INT DU< -> <FALSE> }T
+T{ MIN-2INT  LO-2INT DU< -> <TRUE>  }T
+
 
 \ Free memory used for these tests
 double_tests

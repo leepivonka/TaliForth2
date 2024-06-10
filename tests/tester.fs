@@ -23,16 +23,6 @@ variable actual-depth   \ stack record
 create actual-results  20 cells allot
 
 
-\ Empty stack: handles underflowed stack too
-: empty-stack ( ... -- ) 
-   depth ?dup if 
-      dup 0< if 
-         negate 0 do 0 loop 
-      else 
-         0 do drop loop 
-      then 
-   then ;
-
 \ Print the previous test's actual results. Added by SamCo 2018-05 
 : show-results ( -- ) 
    s"  ACTUAL RESULT: { " type
@@ -47,7 +37,9 @@ create actual-results  20 cells allot
 : error  \ ( C-ADDR U -- ) 
    type source type \ display line corresponding to error
    empty-stack      \ throw away every thing else
-   show-results ;   \ added by SamCo to show what actually happened
+   show-results
+   '?' Emit 0 Emit Space  \ signal simulator
+   ;   \ added by SamCo to show what actually happened
 
 \ Syntactic sugar
 : T{  ( -- ) ;
