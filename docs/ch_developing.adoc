@@ -3,6 +3,59 @@ After spending an entire weekend wrestling with blocks files, stacks, and
 the like, I was horrified and convinced that I had made a mistake. Who
 in their right mind would want to program in this godforsaken language! <<DH>>
 
+=== Required Tools
+
+To run Tali Forth 2 in a simulator, you will need `python3` and `py65` installed to be
+able to run `py65mon`.
+
+To assemble Tali Forth 2, you will need `64tass` and `make`.
+
+To compile the documentation for Tali Forth 2, you will need the following tools:
+
+`Ditaa` is used to generate the diagrams from text file descriptions and is
+available at https://ditaa.sourceforge.net/ Ditaa is not required if you are not
+going to change any of the diagrams.
+
+Ditaa is a java program, so I made a helper script (named just `ditaa`) to help
+run it.  You'll need to replace the path to the jar file for your system.
+
+----
+#!/bin/sh
+java -jar /path/to/jarfile/ditaa0_9.jar $@
+----
+
+`asciidoctor` and `asciidoctor-pdf` are used to generate the html and PDF versions
+of this manual.  These are rubygems are are installed by first installing ruby
+and then running the following commands:
+
+----
+sudo gem install asciidoctor
+sudo gem install asciidoctor-pdf
+----
+
+These tools have an annoying "feature" of having their version number in the
+executable name.  To work around this, I created symbolic links in my personal
+bin folder (eg. a folder in my path) as shown below.  You will need to adjust
+with the name of these utilities on your system.
+
+----
+ln -s /usr/bin/asciidoctor.ruby3.2 asciidoctor
+ln -s /usr/bin/asciidoctor-pdf.ruby3.2 asciidoctor-pdf
+----
+
+=== Optional Tools
+
+Generating the MarkDown and PDF versions of the manual is optional.  You will
+need `pandoc` (package was named `pandoc-cli` on my system) and `texlive`
+installed.  These versions of the manual are not compiled by default (only the
+HTML version is compiled by default).  If you would like the manual in these
+formats, you can use the following commands:
+
+----
+make docsmd
+make docspdf
+----
+
 === Adding New Words
 
 The simplest way to add new words to Tali Forth is to include them in the file
@@ -54,39 +107,38 @@ giving the code away freely. It is also to let people play around with it and
 adapt it to their own machines. This is also the reason it is (perversely)
 over-commented.
 
-To work on the internals of Tali Forth, you will need the Ophis assembler.
+To work on the internals of Tali Forth, you will need the 64tass assembler.
 
-==== The Ophis Assembler
+==== The 64tass Assembler
 
-Michael Martin's Ophis Cross-Assembler can be downloaded from
-http://michaelcmartin.github.io/Ophis/. It uses a slightly different format than
-other assemblers, but is in Python and therefore will run on pretty much any
-operating system. To install Ophis on Windows, use the link provided above. For
-Linux:
+While Tali Forth 2 was originally developed with the Ophis assember, it was
+ported to the 64tass assembler because this assembler allows conditional
+compilation.
 
-----
-git clone https://github.com/michaelcmartin/Ophis
-cd Ophis/src
-sudo python setup.py install
-----
+For Linux users, your operating system may have a pre-built 64tass package you
+can install.  For everyone else, you can head over to:
+https://sourceforge.net/projects/tass64/
+Windows users will probably want to just grab a binary (just put the executable
+in a convenient folder and make sure that folder is in the path).  Users of
+other OSes will probably need to compile from source (which is super easy as the
+code has almost no dependancies).
 
-Switch to the folder where the Tali code lives, and run the Makefile with a
-simple `make` command. This also updates the file listings in the `docs` folder.
 
-Ophis has some quirks. For instance, you cannot use math symbols in label names,
-because it will try to perform those operations. Use underscores instead.
+Once you have 64tass installed, switch to the folder where the Tali code lives
+and run the Makefile with a simple `make` command (assumes you have GNU make
+installed). This also updates the file listings in the `docs` folder.
+
 
 ==== General Notes
 
-* The X register is used as the Data Stack Pointer (DSP) and should only be used
-  if there is no other alternative.
+* The X register is used as the Data Stack Index (DSP) and needs to preserved.
 
 * The Y register, however, is free to be changed by subroutines. This also means
   it should not be expected to survive subroutines unchanged.
 
 * Natively coded words generally should have exactly one point of entry -- the 
-  `xt_word` link -- and exactly one point of exit at `z_word`. In may cases,
-  this requires a branch to an internal label `_done` right before `z_word`.
+  `xt_word` link -- and exactly one point of exit at 'FEnd`. In may cases,
+  this requires a branch to an internal label `_done` right before `FEnd`.
 
 * Because of the way native compiling works, the trick of combining
   `jsr`-`rts` pairs to a single `jmp` instruction (usually) doesn't work.
@@ -94,7 +146,7 @@ because it will try to perform those operations. Use underscores instead.
 
 ==== Coding Style
 
-Until there is a tool for Ophis assembly code that formats the source file the
+Until there is a tool for 64tass assembly code that formats the source file the
 way gofmt does for Go (golang), the following format is suggested.
 
 * Tabs are **eight characters long** and converted to spaces.
@@ -114,9 +166,6 @@ way gofmt does for Go (golang), the following format is suggested.
   thank you very much.
 
 * Hex numbers are, however, upper case, such as `$FFFE`. 
-
-WARNING: The Ophis assembler interprets numbers with a leading zero as octal.
-This can be an annoying source of errors.
 
 * Numbers in mnemonics are a stripped-down as possible to reduce
   visual clutter: use `lda 0,x` instead of `lda $00,x`.
@@ -153,55 +202,57 @@ As an example, let's turn the following definition into assembly:
 ---- 
 Translates into: 
 ---- 
-; ## GETSTATE ( -- n ) "Get the current state" 
+ FHdr "GetState",0 ; ( -- n ) "Get the current state" 
 ; ## "getstate" coded Custom 
-.scope 
-xt_getstate: 
+GetState: 
                 jsr xt_state
                 jsr xt_fetch ; @ is pronounced "fetch" in Forth.
-z_getstate: 
+	FEnd 
                 rts 
-.scend 
 ----
 
 The above code would be added to native_words.asm, probably right after
 get-order.  native_words.asm is roughly in alphabetical order with a few odd
 words that need to be close to each other.
-
-The header above the code is in a special format used to track where words come
-from and their current status.  It is parsed by a tool that helps to track
-information about the words, so the format (including the ##s) is important.
-The first line has the name (which is uppercase, but needs to match whatever
-comes after the xt_ and z_ in the labels below it), the input and output stack
+.
+The header above the code is in a special format.
+The first line ( FHdr ) has the Forth name of the word,
+the input and output stack
 parameters in standard Forth format, and a string that has a short description
-of what the word does.  The second line has a string showing the name as it
+of what the word does.  This compiles a Forth word header & links it into
+the current wordlist.
+The second line ( ## ) has a string showing the name as it
 would be typed in Forth (useful for words with symbols in them), the current
 testing status (coded, tested, auto), and where the word comes from (ANS,
 Gforth, etc.)  See the top of native_words.asm for more information on the
 status field, but "coded" is likely to be the right choice until you've
 thoroughly tested your new word.
 
-The `.scope` and `.scend` are special directives to the Ophis assembler to
-create a scope for local labels.  Local labels begin with an underscore "_" and
-are only visible within the same scope.  This allows multiple words to all have
-a `_done:` label, for example, and each word will only branch to its own local
+The label xxxx is the assembly entry point ( xt ).
+This label should be on the the next non-comment after the FHdr line of your word.
+The xxxx portion should be your word spelled out (eg. numbers and
+symbols spelled out with underscores between them).  Although allowed in the
+Forth word, the dash "-" symbol is not allowed in the label (the assembler will
+try to do subtraction), so it is replaced with an underscore anywhere it is
+used.
+
+Local labels begin with an underscore "_" and are only visible within the same
+scope (between two regular labels).  This allows multiple words to all have a
+`_done:` label, for example, and each word will only branch to its own local
 version of `_done:` found within its scope.  Any branching within the word
 (eg. for ifs and loops) should be done with local labels.  Labels without an
 underscore at the beginning are globally available.
 
-The labels xt_xxxx and z_xxxx need to be the entry and exit point, respectively,
-of your word.  The xxxx portion should be your word spelled out (eg. numbers and
-symbols spelled out with underscores between them).  Although allowed in the
-Forth word, the dash "-" symbol is not allowed in the label (the assembler will
-try to do subtraction), so it is replaced with an underscore anywhere it is
-used.  The one and only RTS should be right after the z_xxxx label.  If you need
-to return early in your word, put a `_done:` label just before the z_xxxx label
+FEnd should be at the end of the code.
+For words that can be native-compiled 
+the one and only RTS should be right after the FEnd line.  If you need
+to return early in your word, put a `_done:` label just before the FEnd
 and branch to that.
 
 You can see that the body is just a sequence of JSRs calling each existing word
-in turn.  If you aren't sure of the xt_xxxx name of a forth word, you can search
-native_words.asm for the Forth word (in lowercase) in double quotes and you will
-find it in the header for that word.  `xt_fetch`, above, could be found by
+in turn.  If you aren't sure of the xxxx name of a forth word, you can search
+taliforth.asm for the Forth word in double quotes and you will
+find it in the header for that word.  `Fetch`, above, could be found by
 searching for "@" (including the quotes) if you didn't know its name.
 
 ==== Processing Immediate Words
@@ -232,10 +283,9 @@ xt_star is already in use (for the multiplication word `*`), so this will show h
 to deal with that complication as well.  
 
 ---- 
-; ## STAR_WORD ( -- ) "Print a * on the screen" 
-; ## "star" coded Custom 
-.scope 
-xt_star_word: 
+ FHdr "Star",NN ; ( -- ) "Print a * on the screen" 
+  ; ## "star" coded Custom 
+Star_word: 
                 ; Put a * character on the stack.  
                 dex             ; Make room on the data stack.  
                 dex 
@@ -243,13 +293,12 @@ xt_star_word:
                 sta 0,x         ; Store in low byte of stack cell.
                 stz 1,x         ; high byte is zeroed for characters.
                 jsr xt_emit     ; Print the character to the screen.
-z_star_word: 
+	FEnd
                 rts 
-.scend 
 ----
 
-We chose the labels xt_star_word and z_star_word for this word, but it will be
-named "star" in the dictionary and Tali won't confuse it with `\*` for
+We chose the assembly label Star_word for this word, but it will be
+named "Star" in the dictionary and Tali won't confuse it with `\*` for
 multiplication.  The `[char] *` portion of the definition has the behavior of
 compiling the instructions to put the character "*" on the stack.  We translate
 that into the assembly that does that directly.  The word `emit` is a normal
@@ -294,11 +343,10 @@ The assembly version of this (which you can find in native_words.asm as this is
 the actual assembly definition of this word) is:
 
 ----
-; ## IS ( xt "name" -- ) "Set named word to execute xt"
-; ## "is"  auto  ANS core ext
-        ; """http://forth-standard.org/standard/core/IS"""
-.scope
-xt_is:
+ FHdr "Is",IM+NN ; ( xt "name" -- ) "Set named word to execute xt"
+  ; ## "is"  auto  ANS core ext
+  ; """http://forth-standard.org/standard/core/IS"""
+Is:
                 ; This is a state aware word with different behavior
                 ; when used while compiling vs interpreting.
                 ; Check STATE
@@ -313,14 +361,12 @@ _compiling:
                 ; Postpone DEFER! by compiling a JSR to it.
                 ldy #>xt_defer_store
                 lda #<xt_defer_store
-                jsr cmpl_subroutine
-                bra _done
+                jmp Jsr_Comma_YA		; jsr/rts
+
 _interpreting:
                 jsr xt_tick
-                jsr xt_defer_store
-_done:          
-z_is:           rts
-.scend
+                jmp xt_defer_store		; jsr/rts
+	FEnd
 ----
 
 In the header, you can see this word is part of the ANS standard in the extended
@@ -346,9 +392,11 @@ run the code for the `else` section, we use a BRA to a _done label.
 The `else` section of the `if` just has two regular words, so they are just
 translated into JSRs.
 
-The `immediate` on the end is handled in the header in headers.asm by adding IM
-to the status flags.  See the top of headers.asm for a description of all of the
+The `immediate` on the end is handled in the header (compiled by FHdr) by adding IM
+to the status flags.  See the top of taliforth.asm for a description of all of the
 header fields.
+We also specified the NN (never-native) flag, so this word will never be native
+compiled.  This allows us to use the jsr/rts tricks to save space & execution time.
 
 ==== Processing DOES>
 
@@ -375,38 +423,37 @@ bignum d.
 
 The . at the end of the number makes it a double-cell (32-bit on Tali) number.
 
-The assembly code for `2CONSTANT` (taken from native_words.asm) looks like:
+The assembly code for `2CONSTANT` could look like this 
+(note that Tali has a customized assembly version instead):
 ----
-; ## TWO_CONSTANT (C: d "name" -- ) ( -- d) "Create a constant for a double word"
-; ## "2constant"  auto  ANS double
-        ; """https://forth-standard.org/standard/double/TwoCONSTANT
-        ; Based on the Forth code
-        ; : 2CONSTANT ( D -- )  CREATE SWAP , , DOES> DUP @ SWAP CELL+ @ ;
-        ; """
-.scope
-xt_two_constant:
+ FHdr "2Constant",UF+NN ; (C: d "name" -- ) ( -- d) "Create a constant for a double word"
+  ; ## "2constant"  auto  ANS double
+  ; """https://forth-standard.org/standard/double/TwoCONSTANT
+  ; Based on the Forth code
+  ; : 2CONSTANT ( D -- )  CREATE SWAP , , DOES> DUP @ SWAP CELL+ @ ;
+  ; """
+two_constant:
                 jsr underflow_2
 
-                jsr xt_create
-                jsr xt_swap
-                jsr xt_comma
-                jsr xt_comma
+                jsr create
+                jsr swap
+                jsr comma
+                jsr comma
                 
                 jsr does_runtime    ; does> turns into these two routines.
                 jsr dodoes
                 
-                jsr xt_dup
-                jsr xt_fetch
-                jsr xt_swap
-                jsr xt_cell_plus
-                jsr xt_fetch
+                jsr dup
+                jsr fetch
+                jsr swap
+                jsr cell_plus
+                jsr fetch
                 
-z_two_constant: rts
-.scend
+	FEnd
 ----
 
 This word takes an argument, so underflow checking is added right at the top
-(and the UF flag is added in headers.asm).  Underflow checking is optional, but
+(and the UF flag is added to FHdr).  Underflow checking is optional, but
 recommended for words that take arguments on the stack.  To add underflow
 checking to your word, just call the appropriate underflow checking helper
 (underflow_1 to underflow_4) based on how many cells you are expecting (minimum)
@@ -420,48 +467,28 @@ All of the other words other than `does>` in this definition are regular words,
 so they just turn into JSRs.  The word `does>` turns into a `jsr does_runtime`
 followed by a `jsr dodoes`.
 
-==== Adding the Header in headers.asm
+==== Adding the Header
 
-Once your word has been entered into native_words.asm with the appropriate
-comment block over it and the xt_xxxx and z_xxxx labels for the entry and exit
-points, it is time to add the dictionary header for your word to link it into
-one of the existing wordlists.  The words here are not in alphabetical order and
-are loosely grouped by function.  If you aren't sure where to put your word, then
-put it near the top of the file just under the header for `cold`.
+Words are not in alphabetical order, are loosely grouped by function, &
+are loosely grouped by use frequency for better compile performance
+(words later in taliforth.asm are earlier in the wordlist order).
 
-Each header is simply a declaration of bytes and words that provides some basic
-information that Tali needs to use the word, as well as the addresses of the
-beginning and ending (not including the rts at the end) of your word.  That's
-why you need the xt_xxxx and z_xxxx labels in your word (where xxxx is the
-spelled-out version of your word's name).
+The FHdr macro at the beginning of your code compiles the Forth word header &
+links it into the wordlist in progress.
+The FEnd macro at the end of your code fills in the code length in the word header.
 
-Before we dicuss adding a word, let's go over the form a dictionary header.  The
-fields we will be filling in are described right at the top of headers.asm for
-reference. We'll look at an easy to locate word, `cold`, which is used to
-perform a cold reset of Tali. It's right near the top of the list.  We'll also
-show the word `ed`, which is currently below `cold`, because you will need to
-modify it (or whatever word is currently just below `cold`) when you put your
-word under `cold`.  The headers for these two words currently look like:
+Each header is simply a collection of bytes and words that provides some basic
+information that Tali needs to use the word.  For detail, see the definition of the FHdr macro
+in taliforth.asm .
 
-----
-nt_cold:
-        .byte 4, 0
-        .word nt_bye, xt_cold, z_cold
-        .byte "cold"
+FHdr is expected to be at the beginning of your word.
 
-nt_ed:                  ; ed6502
-        .byte 2, NN
-        .word nt_cold, xt_ed, z_ed
-        .byte "ed"
-----
+The 1st parameter is the Forth name of your word as a string.
+This name can be in any case.
+If your word has a double-quote in it, look up `s_quote` to see how
+this is handled.
 
-The first component of a dictionary header is the label, which comes in the form
-nt_xxxx where xxxx is the spelled out version of your word's name.  The xxxx
-should match whatever you used in your xt_xxxx and z_xxxx labels.
-
-The next two fields are byte fields, so we create them with the Ophis assembler
-`.byte` directive.  The first field is the length of the name, in characters, as
-it will be typed in Tali.  The second field is the status of the word, where
+The 2nd parameter is the flags (status) of the word, where
 each bit has a special meaning.  If there is nothing special about your word,
 you will just put 0 here.  If your word needs some of the status flags, you add
 them together (with +) here to form the status byte.  The table below gives the
@@ -485,77 +512,17 @@ Note: If neither NN or AN is set, then the word might be native compiled based
 on its size and the value in the Forth variable `nc-limit`.
 UF:: Contains underflow check.  If you added a JSR to one of the underflow
 checking helper functions, you should set this bit.
-HC:: Has CFA (words created by CREATE and DOES> only).  You will probably never
-need this bit for words that you write in assembly.
+R6:: Cut 6 bytes off of the beginning and end of the code when native compiling.
 
 If you created a short word made out of just JSRs with underflow checking at the top, and
 you wanted it to be an immediate word, you might put `IM+UF` for this field.
 
-The next line contains three addresses, so the Ophis `.word` directive is used
-here.  The first address is the nt_xxxx of the next word in the word list.  The
-words are actually listed from bottom to top in this file, so this will be the
-nt_xxxx label of the word just above this one in the file.  The second address
-is the xt (execution token), or entry point, of your new word.  This will be
-your xt_xxxx label for your word.  The third address is the end of your routine,
-just before the RTS instruction.  You will use your z_xxxx label here.  The
-xt_xxxx and z_xxxx are used as the bounds of your word if it ends up being
-natively compiled.
+The entry point ( xt ) is expected to be just after the FHdr.
 
-In the sample headers above, you can see that `ed` links to `cold` as the next
-word, and `cold` links to `bye` (not shown) as the next word.  When you go to
-add your own word, you will need to adjust these linkages.
-
-The last line is the actual name of the word, as it will be typed in forth, in
-lowercase.  It uses the Ophis `.byte` directive and Ophis allows literal
-strings, so you can just put the name of your word in double-quotes.  If your
-word has a double-quote in it, look up `nt_s_quote` in the headers to see how
-this is handled.
-
-Although Tali is not case-sensitive, all words in the dictionary headers must be
-in lowercase or Tali will not be able to find them.  The length of this string
-also needs to match the length given as the first byte, or Tali will not be able
-to find this word.
-
-As an example, we'll add the words `star` and `is` from the previous examples.
-Technically, `is` is already in the dictionary, but this example will show
-you how to create the header for a regular word (`star`) and for one that
-requires one of the status flags (`is`).
-
-----
-nt_cold:
-        .byte 4, 0
-        .word nt_bye, xt_cold, z_cold
-        .byte "cold"
-
-nt_star:
-        .byte 4, 0
-        .word nt_cold, xt_star_word, z_star_word
-        .byte "star"
-
-nt_is:
-        .byte 2, IM
-        .word nt_star, xt_is, z_is
-        .byte "is"
-
-nt_ed:                  ; ed6502
-        .byte 2, NN
-        .word nt_is, xt_ed, z_ed
-        .byte "ed"
-----
-
-The first thing to note is the updated linked list of words.  In order to put
-the new words between `ed` and `cold`, we make `ed` link to `is`, which then
-links to `star`, and that links back to `cold`.  Because this file links the
-headers from the bottom to the top of the file, this actually places the new
-words near the end of the dictionary.  If you use the `words` command, you will
-find the new words near the end of the list.
-
-The second thing to note is the status byte of each word.  If the word doesn't
-need any special status, then just use 0.  Neither of our added words contain
-the JMP instruction (branches are OK, but JMP is not), so neither is required to
-carry the NN (Never Native) flag.  The word `is`, in it's original Forth form,
-was marked as an immediate word, and we do that by putting the IM flag on it
-here in the dictionary header.
+The FEnd macro marks the end of the code.
+For code that is can be native-compiled, it is important that the FEnd is just
+before the rts.
+ 
 
 === Code Cheat Sheets
 

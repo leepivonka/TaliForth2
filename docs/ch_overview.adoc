@@ -11,10 +11,10 @@ Spoiler alert: Tali Forth is a subroutine-threaded (STC) variant with a 16-bit
 cell size and a dictionary that keeps headers and code separate. If you don't
 care and just want to use the program, skip ahead.
 
-==== Characteristics of the 65c02
+==== Characteristics of the 6502
 
 Since this is a bare-metal Forth, the most important consideration is the target
-processor. The 65c02 only has one full register, the accumulator A, as well as
+processor. The 6502 only has one full register, the accumulator A, as well as
 two secondary registers X and Y. All are 8-bit wide. There are 256 bytes that
 are more easily addressable on the Zero Page. A single hardware stack is used
 for subroutine jumps. The address bus is 16 bits wide for a maximum of 64 KiB of
@@ -44,7 +44,7 @@ space than the other Forths. Words are created as a table of tokens.
 
 Subroutine threading (STC):: Converts the words to a simple
 series of `jsr` combinations. Easy to understand and less complex than the other
-variants, but uses more space and is slower.
+variants, but uses more space.  The 6502 is good at subroutine calls, so this is fast.
 
 Our lack of registers and the goal of creating a simple and easy to understand
 Forth makes subroutine threading the most attractive solution, so Tali 2 is an
@@ -73,7 +73,7 @@ registers:
 
 On a modern processor like a RISC-V RV32I with 32 registers of 32 bit each, none
 of this would be a problem (in fact, we'd probably run out of ways to use the
-registers). On the 65c02, at least we get the RSP for free with the built-in
+registers). On the 6502, at least we get the RSP for free with the built-in
 stack pointer. This still leaves three registers. We cut that number down by one
 through subroutine threading, which gets rid of the IP. For the DSP, we use the
 65c02's Zero Page indirect addressing mode with the X register. This leaves W,
@@ -92,11 +92,9 @@ no checks for overflow because those cases tend to be rare.
 ==== Dictionary Structure
 
 Each Forth word consists of the actual code and the header that holds the
-meta-data. The headers are arranged as a simple single-linked list.
+meta-data. The headers in a wordlist are arranged as a simple single-linked list.
 
-In contrast to Tali Forth 1, which kept the header and body of the words
-together, Tali Forth 2 keeps them separate. This lets us play various tricks
-with the code to make it more effective.
+The code follows the header.
 
 === Deeper down the rabbit hole
 

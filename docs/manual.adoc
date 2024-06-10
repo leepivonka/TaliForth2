@@ -1,16 +1,16 @@
-= Manual for Tali Forth 2 for the 65c02
+= Manual for Tali Forth 2 Remix for the 6502
 Sam Colwell; Scot W. Stevenson
 :doctype: book
 :keywords: forth, 6502, assembler, programming, 8-bit, vintage, retro
-:revnumber: BETA
-:revdate: 22. Dec 2018
+:revnumber: 1.0
+:revdate: 31. Jan 2024
 :showtitle:
 :icons: font
 :toc: left
 
-Tali Forth 2 is a bare-metal ANS(ish) Forth for the 65c02 8-bit MPU. It aims
+Tali Forth 2 is a bare-metal ANS(ish) Forth for the 6502 8-bit MPU. It aims
 to be, roughly in order of importance, easy to try out (just run the included
-binary), simple (subroutine threading model), specific (for the 65c02 only), and
+binary), simple (subroutine threading model), specific (for the 6502 only), and
 standardized (ANS Forth). 
 
 [dedication]
@@ -66,7 +66,13 @@ include::ch_internals.adoc[]
 include::ch_developing.adoc[]
 
 == Future and Long-Term plans
-WARNING: This section is missing. See the GitHub page for further details.
+Scot has moved on to bigger things (eg. processors with more bits).  Sam continues
+to provide support and bugfixes and maintains the current repository.  Help is
+also generally available at the 6502.org Users Forum in the Forth category.
+http://forum.6502.org/viewforum.php?f=9
+
+See the GitHub page for further details.
+https://github.com/SamCoVT/TaliForth2
 
 
 // --------------------------------------------------------
@@ -79,14 +85,20 @@ include::ch_tutorial_blocks.adoc[]
 == The `ed` Line-Based Editor[[ed-tutorial]]
 include::ch_tutorial_ed.adoc[]
 
+== Wordlists and the Search Order
+include::ch_tutorial_wordlists.adoc[]
+
 
 // --------------------------------------------------------
 = Appendix
 
+== Glossary
+include::ch_glossary.adoc[]
+
 == Reporting Problems
 
 The best way to point out a bug or make any other form of a comment is on Tali
-Forth's page on GitHub at https://github.com/scotws/TaliForth2 There, you can
+Forth's page on GitHub at https://github.com/SamCoVT/TaliForth2 There, you can
 "open an issue", which allows other people who might have the same problem to
 help even when the author is not available.
 

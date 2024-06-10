@@ -1,11 +1,11 @@
 Tali supports the optional BLOCK word set. The 2012 Forth standard
 defines a block as 1024 bytes, and the buffers for them are the same
-size (as opposed to some older forths that had smaller buffers.) Tali
+size (as opposed to some older forths that had smaller buffers). Tali
 currently comes with one buffer.
 
 Before these words can be used, the user needs to write two routines: one for
 reading blocks into RAM and one for writing blocks out from RAM. Both of these
-should have the signature `( addr blk# -- )`. Once these have been written, they
+should have the signature ( addr blk# -- ). Once these have been written, they
 can be incorporated into the BLOCK word set by changing the vectors for words
 `block-read` and `block-write`. That might look like:
 
@@ -37,3 +37,5 @@ Be careful about creating too many blocks as they are 1K each.  It's also worth
 noting that running `block-ramdrive-init` again will create another ramdrive and
 the existing one will be inaccessible while still taking up space in
 RAM.
+
+See the tutorials on working with blocks for more information on how to use them.

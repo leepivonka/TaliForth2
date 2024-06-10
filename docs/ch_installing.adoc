@@ -1,7 +1,7 @@
 === Downloading
 
 Tali Forth 2 lives on GitHub(((GitHub))) at
-https://github.com/scotws/TaliForth2. This is where you will always find the
+https://github.com/SamCoVT/TaliForth2. This is where you will always find the
 current version. You can either clone the code with git(((git))) or simply
 download it. To just test Tali Forth, all you need is the binary file
 `taliforth-py65mon.bin`.
@@ -27,8 +27,12 @@ sudo pip install -U py65
 ----
 
 If you don't have `pip`(((pip))) installed, you will have to add it first with
-something like `sudo apt-get install python-pip` (Ubuntu Linux). There is a
-`setup.py` script as part of the package.
+something like `sudo apt-get install python-pip` (Ubuntu Linux).  Some systems
+use pip3 and you can run the above commands with pip3 instead of pip.
+
+If you are on windows, you will need to download and install Python 3
+first.  Once Python is installed, the above commands should work from
+a Windows command prompt.
 
 ==== Running the Binary
 
@@ -90,3 +94,6 @@ want to have your project added to the list.
 - *SamCo's SBC* (https://github.com/SamCoVT/SBC) by Sam Colwell.  A
    single-board computer running at 4MHz.  Platform file:
    `platform-sbc.asm` (29. Oct 2018)
+
+There are various benchmarks of Tali Forth 2 running different hardware at _The
+Ultimate Forth Benchmark_ (https://theultimatebenchmark.org/#sec-7).

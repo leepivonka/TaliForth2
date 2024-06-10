@@ -35,35 +35,116 @@ See the Appendix for a more detailed discussion of the format.
 
 The disassembler prints the address of the instruction, followed by any operand
 and the mnemonic. To get the code of `drop`, for instance, we can use 
-`' drop 10 disasm`:
+`' drop 6 disasm`:
 
 ----
-36204    119 cpx.#
-36206      3 bmi
-36208  56282 jmp
-36211        inx
-36212        inx
-36213        rts
+36142  55337 jsr     STACK DEPTH CHECK
+36145        inx
+36146        inx
+36147        rts
 ----
 
 The Forth word `see` calls the disassembler while using a hexadecimal number
 base. So `see drop` produces: 
 
 ----
- nt: CF04  xt: 8D6C  UF
- size (decimal): 9
+nt: BC3E  xt: 8D2E 
+flags (CO AN IM NN UF HC): 0 0 0 0 1 0 
+size (decimal): 5 
 
-8D6C  E0 77 30 03 4C DA DB E8  E8  .w0.L... .
+8D2E  20 29 D8 E8 E8   )...
 
-8D6C     77 cpx.#
-8D6E      3 bmi
-8D70   DBDA jmp
-8D73        inx
-8D74        inx
+8D2E   D829 jsr     STACK DEPTH CHECK
+8D31        inx
+8D32        inx
 ----
 
 Note that `see` does not print the final `rts` instruction.
 
+==== Determining address labels
+
+When disassembling, using either `disasm` or `see`, the dictionary is searched
+anytime a `jsr` is encountered and the name of the word will be printed if a
+word with that address is found.  Some interal routines in Tali are not in the
+Forth dictionary and so no name will be printed.  Here is an example when running
+`see order`
+
+----
+nt: C9FF  xt: 9845 
+flags (CO AN IM NN UF HC): 0 0 0 0 0 0 
+size (decimal): 42 
+
+9845  20 63 89 20 34 91 B5 00  F0 1E A8 E8 E8 B5 00 5A   c. 4... .......Z
+9855  20 70 98 7A 88 D0 F4 20  1E A1 20 1E A1 20 29 91   p.z...  .. .. ).
+9865  B5 00 20 70 98 20 63 89  E8 E8  .. p. c. ..
+
+9845   8963 jsr     cr
+9848   9134 jsr     get-order
+984B      0 lda.zx
+984D     1E beq
+984F        tay
+9850        inx
+9851        inx
+9852      0 lda.zx
+9854        phy
+9855   9870 jsr     
+9858        ply
+9859        dey
+985A     F4 bne
+985C   A11E jsr     space
+985F   A11E jsr     space
+9862   9129 jsr     get-current
+9865      0 lda.zx
+9867   9870 jsr     
+986A   8963 jsr     cr
+986D        inx
+986E        inx
+----
+
+This word is a mixture of assembly and other forth words.  Note that the second
+to last jsr shows a destination address of 9870 (in hex).  To trace this
+further, consult the labelmap for your platform in the /docs folder.  In this
+case, searching for 9870 in the labelmap finds the following label and the
+assembly files can be searched to locate this routine if you need to see its
+source.
+
+----
+order_print_wid_string= $9870
+----
+
+==== Literals and Strings
+
+Tali compiles some literals into words by saving a jsr to a helper
+routine followed immediately by the data for the literal.  During
+disassembly, the literal value will be printed and the disassembler will resume
+disassembling from just after the literal value.  Doubles are saved in memory as
+two single cell literal values.
+
+Strings are similar, however they are saved in memory as a
+jsr to the string handling routine, then a jmp over the string
+data, then the string data.
+When the disassembler encounters a string, it will print SLITERAL
+followed by the address and length of the string.
+----
+: example s" This is a string" ;  ok
+see example 
+nt: 800  xt: 80F 
+flags (CO AN IM NN UF HC): 0 0 0 1 0 1 
+size (decimal): 26 
+
+080F  4C 22 08 54 68 69 73 20  69 73 20 61 20 73 74 72  L".This  is a str
+081F  69 6E 67 20 A9 A0 12 08  10 00  ing .... ..
+
+80F    822 jmp
+822   A0A9 jsr     SLITERAL 812 10 
+ ok
+----
+To see the value of the string, you can either look at the memory dump above the
+disassembly or you can `type` the string yourself (note that `see` will always
+give the values in hex while `disasm` will use the current `base`):
+----
+hex 812 10 type
+----
 
 ==== Gotchas and known issues
 
