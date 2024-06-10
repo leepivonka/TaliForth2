@@ -1,24 +1,34 @@
-# Tali Forth 2 for the 65c02  
+# Tali Forth 2 Remix for the NMOS 6502 (with ROR) and later
+This version:  31. May 2024
+ 
+Based on Tali Forth 2 as of Feb 2024.
+[https://github.com/SamCoVT/TaliForth2](https://github.com/SamCoVT/TaliForth2).
 Scot W. Stevenson <scot.stevenson@gmail.com>  
 Sam Colwell  
-First version: (Tali Forth 1 ) 19. Jan 2014  
-This version: (Version 1.0.2 ) 01. Jan 2023
+
+Some basic layout details changed.
+Lots of smaller changes.
+Has floating-point words.
+Runs on NMOS 6502 (with ROR) and later.
+
 
 ## Dude, I am the very model of a Salarian scientist, just let me start!
 
-Run `py65mon -m 65c02 -r taliforth-py65mon.bin` from this directory.
+Run `py65mon -m 6502 -r taliforth-py65mon.bin` from this directory.
 
 
 ## Introduction
 
-Tali Forth 2 is a subroutine threaded code (STC) implementation of an ANS-based
-Forth for the 65c02 8-bit MPU. The aim is to provide a modern Forth that is easy
+Tali Forth 2 remix is a subroutine threaded code (STC) implementation of an ANS-based
+Forth for the NMOS 6502 (with ROR) 8-bit MPU and later.
+The aim is to provide a modern Forth that is easy
 to get started with and can be ported to individial hardware projects,
 especially Single Board Computers (SBC), with little effort. It is free --
 released in the public domain -- but with absolutely _no warranty_ of any kind.
-Use at your own risk! (See `COPYING.txt` for details.) Tali Forth 2 is hosted at
+Use at your own risk! (See `COPYING.txt` for details.) 
+Tali Forth 2 Remix is hosted at
 GitHub. You can find the most current version at
-[https://github.com/SamCoVT/TaliForth2](https://github.com/SamCoVT/TaliForth2).
+[https://github.com/leepivonka/TaliForth2](https://github.com/leepivonka/TaliForth2).
 
 
 ## A little more detail please
