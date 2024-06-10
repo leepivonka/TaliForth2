@@ -1,6 +1,26 @@
-        .cpu "6502"        ; 6502 processor (Tali will run on NMOS 6502)
-			; still needs ROR
-        .enc "none"        ; No special text encoding (eg. ASCII)
+; Programmer  : Sam Colwell
+; File        : platform-neo6502.asm
+; Date        : 2024-02
+; Description : A platform file for the Neo6502 board.
+; use "make taliforth-neo6502.bin" from main Tali directory to generate
+; binary.  For the simulator (which starts in Neo6502 BASIC) place the
+; binary file in the "storage" folder and use the following commands to
+; load and start Tali Forth 2.
+;
+; load "taliforth-neo6502.bin", $a000
+; sys $a000
+; 
+; simulator commandline:
+; neo taliforth-neo6502.bin@a000 run@a000
+
+
+        ; 65C02 processor (Tali will not compile on older 6502)
+        .cpu "65c02"
+        ; No special text encoding (eg. ASCII)
+        .enc "none"
+
+        ; Where to start Tali Forth 2 in ROM (or RAM if loading it) 
+        * = $a000
 
 ; I/O facilities are handled in these separate kernel files because of their
 ; hardware dependencies. See docs/memorymap.txt for a discussion of Tali's
@@ -15,41 +35,30 @@
 ; offset for PAD, and the total RAM size. If these are changed, the tests will
 ; have to be changed as well
 
-* = $0
- .dsection zp ; zero page, writale, uninitialized
- .cwarn *>$80, "zero page ends >$80
-;    $0000  +-------------------+
-;           |  ZP varliables    |
-;DStack:    +-------------------+
+
+;    $0000  +-------------------+  ram_start, zpage, user0
+;           |  User varliables  |
+;           +-------------------+
+;           |                   |
 ;           |                   |
 ;           +~~~~~~~~~~~~~~~~~~~+  <-- dsp
 ;           |                   |
 ;           |  ^  Data Stack    |
 ;           |  |                |
-;           +-------------------+  DStack0
-;           | FP stack arrays   |
+;    $0078  +-------------------+  dsp0, stack
 ;           |                   |
 ;           |   (Reserved for   |
 ;           |      kernel)      |
 ;           |                   |
-;           +-------------------+
-RStack = $0100 ; begin of 6502 Return stack
+;    $0100  +-------------------+
 ;           |                   |
-;           |  ^  Return Stack  |  <-- CPU S register
+;           |  ^  Return Stack  |  <-- rsp
 ;           |  |                |
-rsp0      = $ff		; initial Return Stack Pointer (6502 stack)
-
-* = $200
- .dsection bss ;writable, uninitialized
- .cwarn * > $c00, "bss ends >$c00"
-
-;    $0200  +-------------------+
+;    $0200  +-------------------+  rsp0, buffer, buffer0
 ;           |  |                |
 ;           |  v  Input Buffer  |
 ;           |                   |
-;           | more variables    |
-;           |                   |
-;           +-------------------+  cp0
+;    $0300  +-------------------+  cp0
 ;           |  |                |
 ;           |  v  Dictionary    |
 ;           |       (RAM)       |
@@ -58,30 +67,46 @@ rsp0      = $ff		; initial Return Stack Pointer (6502 stack)
 ;           |                   |
 ;           |                   |
 ;           |                   |
-cp_end = $8000 ; LastRAM byte available for Data
-;           +-------------------+
-
- * = $8000
- .dsection code ;read-only, initialized
- .cwarn * > $e000, "code ends >$e000"
-
+;           |                   |
+;           |                   |
+;           |                   |
+;    $9C00  +-------------------+  hist_buff, cp_end
+;           |   Input History   |
+;           |    for ACCEPT     |
+;           |  8x128B buffers   |
+;    $9fff  +-------------------+  ram_end
 
 
 ; HARD PHYSICAL ADDRESSES
 
-; Some of these are somewhat silly for the 6502, where for example
+; Some of these are somewhat silly for the 65c02, where for example
 ; the location of the Zero Page is fixed by hardware. However, we keep
 ; these for easier comparisons with Liara Forth's structure and to
 ; help people new to these things.
 
+ram_start = $0000          ; start of installed 32 KiB of RAM
+ram_end   = $a000-1        ; end of installed RAM
+zpage     = ram_start      ; begin of Zero Page ($0000-$00ff)
+zpage_end = $7F            ; end of Zero Page used ($0000-$007f)	
+stack0    = $0100          ; begin of Return Stack ($0100-$01ff)
+hist_buff = ram_end-$03ff  ; begin of history buffers
+
 
 ; SOFT PHYSICAL ADDRESSES
 
-; Tali currently doesn't have separate user variables for multitasking.
-; We do have limited zero-page space.
-; Many Forth variables are pushed up to user0 in non-zp memory.
+; Tali currently doesn't have separate user variables for multitasking. To
+; prepare for this, though, we've already named the location of the user
+; variables user0. Note cp0 starts one byte further down so that it currently
+; has the address $300 and not $2FF. This avoids crossing the page boundry when
+; accessing the user table, which would cost an extra cycle.
 
-padoffset = 84              ; offset from CP to PAD (holds number strings)
+user0     = zpage            ; user and system variables
+rsp0      = $ff              ; initial Return Stack Pointer (65c02 stack)
+bsize     = $ff              ; size of input/output buffers
+buffer0   = stack0+$100      ; input buffer ($0200-$027f)
+cp0       = buffer0+bsize+1  ; Dictionary starts after last buffer
+cp_end    = hist_buff        ; Last RAM byte available for code
+padoffset = $ff              ; offset from CP to PAD (holds number strings)
 
 
 ; OPTIONAL WORDSETS
@@ -93,12 +118,8 @@ padoffset = 84              ; offset from CP to PAD (holds number strings)
 ; assembled.  If TALI_OPTIONAL_WORDS is not defined in your platform file,
 ; you will get all of the words.
 
-TALI_OPTIONAL_WORDS := [ "fp","fpe","fpieee","fptrancendentals","ed", "editor", "ramdrive", "block", "environment?", "assembler", "wordlist" ]
+TALI_OPTIONAL_WORDS := [ "ed", "editor", "ramdrive", "block", "environment?", "assembler", "wordlist" ]
 
-; "fp" is floating-point
-; "fpe" is half-precision floating-point multiply & divide
-; "fpieee" is IEEE floating-point fetch & store
-; "fptrancendentals" is floating-point trancendental functions
 ; "ed" is a string editor. (~1.5K)
 ; "editor" is a block editor. (~0.25K)
 ;     The EDITOR-WORDLIST will also be removed.
@@ -123,40 +144,15 @@ TALI_OPTIONAL_WORDS := [ "fp","fpe","fpieee","fptrancendentals","ed", "editor", 
 ; only affects output.  Either CR or LF can be used to terminate lines
 ; on the input.
 
-TALI_OPTION_CR_EOL := [ "lf" ]
-;TALI_OPTION_CR_EOL := [ "cr" ]
+;TALI_OPTION_CR_EOL := [ "lf" ]
+; Neo6502 uses CR
+TALI_OPTION_CR_EOL := [ "cr" ]
 ;TALI_OPTION_CR_EOL := [ "cr" "lf" ]
 
- .section bss	; 1st part of bss space
-bsize     = $ff		; size of input/output buffers
-buffer0: .fill bsize	; input buffer
- .endsection bss
 
 
-; Make sure the above options are set BEFORE this include.
+; Put the kernel init first (at $8000)
 
-.include "../taliforth.asm" ; zero page variables, definitions
-
- .section bss	; last part of bss space
-hist_buff: .fill 8*128	; Input History for ACCEPT
-cp0:  ; start of RAM dictionary
- .endsection bss
-
-
-; =====================================================================
-; FINALLY
-
-; Of the 32 KiB we use, 24 KiB are reserved for Tali (from $8000 to $DFFF)
-; and the last eight (from $E000 to $FFFF) are left for whatever the user
-; wants to use them for.
-
-
-; Default kernel file for Tali Forth 2
-; Scot W. Stevenson <scot.stevenson@gmail.com>
-; Sam Colwell
-; First version: 19. Jan 2014
-; This version: 04. Dec 2022
-;
 ; This section attempts to isolate the hardware-dependent parts of Tali
 ; Forth 2 to make it easier for people to port it to their own machines.
 ; Ideally, you shouldn't have to touch any other files. There are three
@@ -167,33 +163,14 @@ cp0:  ; start of RAM dictionary
 ;       kernel_putc - Prints the character in A to the screen
 ;       s_kernel_id - The zero-terminated string printed at boot
 ;
-; This default version Tali ships with is written for the py65mon machine
-; monitor (see docs/MANUAL.md for details).
-
-; The main file of Tali got us to $e000. However, py65mon by default puts
-; the basic I/O routines at the beginning of $f000. We don't want to change
-; that because it would make using it out of the box harder, so we just
-; advance past the virtual hardware addresses.
- .section code
-* = $f010
-
-; All vectors currently end up in the same place - we restart the system
-; hard. If you want to use them on actual hardware, you'll have to redirect
-; them all.
-v_nmi:
-v_reset:
-v_irq:
 kernel_init:
         ; """Initialize the hardware. This is called with a JMP and not
         ; a JSR because we don't have anything set up for that yet. With
         ; py65mon, of course, this is really easy. -- At the end, we JMP
         ; back to the label forth to start the Forth system.
         ; """
-                ; Since the default case for Tali is the py65mon emulator, we
-                ; have no use for interrupts. If you are going to include
-                ; them in your system in any way, you're going to have to
-                ; do it from scratch. Sorry.
-                sei             ; Disable interrupts
+
+                ; Nothing special to set up here.
 
                 ; We've successfully set everything up, so print the kernel
                 ; string
@@ -202,58 +179,35 @@ kernel_init:
                 beq _done
                 jsr kernel_putc
                 inx
-                bne -
+                bra -
 _done:
                 jmp forth
 
-kernel_getc:
-        ; """Get a single character from the keyboard. By default, py65mon
-        ; is set to $f004, which we just keep. Note that py65mon's getc routine
-        ; is non-blocking, so it will return '00' even if no key has been
-        ; pressed. We turn this into a blocking version by waiting for a
-        ; non-zero character.
-        ; """
-_loop:
-                inc RndState+0	; randomize
-                lda $f004
-                beq _loop
-                rts
 
+; Map kernel_getc and kernel_putc to Neo6502 API routines.
+ReadCharacter = $ffee
+WriteCharacter = $fff1
+kernel_getc = ReadCharacter
+kernel_putc = WriteCharacter
 
-kernel_putc:
-        ; """Print a single character to the console. By default, py65mon
-        ; is set to $f001, which we just keep.
-        ; """
-                sta $f001
-                rts
 
 
 platform_bye:
                 brk
 
-				
-platform_CCAt: ; ( -- ud )  Fetch CPU cycle counter
-                lda #$100+err_Unsupported
-                jmp ThrowA  ; py65mon does't have this yet
 
-        ;       rts
+; Make sure the options are set BEFORE this include.
 
-
+; Put the guts of Tali Forth 2 here.
+.include "../taliforth.asm" ; zero page variables, definitions
 
 ; Leave the following string as the last entry in the kernel routine so it
 ; is easier to see where the kernel ends in hex dumps. This string is
 ; displayed after a successful boot
 s_kernel_id:
-        .text "Tali Forth 2 remix default kernel for py65mon (31 May 2024)", AscLF, 0
+        .text "Tali Forth 2 kernel for Neo6502 (2024-02-06)", AscLF, 0
 
 
-; Add the interrupt vectors
-* = $fffa
-
-.word v_nmi
-.word v_reset
-.word v_irq
- .endsection code
 
 ; END
 

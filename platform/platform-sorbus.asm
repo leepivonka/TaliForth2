@@ -3,33 +3,40 @@
         ; No special text encoding (eg. ASCII)
         .enc "none"
 
-; from the steckos jumptable
-krn_chrout = $FFB3
-krn_getkey = $FFB0
-krn_uart_tx  = $FFDD
-krn_uart_rx  = $FFE0
+; This file is based upon the steckschwein version which in turn seems to
+; be based on the py65mon platform. Thanks for the good groundwork.
 
-; steckOS uses the prg format used on the C64 with the first
-; two bytes containing the load address
-; This is now handled in the makefile by running:
-;   make taliforth-steckschwein.prg
-;* = $7FFE
-;.word $8000
-* = $8000
+; Sorbus does not utilize a load address.
+; Just build with:
+;   make taliforth-sorbus.bin
+; and rename the file to tali4th2.sx4
+* = $0400   ; start of SX4 file
+
+; from the Sorbus memory map
+BANK       = $DF00      ; select bank to use
+krn_chrout = $FF03      ; output a character to UART
+krn_getkey = $FF00      ; read character from UART, C=1, Z=1, A=0: no data
+
 kernel_init:
         ; """Initialize the hardware.
-        ; There is really not a lot to do as we use the steckOS kernel which already has done
-        ; all the dirty work for us.
-        ; We put this right before including the "real" taliforth as kernel_init is not called
-        ; through any vector. Also, we save a few bytes as we need no jmp to kernel_init and no jmp to forth
+        ; There is really not a lot to do as we use the Sorbus kernel which
+        ; already has done all the dirty work for us. Also there is not much
+        ; to setup.
+        ; We put this right before including the "real" taliforth as
+        ; kernel_init is not called through any vector. Also, we save a few
+        ; bytes as we need no jmp to kernel_init and no jmp to Forth.
         ; """
 
                 ; We've successfully set everything up, so print the kernel
                 ; string
-                ldx #0
+                brk                 ; software interrupt
+                .byte $0b           ; to copy BIOS from ROM to RAM
+                stz BANK            ; switch to RAM
+
+                ldx #$00
 -               lda s_kernel_id,x
                 beq _done
-                jsr kernel_putc
+                jsr kernel_putc     ; print kernel id message
                 inx
                 bra -
 _done:
@@ -41,7 +48,7 @@ _done:
 ; memory layout.
 
 
-; MEMORY MAP OF RAM
+; MEMORY MAP
 
 ; Drawing is not only very ugly, but also not to scale. See the manual for
 ; details on the memory map. Note that some of the values are hard-coded in
@@ -50,33 +57,48 @@ _done:
 ; have to be changed as well
 
 
-;    $0000  +-------------------+  ram_start, zpage, user0
-;           |  User varliables  |
+;    $0000  +-------------------+
+;           |  (Reserved for    |
+;           | Sorbus kernel,I/O)|
+;    $0010  +-------------------+  ram_start, zpage, user0
+;           |  user varliables  |
 ;           +-------------------+
 ;           |                   |
 ;           |                   |
 ;           +~~~~~~~~~~~~~~~~~~~+  <-- dsp
 ;           |                   |
-;           |  ^  Data Stack    |
+;           |  ^  data stack    |
 ;           |  |                |
 ;    $0078  +-------------------+  dsp0, stack
 ;           |                   |
-;           |   (Reserved for   |
-;           |      kernel)      |
+;           |     (unused)      |
 ;           |                   |
 ;    $0100  +-------------------+
 ;           |                   |
-;           |  ^  Return Stack  |  <-- rsp
+;           |  ^  return stack  |  <-- rsp
 ;           |  |                |
-;    $0200  +-------------------+  io area
+;    $0200  +-------------------+  rsp0
 ;           |                   |
-;    $0290  +-------------------+  rsp0, buffer, buffer0
+;           | (disk buffer for  |
+;           |  saving only)     |
+;           |                   |
+;    $0300  +-------------------+
+;           |                   |
+;           | (disk buffer for  |
+;           |  all access)      |
+;           |                   |
+;    $0360  +-------------------+
 ;           |  |                |
 ;           |  v  Input Buffer  |
 ;           |                   |
-;    $0300  +-------------------+  cp0
+;    $0400  +-------------------+
+;           |                   |
+;           |  Forth program    |
+;           |       code        |
+;           |                   |
+;   ~$6000  +-------------------+  cp0
 ;           |  |                |
-;           |  v  Dictionary    |
+;           |  v  dictionary    |
 ;           |       (RAM)       |
 ;           |                   |
 ;   (...)   ~~~~~~~~~~~~~~~~~~~~~  <-- cp
@@ -86,26 +108,40 @@ _done:
 ;           |                   |
 ;           |                   |
 ;           |                   |
-;    $7C00  +-------------------+  hist_buff, cp_end
-;           |   Input History   |
+;    $D000  +-------------------+  ram_end, cp_end
+;           |                   |
+;           |   hardware I/O    |
+;           |                   |
+;    $E000  +-------------------+  hist_buff
+;           |   input history   |
 ;           |    for ACCEPT     |
 ;           |  8x128B buffers   |
-;    $7fff  +-------------------+  ram_end
+;    $E400  +-------------------+  buffer, buffer0
+;           |                   |
+;           |     free RAM      |
+;           |   (any ideas?)    |
+;           |                   |
+;    $FF00  +-------------------+
+;           |                   |
+;           |   I/O functions   |
+;           |       (BIOS)      |
+;           |                   |
+;    $FFFF  +-------------------+
 
 
 ; HARD PHYSICAL ADDRESSES
 
 ; Some of these are somewhat silly for the 65c02, where for example
-; the location of the Zero Page is fixed by hardware. However, we keep
+; the location of the zero page is fixed by hardware. However, we keep
 ; these for easier comparisons with Liara Forth's structure and to
 ; help people new to these things.
 
-ram_start = $0000          ; start of installed 32 KiB of RAM
-ram_end   = $8000-1        ; end of installed RAM
-zpage     = ram_start      ; begin of Zero Page ($0000-$00ff)
-zpage_end = $7F            ; end of Zero Page used ($0000-$007f)	
-stack0    = $0100          ; begin of Return Stack ($0100-$01ff)
-hist_buff = ram_end-$03ff  ; begin of history buffers
+ram_start = $0010          ; start of installed 32 KiB of RAM
+ram_end   = $D000-1        ; end of installed RAM
+zpage     = ram_start      ; begin of zero page ($0010-$00ff)
+zpage_end = $FF            ; end of zero page used ($0010-$00ff)
+stack0    = $0100          ; begin of return stack ($0100-$01ff)
+hist_buff = $E000          ; begin of "RAM under kernel"
 
 
 ; SOFT PHYSICAL ADDRESSES
@@ -117,21 +153,15 @@ hist_buff = ram_end-$03ff  ; begin of history buffers
 user0     = zpage          ; user and system variables
 rsp0      = $ff            ; initial Return Stack Pointer (65c02 stack)
 bsize     = $ff            ; size of input/output buffers
-buffer0   = stack0+$190    ; input buffer ($0290-$02ff)
-                                ; we need to skip $0200-$027f and then some
-                                ; because IO area and other stuff
-cp0       = buffer0+bsize  ; Dictionary starts after last buffer
-cp_end    = hist_buff      ; Last RAM byte available for code
+buffer0   = hist_buff+$400 ; input buffer ($E400-$E4ff (?))
+cp0       = tali_end       ; Dictionary starts after code
+cp_end    = ram_end        ; Last RAM byte available for code
 padoffset = $ff            ; offset from CP to PAD (holds number strings)
 
 
 .include "../taliforth.asm" ; zero page variables, definitions
 
 ; =====================================================================
-; FINALLY
-
-; Of the 32 KiB we use, 24 KiB are reserved for Tali (from $8000 to $DFFF)
-; and the last eight (from $E000 to $FFFF) are used by steckOS kernel
 
 ; Default kernel file for Tali Forth 2
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
@@ -151,14 +181,10 @@ padoffset = $ff            ; offset from CP to PAD (holds number strings)
 ; This default version Tali ships with is written for the py65mon machine
 ; monitor (see docs/MANUAL.md for details).
 
-; The main file of Tali got us to $e000. However, py65mon by default puts
-; the basic I/O routines at the beginning of $f000. We don't want to change
-; that because it would make using it out of the box harder, so we just
-; advance past the virtual hardware addresses.
-;.advance $f010
-platform_bye:
-        jmp $e800
 
+; routine called when leaving Tali Forth 2: just call the reset vector.
+platform_bye:
+        jmp ($fffc)
 
 
 kernel_getc:
@@ -168,7 +194,7 @@ kernel_getc:
         ; """
 
 -       jsr krn_getkey
-        bcc -
+        bcs -
         rts
 
 
@@ -180,9 +206,9 @@ kernel_putc = krn_chrout
 ; is easier to see where the kernel ends in hex dumps. This string is
 ; displayed after a successful boot
 s_kernel_id:
-        .text "Tali Forth 2 default kernel for steckOS (19. Oct 2018)", AscLF, 0
+        .text AscLF, "Tali Forth 2 default kernel for Sorbus (2024-01-09)"
+        .text AscLF, 0
 
-
-; Add the interrupt vectors
+tali_end:
 
 ; END
