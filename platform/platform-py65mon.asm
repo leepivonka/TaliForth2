@@ -81,7 +81,16 @@ cp_end = $8000 ; LastRAM byte available for Data
 ; We do have limited zero-page space.
 ; Many Forth variables are pushed up to user0 in non-zp memory.
 
-padoffset = 84              ; offset from CP to PAD (holds number strings)
+PadOffset = 84	; offset from CP to PAD (holds number strings)
+		;  Must be at least 84 bytes in size (says ANS).
+
+MAX_LINE_LENGTH  = 79      ; output line size
+
+DDim = 20	; # of cells in data stack
+FDim = 10	; # of entries in floating-point stack
+
+DoStkDim = 8	; # of entries in Do stack
+
 
 
 ; OPTIONAL WORDSETS
@@ -93,27 +102,7 @@ padoffset = 84              ; offset from CP to PAD (holds number strings)
 ; assembled.  If TALI_OPTIONAL_WORDS is not defined in your platform file,
 ; you will get all of the words.
 
-TALI_OPTIONAL_WORDS := [ "fp","fpe","fpieee","fptrancendentals","ed", "editor", "ramdrive", "block", "environment?", "assembler", "wordlist" ]
-
-; "fp" is floating-point
-; "fpe" is half-precision floating-point multiply & divide
-; "fpieee" is IEEE floating-point fetch & store
-; "fptrancendentals" is floating-point trancendental functions
-; "ed" is a string editor. (~1.5K)
-; "editor" is a block editor. (~0.25K)
-;     The EDITOR-WORDLIST will also be removed.
-; "ramdrive" is for testing block words without a block device. (~0.3K)
-; "block" is the optional BLOCK words. (~1.4K)
-; "environment?" is the ENVIRONMENT? word.  While this is a core word
-;     for ANS-2012, it uses a lot of strings and therefore takes up a lot
-;     of memory. (~0.2K)
-; "assembler" is an assembler. (~3.2K)
-;     The ASSEMBLER-WORDLIST will also be removed.
-; "wordlist" is for the optional SEARCH-ORDER words (eg. wordlists)
-;     Note: Without "wordlist", you will not be able to use any words from
-;     the EDITOR or ASSEMBLER wordlists (they should probably be disabled
-;     by also removing "editor" and "assembler"), and all new words will
-;     be compiled into the FORTH wordlist. (~0.9K)
+;TALI_OPTIONAL_WORDS := [ "fp","fpe","fpieee","fptrancendentals","ed", "editor", "ramdrive", "block", "environment?", "assembler", "wordlist" ]
 
 
 ; TALI_OPTION_CR_EOL sets the character(s) that are printed by the word
