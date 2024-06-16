@@ -1,4 +1,4 @@
-; List of Strings for Tali Forth 2
+; Strings for Tali Forth 2
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
 ; First version: 01. Apr 2016 (for Liara Forth)
 ; This version: 31. May 2024
@@ -126,10 +126,10 @@ Exception_Text_List:
 	.text $100+err_NotCompiling,"Not compiling",0
 	.text $100+err_AlreadyCompiling,"Already compiling",0
 
-;_badsource:	.text $100+???,"Illegal SOURCE-ID during REFILL", 0
+;	.text $100+err_BadSource??,"Illegal SOURCE-ID during REFILL", 0
 
 	.text $100+err_wordlist,"No wordlists available",0
-	.text $100+err_blockwords,"Please assign vectors BLOCK-READ-VECTOR and BLOCK-WRITE-VECTOR",0
+	.text $100+err_BlockWordsNotSet,"Please assign BLOCK-READ-VECTOR and BLOCK-WRITE-VECTOR",0
 	.text 0 ; end of list
 
 ; END
