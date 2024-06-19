@@ -2,14 +2,16 @@
 This version:  31. May 2024
  
 Based on Tali Forth 2 as of Feb 2024.
-[https://github.com/SamCoVT/TaliForth2](https://github.com/SamCoVT/TaliForth2).
+[https://github.com/SamCoVT/TaliForth2](https://github.com/SamCoVT/TaliForth2).  
 Scot W. Stevenson <scot.stevenson@gmail.com>  
 Sam Colwell  
 
-Some basic layout details changed.
-Lots of smaller changes.
-Has floating-point words.
-Runs on NMOS 6502 (with ROR) and later.
+Runs on NMOS 6502 (with ROR) and later.  
+Some basic layout details changed - it's Tali, but not exactly Tali.  
+Header format changed.  
+ANSI Double word set complete.  
+ANSI floating-point wordset.  
+Lots of smaller changes & additions.  
 
 
 ## Dude, I am the very model of a Salarian scientist, just let me start!
