@@ -150,7 +150,7 @@ cp0:  ; start of RAM dictionary
 ; that because it would make using it out of the box harder, so we just
 ; advance past the virtual hardware addresses.
  .section code
-* = $f010
+* = $f100
 
 ; All vectors currently end up in the same place - we restart the system
 ; hard. If you want to use them on actual hardware, you'll have to redirect
@@ -181,17 +181,8 @@ kernel_init:
 _done:
                 jmp Cold
 
-kernel_getc: ; """Get a single character from the keyboard to A.
-  ; By default, py65mon
-        ; is set to $f004, which we just keep. Note that py65mon's getc routine
-        ; is non-blocking, so it will return '00' even if no key has been
-        ; pressed. We turn this into a blocking version by waiting for a
-        ; non-zero character.
-        ; """
-_loop:
-;                lda $f004
-;               beq _loop
-;              rts
+
+kernel_getc: ; Get a single character from the keyboard to A.
 -		inc RndState+0	; randomize
 		.byte $22	; jsl GET_BYTE_FROM_PC
 		.word $e033
@@ -200,12 +191,12 @@ _loop:
 		rts
 
 
-kernel_putc:
-        ; """Print a single character to the console. By default, py65mon
-        ; is set to $f001, which we just keep.
-        ; """
-;                sta $f001
-;                rts
+kernel_havekey: ; a key ready?  return a!=0
+		lda #$100+err_unsupported
+		jmp ThrowA
+
+
+kernel_putc: ; Print a single character to the console.
 -		.byte $22	; jsl SEND_BYTE_TO_PC
 		.word $e063
 		.byte 0
@@ -224,6 +215,13 @@ platform_CCAt: ; ( -- ud )  Fetch CPU cycle counter
 		dex
 		.byte $02,$F4,DStack ; cop $f4	get 65816s simulator cycle count in DStack,x
 		rts
+
+
+Platform_Block_Read: ; ( addr u -- )  Read a block from storage
+Platform_Block_Write: ; ( addr u -- )  Write a block to storage
+		lda #$100+err_Unsupported
+		jsr ThrowA
+
 
 
 ; Leave the following string as the last entry in the kernel routine so it
