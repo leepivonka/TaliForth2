@@ -123,10 +123,9 @@ err_Replaces		= -79	; REPLACES
 ; Tali extra throw codes
 err_Refill		= -149	; Refill failed
 err_Defer		= -150	; Defer not set
-err_NotCompiling	= -151
-err_AlreadyCompiling	= -152
-err_BlockWordsNotSet	= -153
-err_wordlist     	= -154
+err_AlreadyInterpreting	= -151	; entering interpret when already interpreting
+err_AlreadyCompiling	= -152	; entering compile when already compiling
+err_TooManyWordlists   	= -154
 
 
 
@@ -254,7 +253,7 @@ Cold_user_table: ; inital values for the user variables.
 	.word 0			; uf_strip (off by default)
 	.word kernel_putc	; output
 	.word kernel_getc	; input
-	.word Abort		; havekey
+	.word kernel_havekey	; havekey
 	.word 0				; BLK
 	.word 0				; SCR
 	.byte 0				; CURRENT = FORTH-WORDLIST
@@ -310,7 +309,10 @@ AscDEL  = $7f	; delete (CTRL-h)
 			; length chosen so incrementing beyond it flagged as negative
 			; leftmost space not needed is never touched, can overlap previous code.
 wh_NameLastChar	= *-1	;last char of name
-wh_NameLength:	.byte ?	;length of name
+wh_HNL:		.byte ?	;
+wh_HNL_HashMask = $e0		; lo 3 bits of last char of name
+wh_HNL_NameLengthMask = $1f	; length of name
+wh_
 wh_WordListLink: .word ? ;link to nt of previous word in wordlist chain
 wh_CodeLength:	.byte ?	;size of code (0xff = 255 or greater)
 wh_Flags:	.byte ?	; created by adding the flags defined as:
@@ -328,7 +330,9 @@ wh_xt:			;  start of 6502 code
 FHdr .macro name,flags ; compile a FORTH word header
 ;	FHdr_Extend	; user-supplied extension
 L1:	.text \name	;  name of word as a string, ending at wh_NameLastChar
-	.byte *-L1	;wh_NameLength	length of name
+	.cerror (*-L1)>wh_HNL_NameLengthMask ; name too long
+	.cerror wh_HNL_HashMask!=$e0 ; hard coded
+	.byte ((\name[-1]&7)<<5)+(*-L1)	;wh_HNL
 	.word WordListLink ;wh_WordListLink	link to previous word in dictionary chain (0=end)
 	.byte 3		;wh_CodeLength  (with placeholder value)
 	.byte \flags	;wh_Flags	dictionary flags
@@ -6368,7 +6372,7 @@ WordList:
 
 		cmp #max_wordlists	; already at the max?
 		bcc +
-		lda #$100+err_wordlist	;   Print an error message
+		lda #$100+err_TooManyWordlists	;   Print an error message
 		jmp ThrowA
 +
 		inc Num_WordlistsV	; increment wordlist count
@@ -6389,7 +6393,7 @@ Search_WordList:
 
 		jsr fina_pattern_prepare ; tmp2 = pseudo-header for pattern name, zeros NOS
 
-		pla
+		pla			; pop wid
 		jsr fina_search_wordlist ; tmp1 = nt of matching word
 		beq _fail
 
@@ -6543,10 +6547,12 @@ BlockInit: ; initialize block variables
 		lda #0
 		sta BuffStatusV
 
-		lda #<Block_Word_Error
-		ldy #>Block_Word_Error
+		lda #<Platform_Block_Read
+		ldy #>Platform_Block_Read
 		sta BlockReadV+0
 		sty BlockReadV+1
+		lda #<Platform_Block_Write
+		ldy #>Platform_Block_Write
 		sta BlockWriteV+0
 		sty BlockWriteV+1
 
@@ -6775,12 +6781,6 @@ Block_Read_Vector:
 	FEnd
 
 
-Block_Word_Error: ; The default error message the vectored words BLOCK-READ and
-  ; BLOCK-WRITE start with.
-		lda #$100+err_BlockWordsNotSet
-		jsr ThrowA
-
-
  FHdr "Save-Buffers",0 ; ( -- ) "Save all dirty buffers to storage"
   ; ## "save-buffers"  tested  ANS block
   ; https://forth-standard.org/standard/block/SAVE-BUFFERS
@@ -6930,19 +6930,13 @@ Flush:		jsr Save_Buffers
 	FEnd
 
 
- FHdr "Load",UF ; ( scr# -- ) "Load the Forth code in a screen/block"
+ FHdr "Load",UF ; ( scr# -- )  Load the Forth code in a screen/block
   ; ## "load"  auto  ANS block
-  ; """https://forth-standard.org/standard/block/LOAD
-  ;
-  ; Note: LOAD current works because there is only one buffer.
-  ; If/when multiple buffers are supported, we'll have to deal
-  ; with the fact that it might re-load the old block into a
-  ; different buffer.
-  ; """
+  ; https://forth-standard.org/standard/block/LOAD
 Load:
 		jsr underflow_1
 
-		lda BlkV+1	; Save the current value of BLK on the return stack.
+		lda BlkV+1		; Save the current value of BLK on the return stack.
 		pha
 		lda BlkV+0
 		pha
@@ -6954,17 +6948,18 @@ Load:
 
 		jsr Block		; Load that block into a buffer
 
-		lda #<1024		; screen length.
+		lda #<1024		; block length.
 		ldy #>1024
 		jsr PushYA
 
 		; Jump to a special evaluate target. This bypasses the underflow
 		; check and skips the zeroing of BLK.
+		sec		; Set a flag to not zero BLK
 		jsr load_evaluate
 
 		; Restore the value of BLK from before the LOAD command.
 		pla
-		lda BlkV+0
+		sta BlkV+0
 		pla
 		sta BlkV+1
 
@@ -6973,14 +6968,14 @@ Load:
 		ora BlkV+0
 		beq _done
 
-		; The block needs to be read back into the buffer.
+		; Make sure we're pointing into the block again.
 		lda BlkV+0
 		ldy BlkV+1
 		jsr PushYA
 		jsr Block
-
-		inx		; Drop the buffer address.
-		inx
+		jsr PopYA	; Pop the buffer address.
+		sta cib+0
+		sty cib+1
 
 _done:
 	FEnd
@@ -7038,8 +7033,56 @@ List:		jsr PopYA	; Save the screen number
 		sta ScrV+0
 		sty ScrV+1
 
-		; Use L from the editor-wordlist to display the screen.
-		jmp Editor_l
+ListScr: ; entry from editor "L"
+		; Load the current screen
+		jsr Scr
+		jsr Fetch
+		jsr Block	; Get the current screen contents.
+
+		jsr CR
+
+		jsr SLiteral_Runtime
+		  jmp +				; for SLiteral_Runtime
+		  .text "Screen #"		; for SLiteral_Runtime
++
+		jsr Type
+		jsr Scr		; print screen number
+		jsr Fetch
+		lda #4		;    in 4 positions
+		jsr U_Dot_R_A
+
+		; The address of the buffer is currently on the stack.
+		; Print 64 chars at a time. TYPE uses tmp1
+		lda #0			; line #
+_line_loop:
+		pha
+		jsr CR
+
+		pla		; Print the line number
+		pha
+		jsr PushZA
+		lda #2		;   in 2 positions
+		jsr U_Dot_R_A
+		jsr Space
+
+		jsr Dup		; Print one line using the address on the stack.
+		lda #64
+		jsr PushZA
+		jsr Type
+
+		lda #64		; move address to the next line.
+		jsr Plus_A
+
+		pla		; Increment the line number
+		clc
+		adc #1
+		cmp #16		; See if we are done.
+		bne _line_loop
+
+		inx		; Drop the address
+		inx
+
+		jmp CR
 	FEnd
 
  .endsection code
@@ -8665,6 +8708,12 @@ Backslash:
 		beq _not_block
 			                ; We are in a block.
 
+		; Was the "\" at the end of the line (so Parse advanced into the next line)?
+		lda toin+0
+		and #$3F
+		cmp #2
+		bcc _rts
+
                 lda toin+0		; Move toin to next multiple of 64.
                 and #$C0        	;   Clear lower bits to move to beginning of line.
                 clc             	;   Add $40 (64 decimal) to move to next line.
@@ -9241,18 +9290,11 @@ _rts:		rts
   ; accept more than 255 characters here, even though it's a pain in
   ; the 8-bit.
 Evaluate:
-		clc			; Clear the flag to zero BLK.
-					;  Only LOAD will set the flag,
-					; and will set the block number.
-		bcc evaluate_got_work
+		clc			; signal to zero BLK.
 
-; This is a special entry point to skip the zeroing of BLK at the beginning
-; of evaluate.	It's used by LOAD to allow setting BLK while the block is
-; being evaluated.  Evaluate's normal behavior is to zero BLK.
-load_evaluate:
-		sec			; Set a flag to not zero BLK
+load_evaluate: ; special entry point.
+  ; Carry flags controls zeroing BLK.
 
-evaluate_got_work:
 		lda BlkV+1	; Save the current value of BLK on the return stack.
 		pha
 		lda BlkV+0
@@ -9267,25 +9309,25 @@ evaluate_got_work:
 
 		jsr Input_To_R	; Save the input state to the Return Stack
 
-		lda #$ff	; set SOURCE-ID to -1
+		lda #$ff	; SOURCE-ID= -1
 		sta insrc+0
 		sta insrc+1
 
-		lda #0		; set >IN to zero
+		lda #0		; >IN= zero
 		sta toin+0
 		sta toin+1
 
-		jsr PopYA	; pop u
+		jsr PopYA	; ciblen= string length (u)
 		sta ciblen+0
 		sty ciblen+1
 
-		jsr PopYA	; pop addr
+		jsr PopYA	; cib= string addr
 		sta cib+0
 		sty cib+1
 
 		jsr interpret	; ( -- )
 
-		jsr R_To_Input	; restore variables
+		jsr R_To_Input	; restore input state
 
 		pla		; Restore BLK from the return stack.
 		sta BlkV+0
@@ -10191,6 +10233,8 @@ QStack:		DStackCheck 0,Throw_Stack
 Throw:		jsr PopA		; pop n
 ThrowA:		jsr Type_Exception_Text_A ; print the associated error string
 
+		ldx #DStack0		; reset data stack (in case of underflow)
+
 		; Exception frames & CATCH aren't implemented,
 Abort_Core:	;   so we act like Abort in core
 		jsr SLiteral_runtime
@@ -10340,6 +10384,9 @@ _loop:
 		jsr QStack		; check stack bounds
 
 		jsr parse_name		; ( "string" -- addr u )
+	;	jsr two_dup ;??debug
+	;	jsr Type ;??debug
+	;	jsr Space ; ??debug
                 lda DStack+0,x		; empty line?
                 beq _line_done
 
@@ -10532,12 +10579,12 @@ _not_immediate:	; This is not an immediate word
 	FEnd
 
 
- FHdr "Compile,",NN ; ( xt -- ) "Compile xt"
+ FHdr "Compile,",NN ; ( xt -- )  Compile xt
   ; ## "compile,"	 auto  ANS core ext
   ; https://forth-standard.org/standard/core/COMPILEComma
   ; Compile the given xt in the current word definition.
   ; Because we are using subroutine threading, we can't use
-  ; , (COMMA) to compile new words the traditional way.
+  ; , (COMMA) to compile new words the indirect-threaded way.
 Compile_Comma:	jsr PopYA		; pop xt (check stack, skippable)
 Compile_Comma_YA: jsr PushYA		; push xt
 
@@ -10550,13 +10597,12 @@ Compile_Comma_WithNT: ; ( xt -- )  xt is guaranteed to have nt
 		jsr Dup
 		lda #$100-wh_xt		; convert xt to nt
 		jsr Minus_A
-
 Compile_Comma_B:			; ( xt nt )
 		lda DStack+0,x		; tmp5 = nt
 		sta tmp5+0
 		lda DStack+1,x
 		sta tmp5+1
-		beq _jsr		; no nt found?
+		beq _jsr		; no nt found (we have no flags) ?
 
 		ldy #wh_CodeLength
 		lda (tmp5),y
@@ -10648,7 +10694,7 @@ _copy_end:
   ; https://forth-standard.org/standard/core/Bracket
 Left_Bracket:	lda state+0		; Already in the interpret state?
 		bne Left_Bracket_NoCheck
-		lda #$100+err_NotCompiling
+		lda #$100+err_AlreadyInterpreting
 		jmp ThrowA
 
 Left_Bracket_NoCheck:
@@ -11849,6 +11895,22 @@ fina_pattern_prepare: ; ( addr u -- 0 u )
 		adc DStack+3,x
 		sta tmp2+1
 
+		lda #wh_NameLastChar
+		sec
+		sbc DStack+0,x
+		sta tmp4+0
+
+		ldy #wh_NameLastChar	; tmp3+0= wh_HNL (hash & length)
+		lda (tmp2),y
+		.cerror wh_HNL_HashMask!=$e0 ; hard coded
+		asl a
+		asl a
+		asl a
+		asl a
+		asl a
+		ora DStack+0,x
+		sta tmp3+0
+
 		lda #0			; assuming failure
 		sta DStack+2,x
 		sta DStack+3,x
@@ -11860,49 +11922,47 @@ fina_search_wordlist:
   ; wordlist # in A
   ; returns Z=1 (not found)
   ;	 or Z=0 (found, tmp1=nt)
+		stx tmp3+1		; save data stack index
+
 		asl			; tmp1 = up->wordlists[A]
 		tay
-		lda WordlistsV+0,y
-		sta tmp1+0
+		ldx WordlistsV+0,y
 		lda WordlistsV+1,y
-		sta tmp1+1
+		bne _word_3		;   not end-of-list?
 
-		bne _word_test		;   not end-of-list?
-_rts:		rts			; Z= end_of_list
+_rts:		php
+		ldx tmp3+1		; restore data stack index
+		plp
+		rts			; Z= end_of_list
 
 _word_next: ; step to next word in wordlist
-		ldy #wh_WordListLink+1	; tmp1= tmp1->Wh_WordListLink
+		ldy #wh_WordListLink	; tmp1= tmp1->Wh_WordListLink
 		lda (tmp1),y
-		pha
-		dey
+		tax
+		iny
 		lda (tmp1),y
-		sta tmp1+0
-		pla
-		sta tmp1+1
 		beq _rts		; end of list?
+_word_3:	sta tmp1+1
+		stx tmp1+0
 
-_word_test:
-		ldy #Wh_NameLength	; Are strings the same length?
+		ldy #Wh_HNL		; Are hash & name length the same?
 		lda (tmp1),y
-		cmp DStack+0,x
+		cmp tmp3+0
 		bne _word_next
 
-		lda #Wh_NameLastChar	; Y= index of 1st name char-1
-		sec
-		sbc DStack+0,x
-		tay
+		ldy tmp4+0		; Y= index of 1st char -1
 _char_next:	iny			; to next char
 		bmi _rts		; end of string?
-		lda (tmp2),y		; char of mystery string
-		eor (tmp1),y
+		.cerror Wh_NameLastChar!=$7f ; the above bmi wont work
+		lda (tmp2),y		; char of pattern name
+		eor (tmp1),y		; char of this word name
 		beq _char_next		;   exact match?
-		and #$df		;   only a case mismatch?
+		cmp #$20		;   only a case mismatch?
 		bne _word_next
 		lda (tmp1),y		;   verify it is alpha char
 		and #$df
-		cmp #'A'
-		bcc _word_next
-		cmp #'Z'+1
+		sbc #'A'
+		cmp #'Z'-'A'+1
 		bcc _char_next
 		bcs _word_next
 
@@ -11916,59 +11976,58 @@ Int_To_Name:
 		jsr underflow_1
 
 		; Unfortunately, to make sure this xt has a header,
-		; we have to walk through all of the wordlists.
+		; we have to walk through all of the wordlists until we find it.
 		; This searches all of the wordlists in id order.
 
 		lda #$100-Wh_xt		; convert xt on stack to proposed nt
 		jsr Minus_A
 
-		lda #$ff		; for each wordlist
-		jsr PushZA
+		lda DStack+0,x		; tmp3= proposed nt
+		ldy DStack+1,x
+		sta tmp3+0
+		sty tmp3+1
+
+		stx tmp1+0		; save data stack index
+
+		lda #$100-2		; for each wordlist
+		sta tmp1+1
 _wordlist_next:
-		inc DStack+0,x
-		lda DStack+0,x		; Get the current wordlist index
-		cmp #(Num_OrderV-WordlistsV)/2
+		ldy tmp1+1		; get next wordlist index
+		iny
+		iny
+		sty tmp1+1
+		cpy #(Num_OrderV-WordlistsV)/2
 		bcs _fail
-
-		asl			; tmp2 = wordlist[A]
-		tay
-		lda WordlistsV+0,y
-		sta tmp2+0
+		ldx WordlistsV+0,y
 		lda WordlistsV+1,y
-		sta tmp2+1
-		beq _wordlist_next	;   empty wordlist?
-		bne _word_test
+		jmp _word_3
 
-_word_next:	ldy #wh_WordListLink+1	; follow wh_WordListLink to next word
-		lda (tmp2),y
-		pha
-		dey
-		lda (tmp2),y
-		sta tmp2+0
-		pla
+_word_next:	stx tmp2+0
 		sta tmp2+1
-		beq _wordlist_next	;  end of list?
 
-_word_test:	eor DStack+3,x		; tmp2 = nt ?
+		ldy #wh_WordListLink	; follow wh_WordListLink to next word
+		lda (tmp2),y
+		tax
+		iny
+		lda (tmp2),y
+_word_3:	beq _wordlist_next	;  end of list?
+		cmp tmp3+1		;  match?
 		bne _word_next
-		lda tmp2+0
-		eor DStack+2,x
+		cpx tmp3+0
 		bne _word_next
+
 		; We found it!
-		inx			; Drop wordlist index
-		inx
-
+		ldx tmp1+0		; restore data stack index
+					; proposed nt already on the stack
 		rts
 
 _fail: ; We didn't find it in any of the wordlists.
-		inx			; Drop wordlist index
-		inx
-
+		ldx tmp1+0		; restore data stack index
 		lda #0			; return a zero to indicate that we didn't find it.
 		sta DStack+0,x
 		sta DStack+1,x
-	FEnd
 		rts
+	FEnd
 
 
  FHdr "Name>Int",UF+NN ; ( nt -- xt ) "Convert Name Token to Execute Token"
@@ -11993,14 +12052,16 @@ Name_To_String:
 		sta tmp1+0
 		sty tmp1+1
 
-		ldy #Wh_NameLength
-
-		lda #Wh_NameLastChar+1	; calc start offset
+		ldy #Wh_HNL
+		lda (tmp1),y
+		and #wh_HNL_NameLengthMask
+		pha
+		eor #$ff
 		sec
-		sbc (tmp1),y
+		adc #Wh_NameLastChar+1	; calc start offset
 		jsr Plus_A		; calc start addr
 
-		lda (tmp1),y		; push length
+		pla			; push length
 		jmp PushZA
 	FEnd
 
@@ -12015,8 +12076,9 @@ Name_To_String:
   ; This is a
   ; difficult word for STC Forths, because most words don't actually
   ; have a Code Field Area (CFA) to skip.
-  ; We assume the user will only call this on a word with a CFA containing
-  ; a jsr abs and the PFA following.
+  ; We assume the user will only call this on a word with:
+  ;   a CFA consisting of a jsr abs
+  ;   and the PFA following.
 To_Body:
 		jsr underflow_1
 
@@ -12065,18 +12127,18 @@ Fill:
 		sta tmp2+0
 		inc DStack+3,x		; so decrement & test for 0 works
 
-		ldy #0
 		lda DStack+0,x		; A= fill byte
+		ldy #0
 _loop:		cpy tmp2+0		; done?
 		beq _test2
-		sta (tmp1),y		; store a byte
+_3:		sta (tmp1),y		; store a byte
 		iny			; to next byte
 		bne _loop
 		inc tmp1+1		; increment addr page
 		bne _loop
 
 _test2:		dec DStack+3,x		; any more pages?
-		bne _loop
+		bne _3
 
 		jmp ThreeDrop	; Drop three cells off the Data Stack.
 	FEnd
@@ -12573,21 +12635,23 @@ Header_Link: ; finish linking compiled word header into current dictionary
 
 Header_Build: ; compile word header, but don't link it into a wordlist yet
 
-		jsr parse_name_check	; get name string
+		jsr parse_name_check	; get name string, throw error if empty string
 					; ( addr u )
 
 		; We assume name lengths will be <255
 
-		; Check to see if this name already exists.
+		; Check to see if this name already exists in current wordlist.
 		jsr Two_dup		; ( addr u addr u )
-		jsr find_name		; ( addr u nt )
-		lda DStack+1,x		; not found?
-		inx			; Drop flag from find-name.
+		jsr Get_Current
+		jsr Search_WordList	; ( addr u xt f ) or ( addr u 0 )
+		inx			; pop flag.
 		inx
-		tay
+		lda DStack-2,x		; not found?
 		beq _new_name		; We haven't seen this one before.
 
-		; This name already exists.  ( addr u nt )
+		; This name already exists.  ( addr u xt )
+		inx			; Drop xt
+		inx
 
 		; See if we are supposed to print the message for it.
 		bit status		; Check bit 7
@@ -12625,10 +12689,21 @@ _process_name:
 		jsr Here
 		jsr Swap
 		jsr CMove
-		jsr Dup
+		jsr Dup		;   save length
 		jsr Allot
 
-		jsr C_Comma		; compile wh_NameLength
+		jsr Here
+		jsr One_Minus
+		lda (DStack+0,x)
+		.cerror wh_HNL_HashMask!=$e0 ; hard coded
+		asl a
+		asl a
+		asl a
+		asl a
+		asl a
+		sta DStack+0,x
+		jsr Or
+		jsr C_Comma		; compile wh_HNL
 
 		inx			; drop name string addr
 		inx
@@ -15838,73 +15913,18 @@ assembler_dictionary_start = WordListLink ; END of ASSEMBLER-WORDLIST
 
 
 ; EDITOR-WORDLIST----------------------------------------------------------------
-
-WordListLink .var 0
-
-; "l" needs special handling as it's used by LIST in the block words.
-.if "block" in TALI_OPTIONAL_WORDS
-
- FHdr "l",NN ; ( -- ) "List the current screen"
-  ; ## "l"  tested  Tali Editor
-Editor_l:
-		; Load the current screen
-		jsr Scr
-		jsr Fetch
-		jsr Block	; Get the current screen contents.
-
-		jsr CR
-
-		jsr SLiteral_Runtime
-		  jmp +				; for SLiteral_Runtime
-		  .text "Screen #"		; for SLiteral_Runtime
-+
-		jsr Type
-		jsr Scr		; print screen number
-		jsr Fetch
-		lda #4		;    in 4 positions
-		jsr U_Dot_R_A
-
-		; The address of the buffer is currently on the stack.
-		; Print 64 chars at a time. TYPE uses tmp1
-		lda #0			; line #
-_line_loop:
-		pha
-		jsr CR
-
-		pla		; Print the line number
-		pha
-		jsr PushZA
-		lda #2		;   in 2 positions
-		jsr U_Dot_R_A
-		jsr Space
-
-		jsr Dup		; Print one line using the address on the stack.
-		lda #64
-		jsr PushZA
-		jsr Type
-
-		lda #64		; move address to the next line.
-		jsr Plus_A
-
-		pla		; Increment the line number
-		clc
-		adc #1
-		cmp #16		; See if we are done.
-		bne _line_loop
-
-		inx		; Drop the address
-		inx
-
-		jmp CR
-	FEnd
-
-.endif ; "block"
-
+WordListLink .var 0	; start wordlist
 
 .if "editor" in TALI_OPTIONAL_WORDS && "block" in TALI_OPTIONAL_WORDS
 
 
-Editor_Screen_Helper:
+ FHdr "l",NN ; ( -- ) "List the current screen"
+  ; ## "l"  tested  Tali Editor
+Editor_l:	jmp ListScr
+	FEnd
+
+
+Editor_Screen_Helper: ; ( scr# -- addr )  Get block in buffer, return addr of buffer
   ; Used by both enter-screen and erase-screen
   ; to get a buffer for the given screen number and set SCR to
   ; the given screen number.  This word is not in the dictionary.

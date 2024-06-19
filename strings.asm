@@ -123,13 +123,12 @@ Exception_Text_List:
 
 	.text $100+err_Refill,"Refill",0
 	.text $100+err_Defer,"Defer not set",0
-	.text $100+err_NotCompiling,"Not compiling",0
+	.text $100+err_AlreadyInterpreting,"Already interpreting",0
 	.text $100+err_AlreadyCompiling,"Already compiling",0
 
 ;	.text $100+err_BadSource??,"Illegal SOURCE-ID during REFILL", 0
 
-	.text $100+err_wordlist,"No wordlists available",0
-	.text $100+err_BlockWordsNotSet,"Please assign BLOCK-READ-VECTOR and BLOCK-WRITE-VECTOR",0
+	.text $100+err_TooManyWordlists,"No wordlists available",0
 	.text 0 ; end of list
 
 ; END
