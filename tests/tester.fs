@@ -74,3 +74,7 @@ create actual-results  20 cells allot
       dup >r type cr r> >in !
    else >in ! drop
    then ;
+
+False Constant <False>
+True  Constant <True>
+

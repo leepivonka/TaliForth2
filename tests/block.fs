@@ -1,5 +1,5 @@
 \ ------------------------------------------------------------------------
-testing block words: BLK SCR LOAD THRU BUFFER BLOCK UPDATE FLUSH
+testing block words: BLK SCR LOAD THRU BUFFER BLOCK UPDATE FLUSH \
 
 marker block_tests
 decimal
@@ -27,20 +27,19 @@ T{ s"           " ramdrive 10 compare -> 0 }T
 1 enter-screen
 ( Test screen 1 )
 ( 1 ) variable testvalue
-( 2 ) testvalue 5 !
+( 2 ) 5 testvalue !
 ( 3 ) variable blkinscreen
 ( 4 ) blk @ blkinscreen !
 ( 5 ) variable blkinstring
 ( 6 ) s" blk @ blkinstring !" evaluate
 ( 7 ) variable blkinscreenA
 ( 8 ) blk @ blkinscreenA !
-( 9 )
-( 10 )
-( 11 )
-( 12 )
-( 13 )
-( 14 )
-( 15 )
+\ ( 9 ) 20 testvalue +! \ Shouldn't run
+( 10 ) \ Test comments in blocks 1 testvalue +! 
+( 11 ) 1 testvalue +! \ This shoud be ignored 1 testvalue +!
+( 12 )                                                         \ ( 13 ) 1 testvalue +!
+( 14 ) \ The above has a backslash as the very last character
+( 15 ) \ on the line so no CR needed before giving line 13
 
 \ Load screen 1 and then check for the expected side effects.
 T{ 1 load -> }T
@@ -49,6 +48,7 @@ T{ 1 load -> }T
 T{ blkinscreen @  -> 1 }T
 T{ blkinstring @  -> 0 }T
 T{ blkinscreenA @ -> 1 }T
+T{ testvalue @    -> 7 }T
 
 2 enter-screen
 ( Test screen 2 )
@@ -65,8 +65,8 @@ T{ blkinscreenA @ -> 1 }T
 ( 11 )
 ( 12 )
 ( 13 )
-( 14 )
-( 15 ) 
+( 14 ) \ Testing backslash at very end of a block.
+( 15 )                                                         \
 
 3 enter-screen
 ( Test screen 2 )
