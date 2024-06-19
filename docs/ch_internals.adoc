@@ -78,6 +78,9 @@ Underflow detection adds three bytes and 16 cycles to the words that have it.
 However, it increases the stability of the program. There is an option for
 stripping it out when compiling user-defined words (see below).
 
+The UnderflowCheck macro is another alternative.  It reduces the overhead to 4 cycles,
+but requires that the word be never-native and is not strippable.
+
 Tali Forth does not check for overflow, which in normal operation is too rare
 to justify the computing expense. 
 
@@ -112,7 +115,7 @@ NOTE: Because Tali uses a subroutine threaded model (STC), the classic Forth
 distinction between the Code Field Area (CFA) and the Parameter Field Area
 (PFA, also Data Field Area) is meaningless -- it's all "payload". 
 
-Tali Forth copies mixed case names into dictionary.
+Tali Forth copies mixed case names into word header.
 The lookup is case-insensitive, so `quarian` matches `QUARIAN`.
 
 
@@ -206,7 +209,7 @@ buffer.
 
 ==== The Word `Evaluate`
 
-The word `Evaluate`is used to execute commands that are in a string. A simple example:
+The word `Evaluate`is used to execute Forth text that is in a string. A simple example:
 
 ----
 s" 1 2 + ." evaluate 
