@@ -2072,9 +2072,10 @@ FPos:		ldy fp			; load FP stack index
   ;	FEnd
 
 
- FHdr "F*",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3.
+ .if 0
+ FHdr "F*1",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3.
   ; https://forth-standard.org/standard/float/FTimes
-FStar:
+FStar1:
 		jsr FPos		; make r1 & r2 positive,
 		php			;   save r3 sign
 
@@ -2157,6 +2158,97 @@ _b3:		lsr FSMant0+1,x		;   r3 >>= 1
 		bne _b1
 		rts
 	FEnd
+
+  .else
+
+ FHdr "F*",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3.
+  ; https://forth-standard.org/standard/float/FTimes
+FStar:
+		jsr FPos		; make r1 & r2 positive,
+		php			;   save r3 sign
+
+		lda FSExp+0,x		; add exponents
+		sec
+		adc FSExp+1,x
+		sta FSExp+1,x
+		bvc _49			; IfVs, 
+		bcs _zero		;   underflow?
+		ldx tmp1+0		;   restore data stack index
+		plp			; RDrop sign flag
+		jsr Throw_FpOutOfRange
+
+_zero:		inx			; F2Drop
+		inx
+		stx fp
+		plp			; rdrop saved result sign
+		ldx tmp1+0		; restore data stack index
+		jmp F0			; return zero
+
+_49:
+
+		lda #0			; tmp32= 0
+		sta tmp2+0
+		sta tmp2+1
+		sta tmp3+0
+		sta tmp3+1
+
+		lda FSMant3+1,x
+		jsr _Byte		; do bytes of r1 mantissa
+		lda FSMant2+1,x
+		jsr _Byte
+		lda FSMant1+1,x
+		jsr _Byte
+		lda FSMant0+1,x
+		jsr _Byte
+
+		lda tmp2+0		; r1.mant= tmp32
+		sta FSMant3+1,x
+		lda tmp2+1
+		sta FSMant2+1,x
+		lda tmp3+0
+		sta FSMant1+1,x
+		lda tmp3+1
+		sta FSMant0+1,x
+
+		inc fp			; FDrop
+		ldx tmp1+0		; restore data stack index
+
+		plp			; fix result sign
+		bpl +
+		jmp FNegate
++
+		jmp FNorm
+
+_Byte: ; do a byte of r1 (in A)
+		eor #$ff
+		sta tmp1+1
+		ldy #8			; for each bit in byte
+_b1:		lsr tmp1+1		;   if bit set
+		bcs _b3
+
+		lda tmp2+0		;     tmp32 += r2
+		adc FSMant3+0,x
+		sta tmp2+0
+		lda tmp2+1
+		adc FSMant2+0,x
+		sta tmp2+1
+		lda tmp3+0
+		adc FSMant1+0,x
+		sta tmp3+0
+		lda tmp3+1
+		adc FSMant0+0,x
+		sta tmp3+1
+
+_b3:		lsr tmp3+1		;   tmp32 >>= 1
+		ror tmp3+0
+		ror tmp2+1
+		ror tmp2+0
+
+		dey			;  next bit
+		bne _b1
+		rts
+	FEnd
+  .endif
 
 
  FHdr "FSqr",NN ; ( F: r1 -- r2 )  ; square
@@ -8494,7 +8586,7 @@ _27:
 	FEnd
 
 
- FHdr "#S",UF ; ( d -- d )  Convert all digits in pictured output
+ FHdr "#S",0 ; ( d -- d )  Convert all digits in pictured output
   ; ## "#s"  auto	 ANS core
   ; https://forth-standard.org/standard/core/numS
 Number_Sign_S:
@@ -13838,7 +13930,7 @@ DAbs:		DStackCheck 2,Throw_Stack_17 ; double number
 
  FHdr "D<>",NN ; ( d1 d2 -- f )  return d1 != d2
 DNEq:		jsr DEqual
-		jmp Zero_Equal
+		jmp ZEqA
 	FEnd
 
  FHdr "D=",NN ; ( d1 d2 -- f )  return d1 == d2
@@ -14036,7 +14128,7 @@ _c:		bpl False1
 
  FHdr ">=",NN ; ( n1 n2 -- f )  return n1 > n2
 Ge:		jsr Less_Than
-		jmp Zero_Equal
+		jmp ZEqA
 	FEnd
 
  FHdr "U<",NN ; ( u1 u2 -- f )  Return u1 < u2 (unsigned)
@@ -14077,17 +14169,17 @@ _c:		bpl False1
 
  FHdr "<=",NN ; ( n1 n2 -- f )  return n1 < n2
 Le:		jsr Greater_Than
-		jmp Zero_Equal
+		jmp ZEqA
 	FEnd
 
  FHdr "U>=",NN ; ( u1 u2 -- f )  Return u1 >= u2 (unsigned)
 UGe:		jsr U_Less_Than
-		jmp Zero_Equal
+		jmp ZEqA
 	FEnd
 
  FHdr "U<=",NN ; ( u1 u2 -- f )  Return u1 <= u2 (unsigned)
 ULe:		jsr U_Greater_Than
-		jmp Zero_Equal
+		jmp ZEqA
 	FEnd
 
 Throw_Stack_11: jmp Throw_Stack
@@ -14101,6 +14193,12 @@ ZEq3:		ora DStack+0,x
 		bne False0
 		beq True0
 	FEnd
+
+ZEqA: ; complement boolean, value in A
+		eor #$ff
+		sta DStack+0,x
+		sta DStack+1,x
+		rts
 
  FHdr "0<>",NN ; ( n -- f )  Return n != 0
   ; ## "0<>"  auto  ANS core ext
