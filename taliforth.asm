@@ -11,22 +11,21 @@
 ; including this file.
 
 ; Assemble all words unless overridden in the platform file.
-TALI_OPTIONAL_WORDS := ["fp","fpe", "fpieee","fptrancendentals", "ed", "editor", "ramdrive", "block", "environment?", "assembler", "wordlist" ]
+TALI_OPTIONAL_WORDS := ["fp","fpe", "fpieee","fptrancendentals", "fphyperbolic", "ed", "editor", "ramdrive", "block", "environment?", "assembler", "wordlist" ]
 
-; "fp" is floating-point
-; "fpe" is half-precision floating-point multiply & divide
-; "fpieee" is IEEE floating-point fetch & store
-; "fptrancendentals" is floating-point trancendental functions
+; "fp" is floating-point (~3.8k)
+; "fpe" is floating-point 16bit-precision multiply & divide (~0.2k)
+; "fpieee" is IEEE floating-point fetch & store (~0.4K)
+; "fptrancendentals" is floating-point trancendental functions (~1K)
+; "fphyperbolic" is floating-point hyperbolic functions
 ; "ed" is a string editor. (~1.5K)
 ; "editor" is a block editor. (~0.25K)
-;     The EDITOR-WORDLIST will also be removed.
-; "ramdrive" is for testing block words without a block device. (~0.3K)
+; "ramdrive" is for testing block words without a block device. (~0.2K)
 ; "block" is the optional BLOCK words. (~1.4K)
 ; "environment?" is the ENVIRONMENT? word.  While this is a core word
 ;     for ANS-2012, it uses a lot of strings and therefore takes up a lot
-;     of memory. (~0.2K)
-; "assembler" is an assembler. (~3.2K)
-;     The ASSEMBLER-WORDLIST will also be removed.
+;     of memory. (~0.1K)
+; "assembler" is an assembler & disassembler. (~2.5K)
 ; "wordlist" is for the optional SEARCH-ORDER words (eg. wordlists)
 ;     Note: Without "wordlist", you will not be able to use any words from
 ;     the EDITOR wordlists (they should probably be disabled
@@ -162,9 +161,9 @@ status: .word ?		; internal status flags
 			;         be set if the word was redefined and 0 if
 			;         not. This bit should be 0 when not in use.
 			; Bit 6 = 1 for normal ":" definitions
-			;         WORKWORD contains nt of word being compiled
+			;         WorkWord contains nt of word being compiled
 			;       = 0 for :NONAME definitions
-			;         WORKWORD contains xt of word being compiled
+			;         WorkWord contains xt of word being compiled
 			; Bit 5 = 1 for NUMBER returning a double word
 			;       = 0 for NUMBER returning a single word
 			; Bit 3 = 1 makes CTRL-n recall current history
@@ -233,7 +232,7 @@ Search_OrderV: .fill 9	; SEARCH-ORDER (bytes)
 			;   Allowing for 9 to keep offsets even.
 MarkEnd:
 
-ToHold:	.byte ?		; index for formatted output
+ToHold:	.byte ?		; pad buffer index for formatted output
 
 RndState: .dword ?	; random # state
  .endsection bss
@@ -425,7 +424,7 @@ Cold:
 		; can load high-level words with EVALUATE
 		jsr Empty_Stack
 
-  .if "block" in TALI_OPTIONAL_WORDS
+  .if "block" in TALI_OPTIONAL_WORDS ;-------------------------------------------
 		jsr BlockInit
   .endif
 
@@ -495,7 +494,7 @@ user_words_len = *-user_words_start
 		rts
 
 
- FHdr "cc@",NN ; ( -- ud ) fetch cpu cycle counter
+ FHdr "CC@",NN ; ( -- ud ) fetch cpu cycle counter
 CCAt:		jmp platform_CCAt
 	FEnd
 
@@ -718,51 +717,40 @@ RandM:		jsr Dup		; ( umod umod )
 
  .endsection code
 
-.if "fp" in TALI_OPTIONAL_WORDS
+.if "fp" in TALI_OPTIONAL_WORDS ;-----------------------------------------------------
 ;======================================================================
 ; 12. The optional Floating-Point word set
 
-; Not IEEE compliant (but has SF@ & SF!)
+; Not fully IEEE compliant.
+; Has SF@ & SF! & DF@ & DF! to interoperate with IEEE formats
 ; Trying to be small, fast, simple
 ; NANs not supported
 ; Denormals not supported
+; Limited exception handling
+; Rounding isn't IEEE, but we include some extra mantissa bits
 
 ; FP stack entries & internal format storage have:
 ;   4 bytes of 2s complement binary mantissa
 ;   1 byte  of 2s complement binary exponent
 
-; FP stack has FDim entries.
-; FP stack is a set of byte arrays, each with FDim # of entries indexed by FP:
-;   FSExp   is the exponent
-;   FSMant0 is the mantissa most signficant byte
-;   FSMant1 is the   "      2nd byte
-;   FSMant2 is the   "      3rd byte
-;   FSMant3 is the   "      4th byte
-
-; Table 9.1: THROW code assignments
-;	-40 invalid Base for floating point conversion
-;	-41 loss of precision
-;	-42 floating-point divide by zero
-;	-43 floating-point result out of range
-;	-44 floating-point stack overflow
-;	-45 floating-point stack underflow
-;	-46 floating-point invalid argument
-;	-54 floating-point underflow
-;	-55 floating-point unidentified fault
-
-
  .section zp
+fp:	.byte ?		; floating-point stack index. empty=FDim, full=0
+
+; FP stack has FDim entries, defined in platform.
+; FP stack is a set of byte arrays, each with FDim # of entries indexed by FP:
+FSExp:   .fill FDim	; FP stack exponent        array
+FSMant0: .fill FDim	; FP stack mantissa MSByte array
+FSMant1: .fill FDim	; FP stack mantissa 2nd    array
+FSMant2: .fill FDim	; FP stack mantissa 3rd    array
+FSMant3: .fill FDim	; FP stack mantissa 4th    array
   ; Will FP stack fit in ZP?  It could be placed in bss if needed.
   ; How to move this decision out to platform???
-fp:	.byte ?		; floating-point stack index
-FSExp:   .fill FDim	; FP stack exponent     array
-FSMant0: .fill FDim	; FP stack mantissa MSB array
-FSMant1: .fill FDim	; FP stack mantissa 2nd array
-FSMant2: .fill FDim	; FP stack mantissa 3rd array
-FSMant3: .fill FDim	; FP stack mantissa 4th array
+
  .endsection zp
 
  .section code
+
+;--- labels for writing words that play with FP internals------------------------
 
  FHdr "FP",NN ; ( -- addr )  Byte Variable: FP stack index
 		lda #fp
@@ -774,27 +762,27 @@ FSMant3: .fill FDim	; FP stack mantissa 4th array
 		jmp PushZA
 	FEnd
 
- FHdr "FSExp",NN ; ( -- addr )  Byte variable: FP exponent array
+ FHdr "FSExp",NN ; ( -- addr )  Byte variable: FP exponent byte array
 		lda #FSExp
 		jmp PushZA
 	FEnd
 
- FHdr "FSMant0",NN ; ( -- addr )  Byte variable: FP mantissa MSB array
+ FHdr "FSMant0",NN ; ( -- addr )  Byte variable: FP mantissa MSByte array
 		lda #FSMant0
 		jmp PushZA
 	FEnd
 
- FHdr "FSMant1",NN ; ( -- addr )  Byte variable: FP mantissa 2nd array
+ FHdr "FSMant1",NN ; ( -- addr )  Byte variable: FP mantissa 2nd byte array
 		lda #FSMant1
 		jmp PushZA
 	FEnd
 
- FHdr "FSMant2",NN ; ( -- addr )  Byte variable: FP mantissa 3rd array
+ FHdr "FSMant2",NN ; ( -- addr )  Byte variable: FP mantissa 3rd byte array
 		lda #FSMant2
 		jmp PushZA
 	FEnd
 
- FHdr "FSMant3",NN ; ( -- addr )  Byte variable: FP mantissa 4th array
+ FHdr "FSMant3",NN ; ( -- addr )  Byte variable: FP mantissa 4th byte array
 		lda #FSMant3
 		jmp PushZA
 	FEnd
@@ -812,63 +800,146 @@ FloatPlus:	lda #5
 	FEnd
 
  FHdr "Floats",NN ; ( n1 -- n2 )  return size of n1 floats
+  ; https://forth-standard.org/standard/float/FLOATS
 Floats:		lda #5
 		jsr PushZA
 		jmp Star
 	FEnd
 
 
-; FHdr "FAlign",0 ; ( -- )  reserve enough space to align the compiler pointer
+ FHdr "FAlign",0 ; ( -- )  reserve enough space to align the compiler pointer
   ; If the data-space pointer is not float aligned, reserve enough data space to make it so. 
   ; https://forth-standard.org/standard/float/FALIGN
-;FAlign: 		; 6502 doesn't need any alignment, do nothing.
-;	FEnd
-;		rts
+FAlign: 		; 6502 doesn't need any alignment, do nothing.
+	FEnd
+		rts
 
-
-; FHdr "FAligned",0 ; ( addr -- r-addr )  FP align the address
+ FHdr "FAligned",0 ; ( addr -- r-addr )  FP align the address
   ; https://forth-standard.org/standard/float/FALIGNED
   ; r-addr is the first float-aligned address greater than or equal to addr. 
-;FAligned:		; 6502 doesn't need any alignment, do nothing
+FAligned:		; 6502 doesn't need any alignment, do nothing
+	FEnd
+		rts
+
+
+ FHdr "Hex>F",NN ; ( d_mant n_exp -- ) ( F: -- r )  create r from parts
+HexToF:		jsr FAllocX		; alloc FP stack entry, X= fp stack index
+		ldx tmp1+0		; restore data stack index
+		ldy fp			; Y= FP stack index
+		jsr PopA		; pop n_exp
+		sta FSExp,y
+		lda DStack+1,x
+		sta FSMant0,y
+		lda DStack+0,x
+		sta FSMant1,y
+		lda DStack+3,x
+		sta FSMant2,y
+		lda DStack+2,x
+		sta FSMant3,y
+		jmp Two_Drop
+	FEnd
+
+ FHdr "F>Hex",NN ; ( F: r -- ) ( -- d_mantissa n_exponent )  get parts of r
+FToHex:		ldy fp		; Y= FP stack index
+		dex
+		dex
+		dex
+		dex
+		dex
+		dex
+		lda FSMant0,y	; copy mantissa
+		sta DStack+3,x
+		lda FSMant1,y
+		sta DStack+2,x
+		lda FSMant2,y
+		sta DStack+5,x
+		lda FSMant3,y
+		sta DStack+4,x
+		lda FSExp,y	; copy exponent
+		sta DStack+0,x
+		and #$80	;   sign extend
+		beq +
+		lda #$ff
++		sta DStack+1,x
+		inc fp		; FDrop
+		rts
+	FEnd
+
+ FHdr "F.Hex",NN ; ( F: r -- )	display r in hex
+FDotHex:	jsr FToHex	; get parts of r
+		jsr Not_Rot
+		jsr Dot_Hex	; do mantissa
+		jsr Dot_Hex
+		lda #':'
+		jsr Emit_A
+		jmp C_Dot_Hex	; do exponent
+	FEnd
+
+
+; FHdr "FCmp",NN ; ( F: r1 r2 -- r1 r2 ) ( -- n )  wrapper for FCmpA
+;		jsr FCmpA		; compare #s
+;		tay			; return >0, 0, <0
+;		jmp PushYA
 ;	FEnd
-;		rts
 
+ FHdr "FCmpA",NN ; ( F: r1 r2 -- r1 r2 CPU_regs ) \ floating point compare
+  ; assumes normalized values
+  ; returns: flags N & Z, A=0 for NOS=TOS, A<0 for NOS<TOS, A>0 for NOS>TOS
+FCmpA:		stx tmp1		; save data stack index
+		ldx fp			; X= FP stack index
 
- FHdr "Precision",NN ; ( -- u )  number of significant digits currently used by F., FE., or FS.
-  ; https://forth-standard.org/standard/float/PRECISION
-Precision:	lda PrecisionV
-		jmp PushZA
-	FEnd
+		lda FSMant0+0,x		; r2 mantissa = 0 ?
+		beq _r2Zero
+		ldy FSMant0+1,x		; r1 mantissa = 0 ?
+		beq _r1Zero
+		eor FSMant0+1,x		; compare mantissa sign
+		bmi _MantissaSignDifferent
+
+		sec			; compare exponent
+		lda FSExp+1,x
+		sbc FSExp+0,x
+		bne _ExponentDifferent
+
+		tya			; compare mantissa MSB
+		sbc FSMant0+0,x		;   always same sign so can't overflow
+		bne _13
+		lda FSMant1+1,x		; compare mantissa 1
+		sbc FSMant1+0,x
+		bne _12
+		lda FSMant2+1,x		; compare mantissa 2
+		sbc FSMant2+0,x
+		bne _12
+		lda FSMant3+1,x		; compare mantissa LSB
+		sbc FSMant3+0,x
+		beq _13
+_12:		ror a
+_14:		eor #$80
+		ora #1
+_13:		ldx tmp1		; restore data stack index
+		tay			; set CPU flags
 		rts
 
- FHdr "Set-Precision",NN ; ( u -- )  Set the number of significant digits currently used by F., FE., or FS. to u. 
-  ; https://forth-standard.org/standard/float/SET-PRECISION
-		jsr PopA
-		sta PrecisionV
-	FEnd
+_r1Zero:	lda FSMant0+0,x		; return r2
+		bne _14
+		beq _13
+
+_r2Zero:	lda FSMant0+1,x		; return 0-r1
+		jmp _13
+
+_ExponentDifferent:
+		bvc +
+		eor #$80
++
+		eor FSMant0+0,x
+		ldx tmp1		; restore data stack index
+		ora #1			; set CPU flags
 		rts
 
-
- FHdr "FDrop",0 ; ( F: r -- )  Drop 1 FP stack entry
-  ; https://forth-standard.org/standard/float/FDROP
-FDrop:		inc fp
-	FEnd
+_MantissaSignDifferent:
+		tya
+		ldx tmp1		; restore data stack index
+		ora #1
 		rts
-
-
- FHdr "F2Drop",0 ; ( F: r1 r2 -- ) \ Drop 2 FP entries
-F2Drop:		inc fp
-		inc fp
-	FEnd
-		rts
-
-
- FHdr "FDepth",NN ; ( -- n )  # of entries on the FP stack
-  ; https://forth-standard.org/standard/float/FDEPTH
-FDepth:		lda #FDim
-		sec
-		sbc fp
-		jmp PushZA
 	FEnd
 
 
@@ -881,9 +952,9 @@ FAllocX:	stx tmp1+0	; save data stack index
 		stx fp
 		rts		; return X= FP stack index
 
-_err:		asl a		; save sign bit
+_err:		php		; save sign bit
 		ldx tmp1+0	; restore data stack index
-		ror a		; restore sign bit
+		plp		; restore sign bit
 		jmp Throw_FPStack
 	FEnd
 
@@ -895,7 +966,6 @@ FMax:		jsr FCmpA
 		bmi FNip
 	FEnd
 
-
  FHdr "FMin",NN ; ( F: r1 r2 -- r3 )  r3 is the lesser of r1 and r2.
   ; https://forth-standard.org/standard/float/FMIN
 FMin:		jsr FCmpA
@@ -904,10 +974,30 @@ FMin:		jsr FCmpA
 	FEnd
 
 
+ FHdr "FDepth",NN ; ( -- n )  # of entries on the FP stack
+  ; https://forth-standard.org/standard/float/FDEPTH
+FDepth:		lda #FDim
+		sec
+		sbc fp
+		jmp PushZA
+	FEnd
+
+ FHdr "FDrop",0 ; ( F: r -- )  Drop 1 FP stack entry
+  ; https://forth-standard.org/standard/float/FDROP
+FDrop:		inc fp
+	FEnd
+		rts
+
+ FHdr "F2Drop",0 ; ( F: r1 r2 -- )  Drop 2 FP stack entries
+F2Drop:		inc fp
+		inc fp
+	FEnd
+		rts
+
  FHdr "FNip",0 ; ( F: r1 r2 -- r2 )   Drop NOS on FP stack
   ; like https://forth-standard.org/standard/core/NIP
 FNip:		stx tmp1		; save data stack index
-		ldx fp			; get FP stack index
+		ldx fp			; X= FP stack index
 		lda FSExp+0,x		; copy exponent
 		sta FSExp+1,x
 		lda FSMant0+0,x		; copy mantissa
@@ -923,10 +1013,9 @@ FNip:		stx tmp1		; save data stack index
 	FEnd
 		rts
 
-
  FHdr "FDup",0 ; ( F: r -- r r )  Push a copy of FP TOS
   ; https://forth-standard.org/standard/float/FDUP
-FDup:		jsr FAllocX		; alloc FP stack entry
+FDup:		jsr FAllocX		; alloc FP stack entry, X=fp stack index
 		lda FSExp+1,x		; copy exponent
 		sta FSExp+0,x
 		lda FSMant0+1,x		; copy mantissa
@@ -955,10 +1044,9 @@ FDup:		jsr FAllocX		; alloc FP stack entry
 ;	FEnd
 ;		rts
 
-
  FHdr "FOver",0 ; ( F: r1 r2 -- r1 r2 r1 )  Push a copy of FP NOS
   ; https://forth-standard.org/standard/float/FOVER
-FOver:		jsr FAllocX		; alloc FP stack entry
+FOver:		jsr FAllocX		; alloc FP stack entry, X=fp stack index
 		lda FSExp+2,x		; copy exponent
 		sta FSExp+0,x
 		lda FSMant0+2,x		; copy mantissa
@@ -973,16 +1061,15 @@ FOver:		jsr FAllocX		; alloc FP stack entry
 	FEnd
 		rts
 
-
  FHdr "FPick",0 ; ( r(u) ... r(1) r(0) u -- r(u) ... r(1) r(0) r(u) )
   ; Push ith data stack number.  1 FPICK is equivalent to FOVER.
   ; like https://forth-standard.org/standard/core/PICK
-FPick:		jsr PopA		; pop u
-FPickA:		clc
+FPick:		jsr PopA		; pop u (desired entry #)
+FPickA:		clc			; Y= fp stack index of [u]
 		adc fp
 FPick3:		tay
 
-		jsr FAllocX
+		jsr FAllocX		; alloc FP stack entry, X=fp stack index
 		lda FSExp,y		; copy exponent
 		sta FSExp,x
 		lda FSMant0,y		; copy mantissa
@@ -997,12 +1084,10 @@ FPick3:		tay
 	FEnd
 		rts
 
-
- FHdr "F2Dup",NN ; ( F: r1 r2 -- r1 r2 r1 r2 ) \ push copy of top 2 on FP stack
+ FHdr "F2Dup",NN ; ( F: r1 r2 -- r1 r2 r1 r2 )  push copy of top 2 on FP stack
 F2Dup:		jsr FOver
 		jmp FOver
 	FEnd
-
 
 ; FHdr "F2Dup<",NN ; ( F: r1 r2 -- r1 r2 ) ( -- )
 ;F2DupLt:	jsr FCmpA
@@ -1010,10 +1095,9 @@ F2Dup:		jsr FOver
 ;	FEnd
 ;		rts
 
-
- FHdr "FSwap",0 ; ( F: r1 r2 -- r2 r1 )  \ Swap FP TOS & NOS
+ FHdr "FSwap",0 ; ( F: r1 r2 -- r2 r1 )  Swap FP TOS & NOS
   ; https://forth-standard.org/standard/float/FSWAP
-FSwap:		stx tmp1		; save data stack index
+FSwap:		stx tmp1+0		; save data stack index
 		ldx fp			; X=FP stack index
 
 		lda FSExp+0,x		; do FSExp
@@ -1041,10 +1125,9 @@ FSwap:		stx tmp1		; save data stack index
 		sta FSMant3+1,x
 		sty FSMant3+0,x
 
-		ldx tmp1		; restore data stack index
+		ldx tmp1+0		; restore data stack index
 	FEnd
 		rts
-
 
 ; FHdr "FNSwap",NN ; ( F: rN+1  rN  rN-1... r0 --  rN+1  r0  rN-1 ... r1 rN ) ( u -- )
   ; Exchange the fp value at the N-th location on the fp stack with the value at the top of the
@@ -1052,13 +1135,11 @@ FSwap:		stx tmp1		; save data stack index
 ;FNSwap:	jsr PopA		; pop u
 ;FNSwapA:	???
 
-
  FHdr "FTuck",NN ; ( F: r1 r2 -- r2 r1 r2 )
   ; like https://forth-standard.org/standard/core/TUCK
 FTuck:		jsr FSwap
 		jmp FOver
 	FEnd
-
 
  FHdr "FRot",0 ; ( F: r1 r2 r3 -- r2 r3 r1 ) \ Rotate the top three FP stack entries.
   ; https://forth-standard.org/standard/float/FROT
@@ -1138,6 +1219,146 @@ FMRot:		jsr FRot
 	FEnd
 
 
+ .if "fpaux" in TALI_OPTIONAL_WORDS ;------------------------------------------------------
+; the FP stack can also be used as an auxilliary data stack.
+; Note that this data on the FP stack is not a valid FP number.
+; http://forum.6502.org/viewtopic.php?f=9&t=493&hilit=aux
+
+ FHdr ">A",0 ; ( n -- ) ( F: -- n )  Move data stack entry to 1 FP stack entry
+ToA:		jsr DupToA	; Copy
+		inx		; Drop
+		inx
+	FEnd
+		rts
+
+ FHdr "Dup>A",0 ; ( n -- n ) ( F: -- n )  Copy data stack entry to 1 FP stack entry
+DupToA:		dec fp		; alloc fp stack entry
+		ldy fp		; Y= FP stack index
+		lda DStack+0,x	; copy data
+		sta FSMant1,y
+		lda DStack+1,x
+		sta FSMant0,y
+	FEnd
+		rts
+
+ FHdr "2>A",NN ; ( d -- ) ( F: -- d )  Move double data stack entry to 1 FP stack entry
+DToA:		jsr DDupToA
+		jmp Two_Drop	; 2Drop
+	FEnd
+
+ FHdr "2Dup>A",0 ; ( d -- d ) ( F: -- d )  Copy double data stack entry to 1 FP stack entry
+DDupToA:	dec fp		; alloc fp stack entry
+		ldy fp		; Y= FP stack index
+		lda DStack+0,x	; copy data
+		sta FSMant1,y
+		lda DStack+1,x
+		sta FSMant0,y
+		lda DStack+2,x
+		sta FSMant3,y
+		lda DStack+3,x
+		sta FSMant2,y
+	FEnd
+		rts
+
+ FHdr "A>",0 ; ( -- n ) ( F: n -- )  move aux data entry on FP to data stack
+AFrom:		ldy fp		; Y= FP stack index
+		inc fp		; FDrop (doesn't affect Y)
+AFrom3:		dex		; alloc data stack space
+		dex
+		lda FSMant1,y	; copy data
+		sta DStack+0,x
+		lda FSMant0,y
+		sta DStack+1,x
+	FEnd
+		rts
+
+ FHdr "A@",NN ; ( -- n ) ( F: n -- n )  copy aux data entry on FP stack to data stack
+AFetch:		ldy fp		; Y= FP stack index
+		jmp AFrom3
+	FEnd
+
+ FHdr "2A>",0 ; ( -- d ) ( F: d -- )  move double aux data entry on FP to data stack
+DAFrom:		ldy fp		; Y= FP stack index
+		inc fp		; FDrop (doesn't affect Y)
+DAFrom3:	dex		; alloc data stack space
+		dex
+		dex
+		dex
+		lda FSMant1,y	; copy data
+		sta DStack+0,x
+		lda FSMant0,y
+		sta DStack+1,x
+		lda FSMant3,y
+		sta DStack+2,x
+		lda FSMant2,y
+		sta DStack+3,x
+	FEnd
+		rts
+
+ FHdr "DA@",NN ; ( -- d ) ( F: d -- d )  copy double aux data entry on FP stack to data stack
+DAFetch:	ldy fp		; Y= FP stack index
+		jmp DAFrom3
+	FEnd
+
+ .endif ; fpaux
+
+ .if 0 ; these don't seem very useful
+
+ FHdr "F>R",R6 ; ( F: r -- ) ( r: -- r )
+FToR:		pla		; save RTS addr
+		sta tmp1+0
+		pla
+		sta tmp1+1
+
+		ldy fp
+		lda FSExp,y
+		pha
+		lda FSMant0,y
+		pha
+		lda FSMant1,y
+		pha
+		lda FSMant2,y
+		pha
+		lda FSMant3,y
+		pha
+		inc fp		; FDrop
+
+		lda tmp1+1	; restore RTS addr
+		pha
+		lda tmp1+0
+		pha
+	FEnd
+		rts
+
+ FHdr "FR>",R6 ; ( r: r -- ) ( F: -- r )
+FRTo:		pla		; save rts addr
+		sta tmp2+0
+		pla
+		sta tmp2+1
+
+		jsr FAllocX	; alloc FP stack entry & set X
+		pla
+		sta FSMant3,x
+		pla
+		sta FSMant2,x
+		pla
+		sta FSMant1,x
+		pla
+		sta FSMant0,x
+		pla
+		sta FSExp,x
+		ldx tmp1	; restore data stack index
+
+		lda tmp2+1	; restore RTS addr
+		pha
+		lda tmp2+0
+		pha
+	FEnd
+		rts
+
+ .endif ; 0
+
+
  FHdr "F@",0 ; ( addr -- ) ( F: -- r )  Fetch a FP number, internal format
   ; https://forth-standard.org/standard/float/FFetch
   ; Also see: SF@ DF@ for IEEE formats
@@ -1145,9 +1366,9 @@ FAt:		jsr PopYA		; pop addr
 FAt_YA:		sta tmp2+0		; save addr
 		sty tmp2+1
 
-FAt_Tmp2:	jsr FAllocX		; alloc FP stack entry
-		ldy #0			; copy mantissa
-		lda (tmp2),y
+		ldy #0			; starting offset from tmp2
+FAt_Tmp2Y:	jsr FAllocX		; alloc FP stack entry, X= fp stack index
+		lda (tmp2),y		; copy mantissa
 		sta FSMant3,x
 		iny
 		lda (tmp2),y
@@ -1165,7 +1386,6 @@ FAt_Tmp2:	jsr FAllocX		; alloc FP stack entry
 	FEnd
 		rts
 
-
  FHdr "F!",0 ; ( addr -- ) ( F: r -- )  Store a FP number, internal format
   ; https://forth-standard.org/standard/float/FStore
   ; Also see: SF! DF! for IEEE formats
@@ -1173,10 +1393,10 @@ FStore:		jsr PopYA		; pop addr
 FStore_YA:	sta tmp1+0		; save addr
 		sty tmp1+1
 
-		stx tmp2		; save data stack index
-		ldx fp			; Y= FP stack index
-		lda FSMant3,x		; copy mantissa
 		ldy #0
+		stx tmp2		; save data stack index
+		ldx fp			; X= FP stack index
+		lda FSMant3,x		; copy mantissa
 		sta (tmp1),y
 		lda FSMant2,x
 		iny
@@ -1196,8 +1416,8 @@ FStore_YA:	sta tmp1+0		; save addr
 		rts
 
 
- FHdr "F,",NN ; ( F: f -- ) \ compile a float
-FComma:		lda cp+0
+ FHdr "F,",NN ; ( F: f -- )  compile a float
+FComma:		lda cp+0		; store f at Here
 		ldy cp+1
 		jsr FStore_YA
 		lda #5			; Float
@@ -1207,219 +1427,9 @@ FComma:		lda cp+0
 
 
  FHdr "F0!",NN ; ( addr -- )  Store a zero in a FP internal format variable
-FZStore:	jsr PopYA		; pop addr
-FZStore_YA:	sta tmp1+0
-		sty tmp1+1
-
-		lda #0
-		ldy #5-1
--		sta (tmp1),y
-		dey
-		bpl -
+FZStore:	jsr F0
+		jmp FStore
 	FEnd
-		rts
-
-
- FHdr "FCmp",NN ; ( F: r1 r2 -- r1 r2 ) ( -- n )  wrapper for FCmpA
-		jsr FCmpA		; compare #s
-		tay			; return >0, 0, <0
-		jmp PushYA
-	FEnd
-
-
- FHdr "FCmpA",NN ; ( F: r1 r2 -- r1 r2 CPU_regs ) \ floating point compare
-  ; assumes normalized values
-  ; returns: flags N & Z, A=0 for NOS=TOS, A<0 for NOS<TOS, A>0 for NOS>TOS
-FCmpA:		stx tmp1		; save data stack index
-		ldx fp			; X= FP stack index
-
-		lda FSMant0+0,x		; r2 mantissa = 0 ?
-		beq _r2Zero
-		ldy FSMant0+1,x		; r1 mantissa = 0 ?
-		beq _r1Zero
-		eor FSMant0+1,x		; compare mantissa sign
-		bmi _MantissaSignDifferent
-
-		sec			; compare exponent
-		lda FSExp+1,x
-		sbc FSExp+0,x
-		bne _ExponentDifferent
-
-		tya			; compare mantissa MSB
-		sbc FSMant0+0,x		;   always same sign so can't overflow
-		bne _13
-		lda FSMant1+1,x		; compare mantissa 1
-		sbc FSMant1+0,x
-		bne _12
-		lda FSMant2+1,x		; compare mantissa 2
-		sbc FSMant2+0,x
-		bne _12
-		lda FSMant3+1,x		; compare mantissa LSB
-		sbc FSMant3+0,x
-		beq _13
-_12:		ror a
-_14:		eor #$80
-		ora #1
-_13:		ldx tmp1		; restore data stack index
-		tay			; set CPU flags
-		rts
-
-_r1Zero:	lda FSMant0+0,x		; return r2
-		bne _14
-		beq _13
-
-_r2Zero:	lda FSMant0+1,x		; return 0-r1
-		jmp _13
-
-_ExponentDifferent:
-		bvc +
-		eor #$80
-+
-		eor FSMant0+0,x
-		ldx tmp1		; restore data stack index
-		ora #1			; set CPU flags
-		rts
-
-_MantissaSignDifferent:
-		tya
-		ldx tmp1		; restore data stack index
-		ora #1
-		rts
-	FEnd
-
-
-; FHdr "FM1+",0 ; ( F: q1 -- q2 )   increment mantissa
-;FMOnePlus:	stx tmp1		; save data stack index
-;		ldx fp			; switch X to FP stack index
-;		inc FSMant3,x
-;		bne @3
-;		inc FSMant2,x
-;		bne @3
-;		inc FSMant1,x
-;		bne @3
-;		inc FSMant0,x
-;@3:
-;		ldx tmp1		; restore data stack index
-;	FEnd
-;		rts
-
-
-; FHdr "FM2/",0 ; ( F: q1 -- q2 carry )  shift mantissa right 1 bit
-;  ; Returns carry.  Preserves Y.
-;FM2Slash:	stx tmp1		; switch X to FP stack index
-;		ldx fp
-;		lda FSMant0,x
-;		asl a
-;		ror FSMant0,x
-;		ror FSMant1,x
-;		ror FSMant2,x
-;		ror FSMant3,x
-;		ldx tmp1		; restore data stack index
-;	FEnd
-;		rts
-
-
- FHdr "Floor",NN ; ( F: r1 -- r2 )  Round using the round toward negative infinity rule 
-  ; https://forth-standard.org/standard/float/FLOOR
-Floor:		ldy fp
-		lda FSMant0,y		; negative?
-		bpl _a
-		lda FSExp,y		; > -1 ?
-		bpl _a
-
-		lda #$80		; return -1
-		sta FSMant0,y
-		lda #0
-		sta FSExp,y
-		sta FSMant1,y
-		sta FSMant2,y
-		sta FSMant3,y
-		rts
-		
-_a:		lda #31
-		jsr FIntAlignA
-		jmp FNorm
-	FEnd
-
-
-; FHdr "FIntAlign",NN ; ( F: r1 -- r2 )  align mantissa as integer
-  ; A=designed alignment
-  ; Returns exponent in Y, lo bit in tmp1+1 bit7
-FIntAlignA:
-		sta tmp2+0		; save alignment
-		lsr tmp1+1		; init saved lo bit
-		stx tmp1+0		; save data stack index
-		ldx fp			; X= FP stack index
-		lda FSMant0,x
-		ldy FSExp,x
-		bpl _18
-					; exponent too small
-		ldy tmp2+0		; return zero
-		lda #0
-		sta FSMant1,x
-		sta FSMant2,x
-		sta FSMant3,x
-		beq _30
-
-_12:		iny			; exp += 1
-		cmp #$80		; mantissa >>=1
-		ror a
-		ror FSMant1,x
-		ror FSMant2,x
-		ror FSMant3,x
-		ror tmp1+1		; save lo bit
-_18:		cpy tmp2+0		; while exp<alignment
-		bcc _12
-
-_30:		sta FSMant0,x
-		sty FSExp,x
-		ldx tmp1+0		; restore data stack index
-		asl tmp1+1		; set carry bit
-;	FEnd
-		rts		
-
-
- FHdr "FTrunc",NN ; ( F: r1 -- r2 ) Round using the "round towards zero" rule
-  ; https://forth-standard.org/standard/float/FTRUNC
-FTrunc:		ldy fp
-		lda FSMant0,y
-		bpl Floor
-		jsr FNegate
-		jsr Floor
-		jmp FNegate
-
-
- FHdr "FRound",NN ; ( F: r1 -- r2 )  Round using the round to nearest rule 
-  ; https://forth-standard.org/standard/float/FROUND
-FRound:		lda #31
-		jsr FIntAlignA
-		bcc _15
-		jmp F1Plus
-
-_15:		jmp FNorm
-	FEnd
-
-
- FHdr "FIntFrc",NN ; ( F: r1 -- r_frac r_int )  Separate out integer part
-FIntFrc:	jsr FDup	; ( r1 r1 )
-		jsr Floor	; ( r1 rint )
-		jsr FTuck	; ( rint r1 rint )
-		jsr FMinus	; ( rint rfrac )
-		jmp FSwap	; ( rfrac rint )
-	FEnd
-
-
-; FHdr "FInt",NN ; ( F: r1 -- r2 )
-;FInt:
-;		ldy #$1f
-;		lda #$40
-;		jsr FLitYA
-;		jsr FMAlignX
-;
-;		inc fp			; FDrop
-;		ldx tmp1+0		; restore data stack index
-;		jmp FNorm
-;	FEnd
 
 
  FHdr "F0=",NN ; ( F: r -- ) ( -- flag )  flag is true if and only if r is equal to zero. 
@@ -1436,8 +1446,8 @@ FTrue1: ; ( F: r -- ) ( -- true )
  FHdr "F0<>",NN ; ( F: r -- ) ( -- flag )  return r <> 0
 FZNe:		ldy fp
 		lda FSMant0,y
-		beq FFalse1
 		bne FTrue1
+		beq FFalse1
 	FEnd
 
  FHdr "F0<",NN ; ( F: r -- ) ( -- flag )  return r < 0
@@ -1530,7 +1540,6 @@ FTAbs:		jsr FMRot
 		jmp FGt
 	FEnd
 
-
  FHdr "F~Rel",NN ; ( F: r1 r2 r3 -- flag )  approximate equality with relative error |r1-r2|<r3*|r1+r2|
 FTRel:		jsr FOver
 		lda #3
@@ -1543,7 +1552,6 @@ FTRel:		jsr FOver
 		jsr FAbs
 		jmp FGt
 	FEnd
-
 
  FHdr "F~",NN ; ( F: r1 r2 r3 -- flag )  Approximate equality
   ; https://forth-standard.org/standard/float/Ftilde
@@ -1611,21 +1619,10 @@ FLitShort: ; compile LDA #; LDY #
 		ldy #>FLitYA
 		rts
 
-FLitYA: ; ( YA -- ) ( F: -- r )  push short fvalue, Y=Exp A=Mant0
-		jsr FAllocX		; alloc FP stack entry
-		sty FSExp,x
-		sta FSMant0,x
-		lda #0
-		sta FSMant1,x
-		sta FSMant2,x
-		sta FSMant3,x
-		ldx tmp1+0		; restore data stack index
-		rts
-
 FLitI: ; ( -- ) ( F: -- r )  push inline fvalue
 		pla			; tmp2= RTS addr
 		sta tmp2+0
-		clc			; bump RTS addr over inline data
+		clc			; bump RTS addr over inline float data
 		adc #5
 		tay
 		pla
@@ -1635,11 +1632,8 @@ FLitI: ; ( -- ) ( F: -- r )  push inline fvalue
 		tya
 		pha
 
-		inc tmp2+0		; tmp2 +=1 1 (correct RTS addr)
-		bne +
-		inc tmp2+1
-+
-		jmp FAt_Tmp2		; fetch inline data, & return
+		ldy #1			; correct for RTS addr
+		jmp FAt_Tmp2Y		; fetch inline data, & return
 
 FloatLit .macro mantissa,exponent ; float constant in native format
 		.dword \mantissa	; 32 bit signed binary mantissa.  $40000000 = +0.5
@@ -1649,66 +1643,6 @@ FloatLitI .macro mantissa,exp ; float literal
 		jsr FLitI
 		FloatLit \mantissa,\exp
 	.endmacro
-
- FHdr "0.e",NN ; ( F: -- r )  aka "F0.0"  FP constant 0
-F0:		lda #0
-		ldy #$80
-		bne FLitYA
-	FEnd
-
- FHdr "1000.e",NN ; ( F: -- r ) push FP constant 1000
-F1000:		lda #$7d
-		ldy #10
-		bne FLitYA
-	FEnd
-
- FHdr "10.e",NN ; ( F: -- r )  aka "F10.0"  FP constant 10
-F10:		lda #$50
-		ldy #4
-		bne FLitYA
-	FEnd
-
- FHdr "2.e",NN ; ( F: -- r)	FP constant 2
-F2:		lda #$40
-		ldy #2
-		bne FLitYA
-	FEnd
-
- FHdr "1.e",NN ; ( F: -- r )  FP constant 1  aka "F1.0"
-F1:		lda #$40
-		ldy #1
-		bne FLitYA
-	FEnd
-
- FHdr ".1e",NN ; ( F: -- r )  FP constant .1
-F10th:		jsr FConstantRun
-		FloatLit $66666667,-3
-	FEnd
-
- FHdr "Pi",NN ; ( F: -- r )  FP constant PI
-FPi:		jsr FConstantRun
-		FloatLit $6487ed51,2
-	FEnd
-
- FHdr "Pi/2",NN ; ( F: -- r )  FP constant FP/2
-FPiH:		jsr FConstantRun
-		FloatLit $6487ed51,1
-	FEnd
-
- FHdr "Pi/4",NN ; ( F: -- r )  FP constant FP/4
-FPiQ:		jsr FConstantRun
-		FloatLit $6487ed51,0
-	FEnd
-
- FHdr "2Pi",NN ; ( F: -- r )  FP constant 2*PI
-F2Pi:		jsr FConstantRun
-		FloatLit $6487ed51,3
-	FEnd
-
- FHdr "F.E",NN ; ( F: -- r )  FP constant e
-FE:		jsr FConstantRun
-		FloatLit $56fc2a2c,2
-	FEnd
 
 
  FHdr "FConstant",NN ; ( F: r "name" -- )  Create FP constant word
@@ -1726,19 +1660,89 @@ FConstant:	jsr Header_Comma	; compile word header
 
 _Short:
 		jsr FLitShort		; compile load value
-		jsr Jmp_Comma_YA
+		jsr Jmp_Comma_YA	; compile JMP
 		jmp adjust_z
 	FEnd
 
 FConstantRun: ; ( F: -- r )  runtime for long FConstant
-		pla			; tmp2= pop RTS addr & add 1
-		clc
-		adc #1
+		pla			; tmp2= pop RTS addr
 		sta tmp2+0
 		pla
-		adc #0
 		sta tmp2+1
-		jmp FAt_Tmp2		; fetch inline data, & return
+		ldy #1			; correct for RTS addr
+		jmp FAt_Tmp2Y		; fetch inline data, & return
+
+
+FLitYA: ; ( YA -- ) ( F: -- r )  push short fvalue, Y=Exp A=Mant0
+		jsr FAllocX		; alloc FP stack entry, X=fp stack index
+		sty FSExp,x		; exp= Y
+		sta FSMant0,x		; Mant= A,0,0,0
+		lda #0
+		sta FSMant1,x
+		sta FSMant2,x
+		sta FSMant3,x
+		ldx tmp1+0		; restore data stack index
+		rts
+
+ FHdr "0.e",NN ; ( F: -- r )  FConstant 0  aka "F0.0"
+F0:		lda #0
+		ldy #$80
+		bne FLitYA
+	FEnd
+
+ FHdr "1000.e",NN ; ( F: -- r )  FConstant 1000
+F1000:		lda #$7d
+		ldy #10
+		bne FLitYA
+	FEnd
+
+ FHdr "10.e",NN ; ( F: -- r )  FConstant 10  aka "F10.0" 
+F10:		lda #$50
+		ldy #4
+		bne FLitYA
+	FEnd
+
+ FHdr "2.e",NN ; ( F: -- r)  FConstant 2
+F2:		lda #$40
+		ldy #2
+		bne FLitYA
+	FEnd
+
+ FHdr "1.e",NN ; ( F: -- r )  FConstant 1  aka "F1.0"
+F1:		lda #$40
+		ldy #1
+		bne FLitYA
+	FEnd
+
+ FHdr ".1e",NN ; ( F: -- r )  FConstant .1
+F10th:		jsr FConstantRun
+		FloatLit $66666667,-3
+	FEnd
+
+ FHdr "Pi",NN ; ( F: -- r )  FConstant PI
+FPi:		jsr FConstantRun
+		FloatLit $6487ed51,2
+	FEnd
+
+ FHdr "Pi/2",NN ; ( F: -- r )  FConstant Pi/2
+FPiH:		jsr FConstantRun
+		FloatLit $6487ed51,1
+	FEnd
+
+ FHdr "Pi/4",NN ; ( F: -- r )  FConstant Pi/4
+FPiQ:		jsr FConstantRun
+		FloatLit $6487ed51,0
+	FEnd
+
+ FHdr "2Pi",NN ; ( F: -- r )  FConstant 2*Pi
+F2Pi:		jsr FConstantRun
+		FloatLit $6487ed51,3
+	FEnd
+
+ FHdr "F.E",NN ; ( F: -- r )  FConstant e
+FE:		jsr FConstantRun
+		FloatLit $56fc2a2c,2
+	FEnd
 
 
  FHdr "FValue",IM+NN ; ( F: r “(spaces)name” -- )  Create FP Value word
@@ -1759,14 +1763,14 @@ FValue:		jsr Header_Comma	; compile word header
 		jmp FComma		; alloc & init value
 	FEnd
 
-FValue_runtime: ; unique, so optimizer & TO can recognize as FValue
+FValue_runtime: ; unique, so  TO & optimizer can recognize as FValue
 		jmp FConstantRun
 
 
  FHdr "FScale",NN ; ( n -- ) ( F: r1 -- r2 )  Add n to the exponent of an fp number.  aka FLShift
 FScale:		jsr PopA		; pop n
 FScaleA:	stx tmp1		; save data stack index
-		ldx fp
+		ldx fp			; X= FP stack index
 		ldy FSMant0,x		; mantissa zero?
 		beq _8
 		clc
@@ -1776,20 +1780,147 @@ FScaleA:	stx tmp1		; save data stack index
 _8:		ldx tmp1		; restore data stack index
 		rts
 
-_overflow: ;	bpl _8			; underflow could just return zero
+_overflow: ;	bpl _zero		; underflow could just return zero
 		ldx tmp1		; restore data stack index
 		jsr Throw_FpOutOfRange
 	FEnd
 
- FHdr "F2*",NN ; ( F: r -- r )  Double an fp number.
+ FHdr "F2*",NN ; ( F: r1 -- r2 )  Double a fp number
 F2Star:		lda #1
 		bne FScaleA
 	FEnd
 
- FHdr "F2/",NN ; ( F: r -- r )  Halve an fp number.
+ FHdr "F2/",NN ; ( F: r1 -- r2 )  Halve a fp number
 F2Slash:	lda #$ff
 		bne FScaleA
 	FEnd
+
+
+; FHdr "FM1+",0 ; ( F: q1 -- q2 )  increment mantissa
+;FMOnePlus:	stx tmp1		; save data stack index
+;		ldx fp			; switch X to FP stack index
+;		inc FSMant3,x
+;		bne @3
+;		inc FSMant2,x
+;		bne @3
+;		inc FSMant1,x
+;		bne @3
+;		inc FSMant0,x
+;@3:
+;		ldx tmp1		; restore data stack index
+;	FEnd
+;		rts
+
+
+; FHdr "FM2/",0 ; ( F: q1 -- q2 carry )  shift mantissa right 1 bit
+;  ; Returns carry.  Preserves Y.
+;FM2Slash:	stx tmp1		; switch X to FP stack index
+;		ldx fp
+;		lda FSMant0,x
+;		asl a
+;		ror FSMant0,x
+;		ror FSMant1,x
+;		ror FSMant2,x
+;		ror FSMant3,x
+;		ldx tmp1		; restore data stack index
+;	FEnd
+;		rts
+
+
+ FHdr "Floor",NN ; ( F: r1 -- r2 )  Round toward negative infinity 
+  ; https://forth-standard.org/standard/float/FLOOR
+Floor:		ldy fp
+		lda FSMant0,y		; negative?
+		bpl _a
+		lda FSExp,y		; > -1 ?
+		bpl _a
+
+		lda #$80		; return -1
+		sta FSMant0,y
+		lda #0
+		sta FSExp,y
+		sta FSMant1,y
+		sta FSMant2,y
+		sta FSMant3,y
+		rts
+		
+_a:		lda #31
+		jsr FShiftA
+		jmp FNormX
+	FEnd
+
+; FHdr "FShift",NN ; ( F: r1 n -- r2 )  align r1 to desired exponent
+  ; n=designed exponent
+  ; Returns exponent in Y, lo bit in carry
+;FShift:	jsr PopA
+FShiftA:	stx tmp1+0		; save data stack index
+		ldx fp			; X= FP stack index
+FShiftAX:	tay			; save desired alignment
+		sec			; calc bit shift count
+		sbc FSExp,x
+		beq _leave
+		bvs _overflow
+		bmi _leave
+		cmp #32
+		bcs _zero
+
+		sty FSExp,x
+		tay
+		lda FSMant0,x
+_12:		cmp #$80		; mantissa >>=1
+		ror a
+		ror FSMant1,x
+		ror FSMant2,x
+		ror FSMant3,x
+		dey
+		bne _12
+		sta FSMant0,x
+_30:		ldy FSExp,x
+		ldx fp			; restore fp stack index (FShiftAX could have had a funny one)
+		rts
+
+_overflow:	bpl _leave
+_zero:		sty FSExp,x		; return zero
+		lda #0
+		sta FSMant0,x
+		sta FSMant1,x
+		sta FSMant2,x
+		sta FSMant3,x
+_leave:		clc
+		bcc _30
+;	FEnd
+
+
+ FHdr "FTrunc",NN ; ( F: r1 -- r2 ) Round towards zero
+  ; https://forth-standard.org/standard/float/FTRUNC
+FTrunc:		ldy fp
+		lda FSMant0,y
+		bpl Floor
+		jsr FNegate
+		jsr Floor
+		jmp FNegate
+
+
+ FHdr "FRound",NN ; ( F: r1 -- r2 )  Round to nearest
+  ; https://forth-standard.org/standard/float/FROUND
+FRound:		lda #31
+		jsr FShiftA
+		bcc _15
+		ldx tmp1+0		; restore data stack index
+		jmp F1Plus
+
+_15:		jmp FNormX
+	FEnd
+
+
+ FHdr "FIntFrc",NN ; ( F: r1 -- r_frac r_int )  Separate out integer part
+FIntFrc:	jsr FDup	; ( r1 r1 )
+		jsr Floor	; ( r1 rint )
+		jsr FTuck	; ( rint r1 rint )
+		jsr FMinus	; ( rint rfrac )
+		jmp FSwap	; ( rfrac rint )
+	FEnd
+
 
 
 ; FHdr "FMAlign",NN ; ( F: r2 r1 -- r2 r1 )  wrapper for FMAlignX
@@ -1798,84 +1929,41 @@ F2Slash:	lda #$ff
 ;	FEnd
 ;		rts
 
-
- FHdr FMAlignX,NN ; ( F: r2 r1 -- r2 r1 )  Denormalize to make exponents =
+ FHdr "FMAlignX",NN ; ( F: r2 r1 -- r2 r1 )  Denormalize to make exponents =
+  ; X is data stack index as usual on input.
   ; returns X= FP stack index
 FMAlignX:	stx tmp1+0	; save data stack index
 		ldx fp		; load FP stack index
-		cpx #FDim-1	; check FP stack for 2 entries
+		cpx #FDim-1	; check FP stack for >=2 entries
 		bcs Throw_FPStack_3
 
-		lda FSExp+0,x
+		; Note: sometimes we get denormalized mantissas
+
+		lda FSExp+0,x	; compare exponents
 		sec
-		sbc FSExp+1,x	; compare exponents
-		tay
-		beq _rts	; already = ?
-		bpl _2		; r2 smaller?
-
-_1: ; r1 looks smaller
-		bvs _2z		; was this a big positive #?
-		cpy #-32
-		bcc _1z		; all significant bits gone?
-		lda FSMant0+0,x
-		and #$80
-		sta tmp1+1	; prepare sign for shifts
-		lda FSMant0+0,x
-_1s:		lsr a
-		ora tmp1+1
-		ror FSMant1+0,x
-		ror FSMant2+0,x
-		ror FSMant3+0,x
-		iny
-		bne _1s
-_1e:		sta FSMant0+0,x
-		lda FSExp+1,x
-		sta FSExp+0,x
-_rts:		rts
-
-_1z:		lda #0		; TOS=0
-		sta FSMant1+0,x
-		sta FSMant2+0,x
-		sta FSMant3+0,x
-		beq _1e
-
-_2: ; r2 looks smaller
-		bvs _1z		; was this a big negative #?
-		cpy #32
-		bcs _2z		; all significant bits gone?
-		lda FSMant0+1,x
-		and #$80
-		sta tmp1+1	; prepare sign for shifts
-		lda FSMant0+1,x
-_2s:		lsr a
-		ora tmp1+1
-		ror FSMant1+1,x
-		ror FSMant2+1,x
-		ror FSMant3+1,x
-		dey
-		bne _2s
-_2e:		sta FSMant0+1,x
-		lda FSExp+0,x
-		sta FSExp+1,x
+		sbc FSExp+1,x
+		bmi _1		; r1 smaller?
+		bne _2		; r2 smaller?
 		rts
 
-_2z:		lda #0		; NOS=0
-		sta FSMant1+1,x
-		sta FSMant2+1,x
-		sta FSMant3+1,x
-		beq _2e
+_1: ; r1 looks smaller
+		bvs _2b		; was this a big positive #?
+_1b:		lda FSExp+1,x	; make r1 like r2
+		jmp FShiftAX
+
+_2: ; r2 looks smaller
+		bvs _1		; was this a big negative #?
+_2b:		lda FSExp+0,x	; make r2 like r1
+		inx
+		jmp FShiftAX
 	FEnd
 
-Throw_FPStack_3: jmp Throw_FPStack
+Throw_FPStack_3: jsr Throw_FPStack
 
  FHdr "FNorm",NN ; ( F: r1 -- r2 )  Normalize r.
 FNorm:		stx tmp1+0		; save data stack index
 FNormX:		ldx fp			; switch to FP stack
 		ldy FSExp,x
-;		tya
-;		sec
-;		sbc #32
-;		sta tmp1+1
 		lda FSMant0,x		; mantissa negative?
 		bmi _Neg
 					; mantissa is positive
@@ -1940,7 +2028,7 @@ _zero:		lda #0
 		bne _28
 
 _ShiftB: ; shift left 1 byte
-		tya
+		tya		; exponent -= 8
 		sec
 		sbc #8
 		tay
@@ -1957,9 +2045,10 @@ _ShiftB: ; shift left 1 byte
 		rts
 	FEnd
 
+
  FHdr "F+",NN ; ( F: r1 r2 -- r3 )  Add r1 & r2, giving r3.
   ;  https://forth-standard.org/standard/float/FPlus
-FPlus:		jsr FMAlignX	; align mantissas
+FPlus:		jsr FMAlignX	; align mantissas, X= fp stack index
 		clc		; add mantissas
 		lda FSMant3+1,x
 		adc FSMant3+0,x
@@ -1974,7 +2063,7 @@ FPlus:		jsr FMAlignX	; align mantissas
 		adc FSMant0+0,x
 
 FPlusFin: ; finish F+ & F-
-		inx		; FDrop
+		inx		; FDrop r2
 		stx fp
 FPlusFin3:	bvc _19		; if overflow
 		ror a		;   shift mantissa right 1 bit
@@ -1989,7 +2078,7 @@ _19:
 		jmp FNormX	; normalize, return
 	FEnd
 
- FHdr "F1+",NN ; ( F: r1 -- r2 )
+ FHdr "F1+",NN ; ( F: r1 -- r2 )  Add 1
 F1Plus:		jsr F1
 		jmp FPlus
 	FEnd
@@ -2012,13 +2101,13 @@ FMinus:		jsr FMAlignX	; align mantissas
 		jmp FPlusFin
 	FEnd
 
- FHdr "F1-",NN ; ( F: r1 -- r2 )
+ FHdr "F1-",NN ; ( F: r1 -- r2 )  Subtract 1
 F1Minus:	jsr F1
 		jmp FMinus
 	FEnd
 
 
- FHdr "FNegate",NN ; ( F: r -- r )  Negate r.
+ FHdr "FNegate",NN ; ( F: r1 -- r2 )  Negate r1.
   ; https://forth-standard.org/standard/float/FNEGATE
 FNegate:	stx tmp1	; save data stack index
 		ldx fp		; X= FP stack index
@@ -2251,13 +2340,13 @@ _b3:		lsr tmp3+1		;   tmp32 >>= 1
   .endif
 
 
- FHdr "FSqr",NN ; ( F: r1 -- r2 )  ; square
+ FHdr "FSqr",NN ; ( F: r1 -- r2 )  square
 FSqr:		jsr FDup
 		jmp FStar
 	FEnd
 
 
- FHdr "F10*",NN ; ( F: r1 -- r2 )  Floating-point multiply by 10
+ FHdr "F10*",NN ; ( F: r1 -- r2 )  multiply by 10
 F10Star:	jsr FDup
 		ldy fp
 		lda FSExp+0,y
@@ -2376,14 +2465,14 @@ F1Slash:	jsr F1
 	FEnd
 
 
- .if "fpe" in TALI_OPTIONAL_WORDS
+ .if "fpe" in TALI_OPTIONAL_WORDS ;----------------------------------------------------
 ;-------------------------------------------------------------
 ; 16bit mantissa floating point (1/2 precision) functions.
 ; These accept & return normal FP entries on the FP stack,
 ; but only use 16bits of the input mantissa values.
-; They are faster, for when lower precision can be tolerated (like Mandelbrot generators).
+; They are faster, for when lower precision can be tolerated.
 
- FHdr "E*",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3. (1/2 precision)
+ FHdr "E*",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3. (16bit precision)
 EStar:
 		jsr FPos		; make r1 & r2 positive
 		php			;   remember result sign
@@ -2453,14 +2542,13 @@ EFix3: ; commonm code
 +		jmp FNorm
 
 
- FHdr "ESqr",NN ; ( F: r1 -- r2 )  FP half-precision Square
-  ; 16bit mantissa floating point
+ FHdr "ESqr",NN ; ( F: r1 -- r2 )  FP 16bit-precision Square
 ESqr:		jsr FDup
 		jmp EStar
 	FEnd
 
 
- FHdr "E/",NN ; ( F: r1 r2 -- r3 )  Divide r1 by r2, giving r3, half precision float
+ FHdr "E/",NN ; ( F: r1 r2 -- r3 )  Divide r1 by r2, giving r3, 16bit precision
 ESlash:		jsr FPos	; make r1 & r2 positive
 		php		; remember result sign
 
@@ -2512,7 +2600,7 @@ _b5:
 		rts
 	FEnd
 
- FHdr "E1/",NN ; ( F: r1 -- r2 )  FP half-precision reciprocal
+ FHdr "E1/",NN ; ( F: r1 -- r2 )  FP 16bit-precision reciprocal
 E1Slash:	jsr F1
 		jsr FSwap
 		jmp ESlash
@@ -2540,7 +2628,7 @@ SToFYA:		jsr FAllocX		; alloc FP stack entry
   ; https://forth-standard.org/standard/float/DtoF
 FDToF:		jsr FAllocX		; alloc FP stack entry
 		ldx tmp1+0		; restore data stack index
-		ldy fp
+		ldy fp			; Y= fp stack index
 		lda DStack+2,x		; mantissa= d
 		sta FSMant3,y
 		lda DStack+3,x
@@ -2565,7 +2653,8 @@ FToS:		ldy fp
 		jsr FNegate
 +
 		lda #15
-		jsr FIntAlignA
+		jsr FShiftA
+		ldx tmp1+0		; restore data stack index
 		cpy #15+1		; always positive, so unsigned compare works
 		bcs _overflow
 
@@ -2602,7 +2691,8 @@ FToD:		ldy fp
 		jsr FNegate
 +
 		lda #31
-		jsr FIntAlignA
+		jsr FShiftA
+		ldx tmp1+0		; restore data stack index
 		cpy #31+1		; always positive, so unsigned compare works
 		bcs _overflow
 
@@ -2651,7 +2741,7 @@ FRnd:		jsr Rand		; generate next RndState
 	FEnd
 
 
- FHdr "FSqrt",NN ; ( F: r1 -- r2 )  Square root.  Newton's method. Short but slow
+ FHdr "FSqrt",NN ; ( F: r1 -- r2 )  Square root.  Newton's method. Short but slowish
   ; https://forth-standard.org/standard/float/FSQRT
 FSqrt:		ldy fp
 		lda FSMant0,y		; zero?
@@ -2679,7 +2769,7 @@ _3:		pha
 	FEnd
 
 
-; : FSqrt ( F: r1 -- r2 )  \ Using pseudo-division
+; : FSqrt ( F: r1 -- r2 )  square root, Using pseudo-division
   ; https://forth-standard.org/standard/float/FSQRT
 ;	phx		;save integer param index
 ;	ldx FIndex	;load FP param index
@@ -2751,59 +2841,19 @@ _3:		pha
 ;	jsr Throw_FpOutOfRange
 
 
- FHdr "Hex>F",NN ; ( d_mant n_exp -- ) ( F: -- r )  create r from parts
-HexToF:		jsr FAllocX		; alloc FP stack entry
-		ldx tmp1+0		; restore data stack index
-		ldy fp			; Y= FP stack index
-		jsr PopA		; pop n_exp
-		sta FSExp,y
-		lda DStack+1,x
-		sta FSMant0,y
-		lda DStack+0,x
-		sta FSMant1,y
-		lda DStack+3,x
-		sta FSMant2,y
-		lda DStack+2,x
-		sta FSMant3,y
-		jmp Two_Drop
+ FHdr "Precision",NN ; ( -- u )  Get number of significant digits currently used by F., FE., or FS.
+  ; https://forth-standard.org/standard/float/PRECISION
+Precision:	lda PrecisionV
+		jmp PushZA
 	FEnd
-
- FHdr "F>Hex",NN ; ( F: r -- ) ( -- d_mantissa n_exponent )  get parts of r
-FToHex:		ldy fp		; Y= FP stack index
-		dex
-		dex
-		dex
-		dex
-		dex
-		dex
-		lda FSMant0,y	; copy mantissa
-		sta DStack+3,x
-		lda FSMant1,y
-		sta DStack+2,x
-		lda FSMant2,y
-		sta DStack+5,x
-		lda FSMant3,y
-		sta DStack+4,x
-		lda FSExp,y	; copy exponent
-		sta DStack+0,x
-		and #$80	;   sign extend
-		beq +
-		lda #$ff
-+		sta DStack+1,x
-		inc fp		; FDrop
 		rts
-	FEnd
 
- FHdr "F.Hex",NN ; ( F: r -- )	display r in hex
-FDotHex:	jsr FToHex	; get parts of r
-		jsr Not_Rot
-		jsr Dot_Hex	; do mantissa
-		jsr Dot_Hex
-		lda #':'
-		jsr Emit_A
-		jmp C_Dot_Hex	; do exponent
+ FHdr "Set-Precision",NN ; ( u -- )  Set the number of significant digits currently used by F., FE., or FS. to u. 
+  ; https://forth-standard.org/standard/float/SET-PRECISION
+		jsr PopA
+		sta PrecisionV
 	FEnd
-
+		rts
 
 ; FHdr "Represent",NN ; ( F: r -- ) ( c-addr u -- n flag1 flag2 )
   ; https://forth-standard.org/standard/float/REPRESENT
@@ -3272,7 +3322,146 @@ _GetChar:
 _gc_rts:	rts
 
 
- .if "fpieee" in TALI_OPTIONAL_WORDS
+
+ FHdr "FKey",NN , ( F: -- r )  get float from console
+  ; Not standard, but useful for application programs
+FKey:	;	lda base		; save base
+	;	pha
+	;	jsr Decimal
+		jsr Here		; ( addr )
+		jsr Here		; ( addr addr )
+		lda #40			; ( addr addr 40 )
+		jsr PushZA
+		jsr Accept		; ( addr len )
+		jsr ToFloat		; ( true | false)
+	;	pla			; restore base
+	;	sta base
+		inx			; err?
+		inx
+		lda DStack-2,x
+		beq _err
+		rts
+
+_err:		jsr SLiteral_runtime
+		  jmp +
+		  .text " ? "
++		jsr Type
+		jmp FKey
+
+
+ .if "fpdo" in TALI_OPTIONAL_WORDS ;------------------------------------------------------
+; Floating-point Do +Loop
+
+ .section bss
+DoFData: .fill 5*2*FDim ; index & limit, should be in RAM
+ .endsection bss
+
+ FHdr "FI'",NN ; ( r: r1 r2 -- r1 ) ( F: -- r1 )  get float loop limit
+FIQuote:	lda #1
+		bne FIA
+	FEnd
+
+ FHdr "FJ",NN ; ( r: r1 r2 r3 -- r1 r2 r3 ) ( F: -- r1 )  get 2nd float loop index
+FJ:		lda #2
+		bne FIA
+	FEnd
+
+ FHdr "FI",NN ; ( r: r -- r ) ( F: -- r )  get float loop index
+FI:		lda #0
+FIA:		jsr DoFGetPtr
+		jmp FAt_YA
+	FEnd
+
+
+DoFGetPtr: ; get ptr to DoFData entry
+	; in: A=entry index
+	; out: YA=ptr
+		clc
+		adc DoStkIndex
+		sta tmp1+0
+		asl a
+		asl a
+		adc tmp1+0
+		adc #<DoFData
+		pha
+		lda #0
+		adc #>DoFData
+		tay
+		pla
+		rts
+
+
+ FHdr "FDo",IM+NN ; ( F: rlimit rstart -- )  start float DO loop
+FDo:	
+		dec DoStkIndex		; alloc DO stack entry
+		ldy DoStkIndex
+		bmi _TooDeep
+
+		jsr Do_Leave_Init
+
+		lda #<_Runtime
+		ldy #>_Runtime
+		jsr Jsr_Comma_YA	; compile jsr _Runtime
+
+		jsr Here		; remember loop body start addr
+
+		lda #<FDo		; identifier
+		jmp PushZA
+					; ( saved_DoLeave loopback_Addr id )
+
+_TooDeep:	lda #$100+err_DoLoop_TooDeep
+		jsr ThrowA
+
+_Runtime:
+		lda #0		; store index
+		jsr DoFGetPTr
+		jsr FStore_YA
+		lda #1		; store limit
+		jsr DoFGetPtr
+		jmp FStore_YA
+
+
+ FHdr "F+Loop",IM+NN ; ( F: r -- )  end FDO loop
+FPlusLoop:
+		lda #<_Runtime		; compile JSR _Runtime
+		ldy #>_Runtime
+		jsr Jsr_Comma_YA
+
+		lda #<FDo		; check id
+		jsr Loop_End_3
+
+		lda #>FUnloop
+		ldy #<FUnloop
+		jmp Jsr_Comma_A		; compile jsr FUnloop
+	FEnd
+
+_Runtime:
+		jsr FI		; add step
+		jsr FPlus
+		jsr FIQuote	; compare
+		jsr FCmpA
+		bpl _RunDone
+		inc fp		; FDrop limit
+		lda #0		; store new index
+		jsr DoFGetPtr
+		jsr FStore_YA
+		clv		; signal loop back
+		rts
+
+_RunDone:	inc fp		; FDrop limit
+		inc fp		; FDrop index
+		sev		; signal loop exit
+		rts
+
+ FHdr "FUnloop",0 ( F: -- )  discard
+FUnloop:	inc DoStkIndex
+	FEnd
+		rts
+
+ .endif ; fpdo
+
+
+ .if "fpieee" in TALI_OPTIONAL_WORDS ;-------------------------------------------------
 
 ; --------------------------------------------------------------------------------
 ; 32-bit IEEE single-precision number format:
@@ -3404,11 +3593,11 @@ SFStore_YA:	sta tmp2+0		; save
   ; sf-addr is the first single-float-aligned address greater than or equal to addr. 
   ; https://forth-standard.org/standard/float/SFALIGNED
   ; Even though 6502 doesn't care, should we align to make structures compatible to other machines?
-;SFAligned:	lda DStack+0,x
-;		and #3
-;		beq _9
-;		jsr One_Plus
-;		jmp SFAligned
+;SFAligned:	lda #4-1
+;		jsr Plus_A
+;		lda DStack+0,x
+;		and #$fc
+;		sta STack+0,x
 ;	FEnd
 ;_9:		rts
 
@@ -3606,11 +3795,11 @@ _shifta:	asl a
   ; df-addr is the first double-float-aligned address greater than or equal to addr. 
   ; https://forth-standard.org/standard/float/DFALIGNED
   ; Even though 6502 doesn't care, should we align to make structures compatible to other machines?
-;DFAligned:	lda DStack+0,x
-;		and #7
-;		beq _9
-;		jsr One_Plus
-;		jmp DFAligned
+;DFAligned:	lda #8-1
+;		jsr Plus_A
+;		lda DStack+0,x
+;		and #$f8
+;		sta DStack+0,x
 ;	FEnd
 ;_9:		rts
 
@@ -3631,203 +3820,9 @@ DFloats:	lda #3
 
  .endif ; "fpieee"
 
-; ----------------------------------------------------------------------
- FHdr "FKey",NN , ( F: -- r )  get float from console
-  ; Not standard, but useful for application programs
-FKey:	;	lda base		; save base
-	;	pha
-	;	jsr Decimal
-		jsr Here		; ( addr )
-		jsr Here		; ( addr addr )
-		lda #40			; ( addr addr 40 )
-		jsr PushZA
-		jsr Accept		; ( addr len )
-		jsr ToFloat		; ( true | false)
-	;	pla			; restore base
-	;	sta base
-		inx			; err?
-		inx
-		lda DStack-2,x
-		beq _err
-		rts
 
-_err:		jsr SLiteral_runtime
-		  jmp +
-		  .text " ? "
-+		jsr Type
-		jmp FKey
-
-; -----------------------------------------------------------------------
-
- .if 0 ; these don't seem very useful
-
- FHdr "F>R",R6 ; ( F: r -- ) ( r: -- r )
-FToR:		pla		; save RTS addr
-		sta tmp1+0
-		pla
-		sta tmp1+1
-
-		ldy fp
-		lda FSExp,y
-		pha
-		lda FSMant0,y
-		pha
-		lda FSMant1,y
-		pha
-		lda FSMant2,y
-		pha
-		lda FSMant3,y
-		pha
-		inc fp		; FDrop
-
-		lda tmp1+1	; restore RTS addr
-		pha
-		lda tmp1+0
-		pha
-	FEnd
-		rts
-
- FHdr "FR>",R6 ; ( r: r -- ) ( F: -- r )
-FRTo:		pla		; save rts addr
-		sta tmp2+0
-		pla
-		sta tmp2+1
-
-		jsr FAllocX	; alloc FP stack entry & set X
-		pla
-		sta FSMant3,x
-		pla
-		sta FSMant2,x
-		pla
-		sta FSMant1,x
-		pla
-		sta FSMant0,x
-		pla
-		sta FSExp,x
-		ldx tmp1	; restore data stack index
-
-		lda tmp2+1	; restore RTS addr
-		pha
-		lda tmp2+0
-		pha
-	FEnd
-		rts
-
- .endif ; 0
-
-
- .if "fpdo" in TALI_OPTIONAL_WORDS
-
-DoFData: .fill 5*2*FDim ; index & limit, should be in RAM
-
- FHdr "FI'",NN ; ( r: r1 r2 -- r1 ) ( F: -- r1 )  get float loop limit
-FIQuote:	lda #1*5
-		bne FIA
-	FEnd
-
- FHdr "FJ",NN ; ( r: r1 r2 r3 -- r1 r2 r3 ) ( F: -- r1 )  get 2nd float loop index
-FJ:		lda #2*5
-		bne FIA
-	FEnd
-
- FHdr "FI",NN ; ( r: r -- r ) ( F: -- r )  get float loop index
-FI:		lda #0
-FIA:		jsr DoFGetPtr
-		jmp FAt_YA
-	FEnd
-
-
-DoFGetPtr: ; get ptr to DoFData entry
-	; in: A=entry offset
-	; out: YA=ptr
-		sta tmp1+0
-		lda DoStkIndex
-		asl a
-		asl a
-		adc DoStkIndex
-		asl a
-		adc tmp1+0
-		adc #<DoFData
-		pha
-		lda #0
-		adc #>DoFData
-		tay
-		pla
-		rts
-
-
- FHdr "FDo",IM+NN ; ( F: rlimit rstart -- )  start float DO loop
-FDo:	
-		dec DoStkIndex		; alloc DO stack entry
-		ldy DoStkIndex
-		bmi _TooDeep
-
-		jsr Do_Leave_Init
-
-		lda #<_Runtime
-		ldy #>_Runtime
-		jsr Jsr_Comma_YA	; compile jsr _Runtime
-
-		jsr Here		; remember loop body start addr
-
-		lda #<FDo		; identifier
-		jmp PushZA
-					; ( saved_DoLeave loopback_Addr id )
-
-_TooDeep:	lda #$100+err_DoLoop_TooDeep
-		jsr ThrowA
-
-_Runtime:
-		lda #0		; store index
-		jsr DoFGetPTr
-		jsr FStore_YA
-		lda #1		; store limit
-		jsr DoFGetPtr
-		jmp FStore_YA
-
-
- FHdr "F+Loop",IM+NN ; ( F: r -- )  end FDO loop
-FPlusLoop:
-		lda #<_Runtime		; compile JSR _Runtime
-		ldy #>_Runtime
-		jsr Jsr_Comma_YA
-
-		lda #<FDo		; check id
-		jsr Loop_End_3
-
-		lda #>FUnloop
-		ldy #<FUnloop
-		jmp Jsr_Comma_A		; compile jsr FUnloop
-	FEnd
-
-_Runtime:
-		jsr FI		; add step
-		jsr FPlus
-		jsr FIQuote	; compare
-		jsr FCmpA
-		bpl _RunDone
-		inc fp		; FDrop limit
-		lda #0		; store new index
-		jsr DoFGetPtr
-		jsr FStore_YA
-		clv		; signal loop back
-		rts
-
-_RunDone:	inc fp		; FDrop limit
-		inc fp		; FDrop index
-		sev		; signal loop exit
-		rts
-
- FHdr "FUnloop",0 ( F: -- )  discard
-FUnloop:	inc DoStkIndex
-	FEnd
-		rts
-
- .endif ; fpdo
-
-
- .if "fptrancendentals" in TALI_OPTIONAL_WORDS
-; Float transendental functions ----------------------------------------
+ .if "fptrancendentals" in TALI_OPTIONAL_WORDS ;------------------------------------------
+; Float transendental functions
 
 ; -------------------------------------------------------------
 ; minimax
@@ -3835,7 +3830,7 @@ FUnloop:	inc DoStkIndex
 ; http://www.research.scea.com/gdc2003/fast-math-functions.html
 
 
- FHdr "FMPoly",NN ; ( YA=^tbl -- ) ( F: rx -- rx rpoly )  \ shared polynomial evaluation
+ FHdr "FMPoly",NN ; ( YA=^tbl -- ) ( F: rx -- rx rpoly )  shared polynomial evaluation
 FMPoly:		jsr PopYA
 FMPolyYA:	jsr PushYA		; push coefficent addr
 		jsr FAt_YA		; fetch 1st coefficent
@@ -3864,6 +3859,7 @@ FLog2M1M:	lda #<_c
 		ldy #>_c
 		jsr FMPolyYA
 		jmp FStar
+	FEnd
 
 _c: ; #define GTE_C_LOG2_DEG7_MAX_ERROR 3.2546531700261561e-7
 		FloatLit $7C97CFCC,-6 ;C7 +1.5209108363023915e-02
@@ -3874,7 +3870,6 @@ _c: ; #define GTE_C_LOG2_DEG7_MAX_ERROR 3.2546531700261561e-7
 		FloatLit $A3C4E107,0  ;C2 -7.2055423726162360e-01
 		FloatLit $5C54A591,1  ;C1 +1.4426664401536078
 		.word 0
-	FEnd
 
  FHdr "FLog2",NN ; ( F: r1 -- r2 )  base 2 log
 FLog2:		ldy fp
@@ -3934,11 +3929,11 @@ FExp2M1M:	lda #<_c
 	FEnd
 
 _c: ; GTE_C_EXP2_DEG5_MAX_ERROR 1.3162098333463490e-7
-		FloatLit $7C4FDCDa,-9 ;C5 1.8968500441332026e-03
-		FloatLit $494CCAD6,-6 ;C4 8.9477503096873079e-03
-		FloatLit $726442f0,-4 ;C3 5.5855296413199085e-02
-		FloatLit $7AF49044,-2 ;C2 2.4014712313022102e-01
-		FloatLit $58B93C9b,0  ;C1 6.9315298010274962e-01
+		FloatLit $7C4FDCe7,-9 ;C5 1.8968500441332026e-03
+		FloatLit $494CCADe,-6 ;C4 8.9477503096873079e-03
+		FloatLit $726442fb,-4 ;C3 5.5855296413199085e-02
+		FloatLit $7AF49050,-2 ;C2 2.4014712313022102e-01
+		FloatLit $58B93Ca2,0  ;C1 6.9315298010274962e-01
 		.byte 0
 
  FHdr "FExp2",NN ; ( F: r1 -- r2 )  base 2 exponential
@@ -3972,7 +3967,7 @@ FExpM1:		jsr FExp
  FHdr "FALog",NN ; ( F: r1 -- r2 )  base 10 (common) exponential
   ; Raise ten to the power r1, giving r2. 
   ; https://forth-standard.org/standard/float/FALOG
-FALog:		FloatLitI $6a4d3c20,2	;1/log(2)
+FALog:		FloatLitI $6a4d3c25,2	;1/log(2)
 		jsr FStar
 		jmp FExp2
 	FEnd
@@ -4099,7 +4094,14 @@ _fix4:		jsr F2Pi
 	FEnd
  .endif
 
- FHdr "FSinM",NN ; ( F: r1 -- r2 )   sin(x) for x in [-pi/2,pi/2].
+ FHdr "FSin",NN ; ( F: r1 -- r2 )  sine
+  ; https://forth-standard.org/standard/float/FSIN
+  ; Range reduction for x outside [-pi/2,pi/2] is obtained using periodicity and trigonometric identities.
+FSin:		jsr FAReduce
+		jmp FSinM
+	FEnd
+
+; FHdr "FSinM",NN ; ( F: r1 -- r2 )   sin(x) for x in [-pi/2,pi/2].
   ; Minimax polynomial approximation
 FSinM:		jsr FDup
 		jsr FSqr	; x x^2
@@ -4109,20 +4111,18 @@ FSinM:		jsr FDup
 		jsr FStar
 		jsr F1Plus	; C0 +1.0
 		jmp FStar
-	FEnd
+;	FEnd
 
 _c: ; GTE_C_SIN_DEG9_MAX_ERROR 5.2010746265374053e-9
-		FloatLit $5721a7a6,-18	;C4 +2.5967200279475300e-06
-		FloatLit $982a0b4e,-12	;C3 -1.9805100675274190e-04
-		FloatLit $44438f3c,-6	;C2 +8.3329962509886002e-03
-		FloatLit $aaaaae37,-2	;C1 -1.6666656235308897e-01
+		FloatLit $5721a7ba,-18	;C4 +2.5967200279475300e-06
+		FloatLit $982a0b3a,-12	;C3 -1.9805100675274190e-04
+		FloatLit $44438f4c,-6	;C2 +8.3329962509886002e-03
+		FloatLit $aaaaae2b,-2	;C1 -1.6666656235308897e-01
 		.byte 0
 
- FHdr "FSin",NN ; ( F: r1 -- r2 )  sine
-  ; https://forth-standard.org/standard/float/FSIN
-  ; Range reduction for x outside [-pi/2,pi/2] is obtained using periodicity and trigonometric identities.
-FSin:		jsr FAReduce
-		jmp FSinM
+ FHdr "FCsc",NN ; ( r1 -- r2 )  CoSecant
+FCsc:		jsr FSin
+		jmp F1Slash		; 1/SIN(r1)
 	FEnd
 
  FHdr "FCos",NN ; ( F: r1 -- r2 )  cosine
@@ -4130,6 +4130,11 @@ FSin:		jsr FAReduce
 FCos:		jsr FPiH
 		jsr FPlus
 		jmp FSin
+	FEnd
+
+ FHdr "FSec",NN ; ( F: r1 -- r2 )  Secant
+FSec:		jsr FCos
+		jmp F1Slash		; 1/COS(r1)
 	FEnd
 
  FHdr "FSinCos",NN ; ( F: r1 -- r2 r3 )
@@ -4141,26 +4146,6 @@ FSinCos:	jsr FDup
 		jmp FCos
 	FEnd
 
-
- FHdr "FTanM",NN ; ( F: r1 -- r2 )  tan(x) for x in [-pi/4,pi/4].
-  ; Minimax polynomial approximation
-FTanM:		jsr FDup
-		jsr FSqr		; x x^2
-		lda #<_c
-		ldy #>_c
-		jsr FMPolyYA
-		jsr FStar
-		jsr F1Plus		; c0 1.0
-		jmp FStar
-	FEnd
-
-_c: ; GTE_C_TAN_DEG11_MAX_ERROR 1.5426257940140409e-7
-		FloatLit $584DAE1E,-5 ;C5 2.1558456793513869e-02
-		FloatLit $57EB0A51,-6 ;C4 1.0732193237572574e-02
-		FloatLit $7714D998,-4 ;C3 5.8145237645931047e-02
-		FloatLit $43EA10F9,-2 ;C2 1.3264516053824593e-01
-		FloatLit $5557E21B,-1 ;C1 3.3337224456224224e-01
-		.byte 0
 
  FHdr "FTan",NN ; ( F: r1 -- r2 )  tangent
   ; https://forth-standard.org/standard/float/FTAN
@@ -4189,6 +4174,32 @@ _30:
 		jsr FMinus
 		jsr FTanM
 		jmp F1Slash
+	FEnd
+
+; FHdr "FTanM",NN ; ( F: r1 -- r2 )  tan(x) for x in [-pi/4,pi/4].
+  ; Minimax polynomial approximation
+FTanM:		jsr FDup
+		jsr FSqr		; x x^2
+		lda #<_c
+		ldy #>_c
+		jsr FMPolyYA
+		jsr FStar
+		jsr F1Plus		; c0 1.0
+		jmp FStar
+;	FEnd
+
+_c: ; GTE_C_TAN_DEG11_MAX_ERROR 1.5426257940140409e-7
+		FloatLit $584DAE1E,-5 ;C5 2.1558456793513869e-02
+		FloatLit $57EB0A51,-6 ;C4 1.0732193237572574e-02
+		FloatLit $7714D998,-4 ;C3 5.8145237645931047e-02
+		FloatLit $43EA10F9,-2 ;C2 1.3264516053824593e-01
+		FloatLit $5557E21B,-1 ;C1 3.3337224456224224e-01
+		.byte 0
+
+
+ FHdr "FCot",NN ; ( r1 -- r2 )  CoTangent
+FCot:		jsr FTan
+		jmp F1Slash	; =1/TAN(r1)
 	FEnd
 
 
@@ -4226,47 +4237,28 @@ _c: ; GTE_C_ACOS_DEG6_MAX_ERROR 1.8491291330427484e-7
 		FloatLit $6487ED41,1  ;C0 +1.5707963267948966
 		.byte 0
 
+ FHdr "FASec",NN ; ( F: r1 -- r2 )  Inverse Secant
+  ; =ATN(SQR(r1*r1-1))+(SGN(r1)-1)*PI/2
+FASec:		jsr F1Slash
+		jmp FACos
+	FEnd
 
  FHdr "FASin",NN ; ( F: r1 -- r2 )  Inverse sine
   ; https://forth-standard.org/standard/float/FASIN
+  ; An ambiguous condition exists if |r1| is greater than one. 
+  ; ARCSIN(X)=ATN(X/SQR(X*X+1));
 FASin:		jsr FACos
 		jsr FNegate
 		jsr FPiH
 		jmp FPlus
 	FEnd
 
-
-; FHdr "FASin",NN ; ( F: r1 -- r2 )  inverse sine
-;  ; An ambiguous condition exists if |r1| is greater than one. 
-;  ; ARCSIN(X)=ATN(X/SQR(X*X+1));
-;FASin:		jsr FDup
-;		jsr FSqr
-;		jsr F1Plus
-;		jsr FSlash
-;		jmp FATan
-;	FEnd
-
-
- FHdr "FATanM",NN ; ( F: r1 -- r2 )  atan(x) for x in [-1,1].
-  ; Minimax polynomial approximation
-FATanM:		jsr FDup		; x x
-		jsr FSqr		; x xsqr
-		lda #<_c
-		ldy #>_c
-		jsr FMPolyYA
-		jsr FStar		; x poly
-		jsr F1Plus		; x poly
-		jmp FStar
+ FHdr "FACsc",NN ; ( F: r1 -- r2 )  Inverse CoSecant
+  ; =ATN(1/SQR(r1*r1-1))+(SGN(r1)-1)*PI/2;
+FACsc:		jsr F1Slash
+		jmp FASin
 	FEnd
 
-_c: ; GTE_C_ATAN_DEG13_MAX_ERROR 3.5859104691865484e-7
-		FloatLit $762D0898,-7 ;C6 +7.2128853633444123e-03
-		FloatLit $B832A155,-4 ;C5 -3.5059680836411644e-02
-		FloatLit $53A2D7A8,-3 ;C4 +8.1675882859940430e-02
-		FloatLit $BB8591BE,-2 ;C3 -1.3374657325451267e-01
-		FloatLit $65AA6506,-2 ;C2 +1.9856563505717162e-01
-		FloatLit $AAB02112,-1 ;C1 -3.3324998579202170e-01
-		.byte 0
 
  FHdr "FATan",NN ; ( F: r1 -- r2 )  Inverse tangent
   ; https://forth-standard.org/standard/float/FATAN
@@ -4288,6 +4280,38 @@ FATan:
 		bpl _18
 		jsr FNegate
 _18:		jmp FPlus
+
+; FHdr "FATanM",NN ; ( F: r1 -- r2 )  atan(x) for x in [-1,1].
+  ; Minimax polynomial approximation
+FATanM:		jsr FDup		; x x
+		jsr FSqr		; x xsqr
+		lda #<_c
+		ldy #>_c
+		jsr FMPolyYA
+		jsr FStar		; x poly
+		jsr F1Plus		; x poly
+		jmp FStar
+;	FEnd
+
+_c: ; GTE_C_ATAN_DEG13_MAX_ERROR 3.5859104691865484e-7
+		FloatLit $762D0898,-7 ;C6 +7.2128853633444123e-03
+		FloatLit $B832A155,-4 ;C5 -3.5059680836411644e-02
+		FloatLit $53A2D7A8,-3 ;C4 +8.1675882859940430e-02
+		FloatLit $BB8591BE,-2 ;C3 -1.3374657325451267e-01
+		FloatLit $65AA6506,-2 ;C2 +1.9856563505717162e-01
+		FloatLit $AAB02112,-1 ;C1 -3.3324998579202170e-01
+		.byte 0
+
+ FHdr "FACot",NN ; ( F: r1 -- r2 )  Inverse CoTangent
+  ;  =-ATN(r1)+PI/2
+FACot:		jsr F1Slash
+		jmp FATan
+
+;		jsr FPiH
+;		jsr Swap
+;		jsr FATan
+;		jmp FMinus
+	FEnd
 
 
  FHdr "FATan2",NN ; ( F: ry rx -- r3 )  2 parameter inverse tangent
@@ -4325,103 +4349,43 @@ _rxzero:	inc fp		; FDrop rx
 	FEnd
 
 
- .if 0
+ FHdr "FSgn",NN ; ( F: r1 -- r2 )  signum, returns 1,0,-1
+FSgn:		ldy fp
+		lda FSMant0,y
+		beq _zero
+		inc fp
+		lda FSMant0,y
+		bmi FM1
+		jmp F1
 
- FHdr "FCsc",NN ; ( r1 -- r2 )  CoSecant
-FCsc:		jsr FSin
-		jmp F1Slash		; 1/SIN(r1)
+_zero:		rts
 	FEnd
 
- FHdr "FSec",NN ; ( F: r1 -- r2 )  Secant
-FSec:		jsr FCos
-		jmp F1Slash		; 1/COS(r1)
-	FEnd
-
- FHdr "FCot",NN ; ( r1 -- r2 )  CoTangent
-FCot:		jsr FTan
-		jmp F1Slash	; =1/TAN(r1)
-	FEnd
+; FHdr "-1.e",NN ; ( F: -- r )  return -1
+FM1:		lda #$80
+		ldy #0
+		jmp FLitYA
+;	FEnd
 
 
- FHdr "FASec",NN ; ( F: r1 -- r2 )  Inverse Secant
-  ; =ATN(SQR(r1*r1-1))+(SGN(r1)-1)*PI/2
-FASec:		jsr FDup		; X X
-		jsr FSqr		; X X*X
-		jsr F1Minus-		; X X*X-1
-		jsr FSqrt		; X Sqrt(X*X-1)
-		jsr FAtn		; X Atn(Sqrt(X*X-1))
+ .if "fphyperbolic" in TALI_OPTIONAL_WORDS ;--------------------------------------------
+
+ FHdr "FSinH",NN ; ( F: r1 -- r2 )  Hyperbolic sine
+  ; =(EXP(r1)-EXP(-r1))/2
+  ; https://forth-standard.org/standard/float/FSINH
+FSinH:		jsr FDup
+		jsr FExp
 		jsr FSwap
-		jsr FSgn
-		jsr F1Minus
-		jsr FPiH
-		jsr FStar
-		jmp FPlus
-	FEnd
-
- FHdr "FACsc",NN ; ( F: r1 -- r2 )  Inverse CoSecant
-  ; =ATN(1/SQR(r1*r1-1))+(SGN(r1)-1)*PI/2;
-FACsc:		jsr FDup
-		jsr FSqr
-		jsr F1Minus
-		jsr FSqrt
-		jsr F1Slash
-		jsr FAtn
-		jsr FSwap
-		jsr FSgn
-		jsr F1Minus
-		jsr FPiH
-		jsr FStar
-		jmp FPlus
-	FEnd
-
- FHdr "FACot",NN ; ( F: r1 -- r2 )  Inverse CoTangent
-  ;  =-ATN(r1)+PI/2
-FACot:		jsr FAtn
 		jsr FNegate
-		jsr FPiH
-		jmp FPlus
-	FEnd
-
-  .endif
-
- .if "fphyperbolic" in TALI_OPTIONAL_WORDS
-
- FHdr "FACosH",NN ; ( F: r1 -- r2 )  inverse hyperbolic cosine
-  ; An ambiguous condition exists if r1 is less than one. 
-  ; =LOG(X+SQR(X*X-1))
-  ; https://forth-standard.org/standard/float/FACOSH
-FACosH:		jsr FDup
-		jsr FSqr
-		jsr F1Minus
-		jsr FSqrt
-		jsr FPlus
-		jmp FLog
-	FEnd
-
- FHdr "FASinH",NN ; ( F: r1 -- r2 )  Inverse hyperbolic sine
-  ; r2 is the floating-point value whose hyperbolic sine is r1.
-  ; An ambiguous condition exists if r1 is less than zero. 
-  ; =LOG(X+SQR(X*X+1))
-  ; https://forth-standard.org/standard/float/FASINH
-FASinH:		jsr FDup
-		jsr FSqr
-		jsr F1Plus
-		jsr FSqrt
-		jsr FPlus
-		jmp FLog
-	FEnd
-
- FHdr "FATanH",NN ; ( F: r1 -- r2 )  Inverse hyperbolic tangent
-  ;  r2 is the floating-point value whose hyperbolic tangent is r1.
-  ; An ambiguous condition exists if r1 is outside the range of -1E0 to 1E0. 
-  ; =LOG((1+X)/(X))/2
-  ; https://forth-standard.org/standard/float/FATANH
-FAtanH:		jsr FDup
-		jsr F1Plus
-		jsr FSwap
-		jsr FSlash
-		jsr FLog
+		jsr FExp
+		jsr FMinus
 		jmp F2Slash
+	FEnd
+
+ FHdr "FCscH",NN ; ( F: r1 -- r2 )  Hyperbolic cosecant
+  ; =2/(EXP(r1)-EXP(-r1))
+FCscH:		jsr FSinH
+		jmp F1Slash
 	FEnd
 
  FHdr "FCosH",NN ; ( F: r1 -- r2 )  Hyperbolic cosine
@@ -4437,29 +4401,10 @@ FCosH:		jsr FDup
 		jmp F2Slash
 	FEnd
 
- FHdr "FSinH",NN ; ( F: r1 -- r2 )  Hyperbolic sine
-  ; =(EXP(r1)-EXP(-r1))/2
-  ; https://forth-standard.org/standard/float/FSINH
-FSinH:		jsr FDup
-		jsr FExp
-		jsr FSwap
-		jsr FNegate
-		jsr FExp
-		jsr FMinus
-		jmp F2Slash
-	FEnd
-
  FHdr "FSecH",NN ; ( F: r1 -- r2 )  Hyperbolic secant
   ; =2/(EXP(r1)+EXP(-r1))
-FSecH:		jsr F2
-		jsr FSwap
-		jsr FDup
-		jsr FExp
-		jsr FSwap
-		jsr FNegate
-		jsr FExp
-		jsr FPlus
-		jmp FSlash
+FSecH:		jsr FCosH
+		jmp F1Slash
 	FEnd
 
  FHdr "FTanH",NN ; ( F: r1 -- r2 )  Hyperbolic tangent
@@ -4473,78 +4418,78 @@ FTanH:		jsr FDup
 		jsr FOver	; Exp(-X) Exp(X) Exp(-X)
 		jsr FPlus	; Exp(-X) Exp(X)+Exp(-X)
 		jsr FSlash	; Exp(-X)/(Exp(X)+Exp(-X))
-		jsr F2Star	; Exp(-X)/(Exp(X)+Exp(-X)) -2
+		jsr F2Star	; Exp(-X)/(Exp(X)+Exp(-X))*2
+		jsr FNegate
 		jmp F1Plus
 	FEnd
 
  FHdr "FCotH",NN ; ( F: r1 -- r2 )  Hyperbolic cotangent
   ; = EXP(-r1)/(EXP(r1)-EXP(-r1))*2+1
-FCotH:		jsr FDup	; X X
-		jsr FNegate	; X -X
-		jsr FExp	; X Exp(-X)
-		jsr FSwap	; Exp(-X) X
-		jsr FExp	; Exp(-X) Exp(X)
-		jsr FOver	; Exp(-X) Exp(X) Exp(-X)
-		jsr FMinus	; Exp(-X) Exp(X)-Exp(-X)
-		jsr FSlash	; Exp(-X)/(Exp(X)-Exp(-X))
-		jsr F2Star	; Exp(-X)/(Exp(X)-Exp(-X))*2
-		jmp F1Plus
+FCotH:		jsr FTanH
+		jmp F1Slash
 	FEnd
 
- FHdr "FCscH",NN ; ( F: r1 -- r2 )  Hyperbolic cosecant
-  ; =2/(EXP(r1)-EXP(-r1))
-FCscH:		jsr FDup
-		jsr FExp
-		jsr FSwap
-		jsr FNegate
-		jsr FExp
-		jsr FMinus
-		jsr F2
-		jsr FSwap
-		jmp FSlash
-	FEnd
 
- FHdr "FSecH",NN ; ( F: r1 -- r2 )  Inverse hyperbolic secant
-  ; =LOG((SQR(r1*r1+1)+1)/r1)
-FSecH:		jsr FDup
-		jsr FSqr
-		jsr F1Plus
-		jsr FSqrt
-		jsr F1Plus
-		jsr FSwap
-		jsr FSlash
-		jmp FLog
+ FHdr "FASinH",NN ; ( F: r1 -- r2 )  Inverse hyperbolic sine
+  ; r2 is the floating-point value whose hyperbolic sine is r1.
+  ; An ambiguous condition exists if r1 is less than zero. 
+  ; =LOG(X+SQR(X*X+1))
+  ; https://forth-standard.org/standard/float/FASINH
+FASinH:		jsr FDup	; X X
+		jsr FSqr	; X X*X
+		jsr F1Plus	; X X*X+1
+		jsr FSqrt	; X sqrt(X*X+1)
+		jsr FPlus	; 
+		jmp FLn
 	FEnd
 
  FHdr "FACscH",NN ; ( F: r1 -- r2 )  Inverse hyperbolic cosecant
   ; =LOG((SGN(r1)*SQR(r1*r1+1)+1)/r1)
-FACscH:	jsr FDup
-		jsr FDup
-		jsr FSgn
-		jsr FSwap
+FACscH:		jsr F1Slash
+		jmp FASinH
+	FEnd
+
+ FHdr "FACosH",NN ; ( F: r1 -- r2 )  inverse hyperbolic cosine
+  ; An ambiguous condition exists if r1 is less than one. 
+  ; =LOG(X+SQR(X*X-1))
+  ; https://forth-standard.org/standard/float/FACOSH
+FACosH:		jsr FDup
 		jsr FSqr
-		jsr FOnePlus
+		jsr F1Minus
 		jsr FSqrt
-		jsr FStar
-		jsr F1Plus
+		jsr FPlus
+		jmp FLn
+	FEnd
+
+ FHdr "FASecH",NN ; ( F: r1 -- r2 )  Inverse hyperbolic secant
+  ; =LOG((SQR(X*X+1)+1)/X)
+FASecH:		jsr F1Slash
+		jmp FACosH
+	FEnd
+
+ FHdr "FATanH",NN ; ( F: r1 -- r2 )  Inverse hyperbolic tangent
+  ;  r2 is the floating-point value whose hyperbolic tangent is r1.
+  ; An ambiguous condition exists if r1 is outside the range of -1E0 to 1E0. 
+  ; =LOG((1+X)/(1-X))/2
+  ; https://forth-standard.org/standard/float/FATANH
+FAtanH:		jsr FDup	; x x
+		jsr F1Plus	; x x+1
+		jsr FSwap	; 1+x x
+		jsr F1
 		jsr FSwap
-		jsr FSlash
-		jmp FLog
+		jsr FMinus	; 1+x 1-x
+		jsr FSlash	; (1+x)/(1-x)
+		jsr FLn
+		jmp F2Slash
 	FEnd
 
  FHdr "FACotH",NN ; ( F: r1 -- r2 )  Inverse hyperbolic cotangent
   ; =LOG((r1+1)/(r1-1))/2
-FACotH: 	jsr FDup
-		jsr F1Plus
-		jsr FSwap
-		jsr F1Minus
-		jsr FSlash
-		jsr FLog
-		jmp F2Slash
+FACotH: 	jsr F1Slash
+		jmp FATanH
 	FEnd
 
-
- .endif ; fphyperbolic"
+ .endif ; fphyperbolic
 
  .endif ; fptransendentals
 
@@ -6268,7 +6213,7 @@ _size9:					; ( xt u )
 _FlagLabels:	.text "COANIMNNUF__R6__"
 
 
-.if "wordlist" in TALI_OPTIONAL_WORDS
+.if "wordlist" in TALI_OPTIONAL_WORDS ;------------------------------------------------
 
  FHdr "Forth-WordList",NN ; ( -- u ) "WID for the Forth Wordlist"
   ; ## "forth-wordlist"  auto  ANS search
@@ -6307,7 +6252,7 @@ Root_WordList:	lda #wid_Root
 	FEnd
 
 
- FHdr "Only",NN ; ( -- ) "Set search order to minimum wordlist"
+ FHdr "Only",NN ; ( -- )  Set search order to minimum wordlist
   ; ## "only"  auto  ANS search ext
   ; https://forth-standard.org/standard/search/ONLY
 Only:		jsr True	; Push -1
@@ -6315,7 +6260,7 @@ Only:		jsr True	; Push -1
 	FEnd
 
 
- FHdr "Also",NN ; ( -- ) "Make room in the search order for another wordlist"
+ FHdr "Also",NN ; ( -- )  Make room in the search order for another wordlist
   ; ## "also"  auto  ANS search ext
   ; http://forth-standard.org/standard/search/ALSO
 Also:		jsr Get_Order
@@ -6326,7 +6271,7 @@ Also:		jsr Get_Order
 	FEnd
 
 
- FHdr "Previous",NN ; ( -- ) "Remove the first wordlist in the search order"
+ FHdr "Previous",NN ; ( -- )  Remove the first wordlist in the search order
   ; ## "previous"	 auto  ANS search ext
   ; http://forth-standard.org/standard/search/PREVIOUS
 Previous:	jsr Get_Order
@@ -6336,7 +6281,7 @@ Previous:	jsr Get_Order
 	FEnd
 
 
- FHdr ">Order",NN ; ( wid -- ) "Add wordlist at beginning of search order"
+ FHdr ">Order",NN ; ( wid -- )  Add wordlist at beginning of search order
   ; ## ">order"  tested  Gforth search
   ; https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Word-Lists.html
 To_Order:
@@ -6352,7 +6297,7 @@ To_Order:
 	FEnd
 
 
- FHdr "Order",NN ; ( -- ) "Print current word order list and current WID"
+ FHdr "Order",NN ; ( -- )  Print current word order list and current WID
   ; ## "order"  auto  ANS core
   ; https://forth-standard.org/standard/search/ORDER
   ; Note the search order is displayed from first search to last
@@ -6436,7 +6381,7 @@ _wid_Table: ; string names (see strings.asm) indexed by the WID if < 4 .
 	  .cerror wid_Root!=3
 
 
- FHdr "Forth",NN ; ( -- ) "Replace first WID in search order with Forth-Wordlist"
+ FHdr "Forth",NN ; ( -- )  Replace first WID in search order with Forth-Wordlist
   ; ## "forth"  auto  ANS search ext
   ; https://forth-standard.org/standard/search/FORTH
 Forth:		lda #wid_Forth
@@ -6445,7 +6390,7 @@ Forth:		lda #wid_Forth
 		rts
 
 
- FHdr "Definitions",NN ; ( -- ) "Make first wordlist in search order the current wordlist"
+ FHdr "Definitions",NN ; ( -- )  Make first wordlist in search order the current wordlist
   ; ## "definitions" auto ANS search
 Definitions:	lda Search_OrderV	; Transfer SEARCH_ORDER[0] to
 		sta CurrentV		;   byte variable CURRENT.
@@ -6453,7 +6398,7 @@ Definitions:	lda Search_OrderV	; Transfer SEARCH_ORDER[0] to
 		rts
 
 
- FHdr "WordList",NN ; ( -- wid ) "Create new wordlist"
+ FHdr "WordList",NN ; ( -- wid )  Create new wordlist
   ; ## "wordlist" auto ANS search
   ; From pool of 8.
   ; https://forth-standard.org/standard/search/WORDLIST
@@ -6472,7 +6417,7 @@ WordList:
 	FEnd
 
 
- FHdr "Search-Wordlist",UF+NN ; ( caddr u wid -- 0 | xt 1 | xt -1) "Search for a word in a wordlist"
+ FHdr "Search-Wordlist",UF+NN ; ( caddr u wid -- 0 | xt 1 | xt -1)  Search for a word in a wordlist
   ; ## "search-wordlist" auto ANS search
   ; https://forth-standard.org/standard/search/SEARCH_WORDLIST
 Search_WordList:
@@ -6527,18 +6472,18 @@ _fail: ; not found
 	FEnd
 
 
- FHdr "Set-Current",0 ; ( wid -- ) "Set the compilation wordlist"
+ FHdr "Set-Current",0 ; ( wid -- )  Set the compilation wordlist
   ; ## "set-current" auto ANS search
-  ; """https://forth-standard.org/standard/search/SET-CURRENT"""
+  ; https://forth-standard.org/standard/search/SET-CURRENT
 Set_Current:	jsr PopA	; pop wid
 		sta CurrentV	; only the LSB is used.
 	FEnd
 		rts
 
 
- FHdr "Get-Current",NN ; ( -- wid ) "Get the id of the compilation wordlist"
+ FHdr "Get-Current",NN ; ( -- wid )  Get the id of the compilation wordlist 
   ; ## "get-current" auto ANS search
-  ; """https://forth-standard.org/standard/search/GET-CURRENT"""
+  ; https://forth-standard.org/standard/search/GET-CURRENT
 Get_Current:
 		; This is a little different than some of the variables
 		; in the user area as we want the value rather than
@@ -6548,7 +6493,7 @@ Get_Current:
 	FEnd
 
 
- FHdr "Set-Order",0 ; ( wid_n .. wid_1 n -- ) "Set the current search order"
+ FHdr "Set-Order",0 ; ( wid_n .. wid_1 n -- )  Set the current search order
   ; ## "set-order" auto ANS search
   ; https://forth-standard.org/standard/search/SET-ORDER
 Set_Order:
@@ -6594,9 +6539,9 @@ _done:
 		rts
 
 
- FHdr "Get-Order",NN ; ( -- wid_n .. wid_1 n) "Get the current search order"
+ FHdr "Get-Order",NN ; ( -- wid_n .. wid_1 n)  Get the current search order
   ; ## "get-order" auto ANS search
-  ; """https://forth-standard.org/standard/search/GET-ORDER"""
+  ; https://forth-standard.org/standard/search/GET-ORDER
 Get_Order:
 		ldy Num_OrderV	; Get #ORDER - the number of wordlists in the search order.
 		beq _done	; If zero, there are no wordlists.
@@ -6609,7 +6554,7 @@ _loop:
 		bne _loop		; See if that was the last one to process (first in the list).
 _done:
 
-		lda Num_OrderV		; Put the number of items on the stack.
+		lda Num_OrderV		; Push the number of items
 		jmp PushZA
 	FEnd
 
@@ -6619,7 +6564,7 @@ _done:
  .endsection code
 
 
-.if "block" in TALI_OPTIONAL_WORDS
+.if "block" in TALI_OPTIONAL_WORDS ;------------------------------------------------
 
  .section bss
 ; Block I/O vectors
@@ -6655,7 +6600,7 @@ BlockInit: ; initialize block variables
 .if "ramdrive" in TALI_OPTIONAL_WORDS
 
  .section bss
-RamDriveV: .word ?
+RamDriveV: .word ?	; ptr to RamDrive storage area
  .endsection bss
 
  .section code
@@ -6671,22 +6616,13 @@ io_blk_buffer = 0
 
  .if io_blk_status!=0 ; c65 simulator set up?
 
- FHdr "Block_C65_Init",NN ; ( -- f ) "Initialize c65 simulator block storage"
+ FHdr "Block_C65_Init",NN ; ( -- f )  Initialize c65 simulator block storage
   ; ## "block-c65-init"  auto  Tali block
-  ; """Set up block IO to read/write to/from c65 block file.
+  ; Set up block IO to read/write to/from c65 block file.
   ; Run simulator with a writable block file option
   ; e.g. `touch blocks.dat; c65/c65 -b blocks.dat -r taliforth-py65mon.bin`
-  ; Returns true if c65 block storage is available and false otherwise."""
+  ; Returns true if c65 block storage is available and false otherwise.
 block_c65_init:
-
-                lda #$ff
-                sta io_blk_status
-                lda #0
-                sta io_blk_action
-                lda io_blk_status	; $0 if OK, $ff otherwise
-                eor #$ff		; invert to forth true/false
-                jsr PushAA		; push f
-
                 lda #<c65_blk_read
                 ldy #>c65_blk_read
                 sta BlockReadV+0
@@ -6697,7 +6633,13 @@ block_c65_init:
                 sta BlockWriteV+0
 		sty BlockWriteV+1
 
-		rts
+                lda #$ff
+                sta io_blk_status
+                lda #0
+                sta io_blk_action
+                lda io_blk_status	; $0 if OK, $ff otherwise
+                eor #$ff		; invert to forth true/false
+                jmp PushAA		; push f
 
 
 c65_blk_write: ; ( addr u -- )
@@ -6720,7 +6662,7 @@ c65_blk_rw:     lda 0,x                 ; ( addr blk# )
  .endif ; io_blk_status ; c65 simulator set up?
 
 
- FHdr "Block-RamDrive-Init",UF+NN ; ( u -- ) "Create a ramdrive for blocks"
+ FHdr "Block-RamDrive-Init",UF+NN ; ( u -- )  Create a ramdrive for blocks
   ; ## "block-ramdrive-init"  auto  Tali block
   ; Create a RAM drive, with the given number of
   ; blocks, in the dictionary along with setting up the block words to
@@ -6788,7 +6730,7 @@ RamDrive:	lda RamDriveV+0
 
  .section code
 
- FHdr "BuffStatus",NN ; ( -- addr ) "Push address of variable holding buffer status"
+ FHdr "BuffStatus",NN ; ( -- addr )  Push address of variable holding buffer status
   ; ## "buffstatus"  auto	 Tali block
 BuffStatus:	ldy #>BuffStatusV
 		lda #<BuffStatusV
@@ -6796,7 +6738,7 @@ BuffStatus:	ldy #>BuffStatusV
 	FEnd
 
 
- FHdr "BuffBlockNum",NN ; ( -- addr ) "Push address of variable holding block in buffer"
+ FHdr "BuffBlockNum",NN ; ( -- addr )  Push address of variable holding block in buffer
   ; ## "buffblocknum"  auto  Tali block
 BuffBlockNum:	ldy #>BuffBlockNumV
 		lda #<BuffBlockNumV
@@ -6804,7 +6746,7 @@ BuffBlockNum:	ldy #>BuffBlockNumV
 	FEnd
 
 
- FHdr "BlkBuffer",NN ; ( -- addr ) "Push address of block buffer"
+ FHdr "BlkBuffer",NN ; ( -- addr )  Push address of block buffer
   ; ## "blkbuffer"  auto	Tali block
 BlkBuffer:	ldy #>BlockBuffer
 		lda #<BlockBuffer
@@ -6812,7 +6754,7 @@ BlkBuffer:	ldy #>BlockBuffer
 	FEnd
 
 
- FHdr "Scr",NN ; ( -- addr ) "Push address of variable holding last screen listed"
+ FHdr "Scr",NN ; ( -- addr )  Push address of variable holding last screen listed
   ; ## "scr"  auto  ANS block ext
   ; https://forth-standard.org/standard/block/SCR
 Scr:		ldy #>ScrV
@@ -6820,7 +6762,7 @@ Scr:		ldy #>ScrV
 		jmp PushYA
 	FEnd
 
- FHdr "Blk",NN ; ( -- addr ) "Push address of block # being interpreted"
+ FHdr "Blk",NN ; ( -- addr )  Push address of block # being interpreted
   ; ## "blk"  auto  ANS block
   ; https://forth-standard.org/standard/block/BLK
 Blk:		ldy #>BlkV
@@ -6829,7 +6771,7 @@ Blk:		ldy #>BlkV
 	FEnd
 
 
- FHdr "Block-Write",NN ; ( addr u -- ) "Write a block to storage (deferred word)"
+ FHdr "Block-Write",NN ; ( addr u -- )  Write a block to storage (deferred word)
   ; ## "block-write"  auto  Tali block
   ; BLOCK-WRITE is a vectored word that the user needs to override
   ; with their own version to write a block to storage.
@@ -6838,7 +6780,7 @@ Block_Write:	jmp (BlockWriteV)	; Execute the BLOCK-READ-VECTOR
 	FEnd
 
 
- FHdr "Block-Write-Vector",NN ; ( -- addr ) "Address of the block-write vector"
+ FHdr "Block-Write-Vector",NN ; ( -- addr )  Address of the block-write vector
   ; ## "block-write-vector"  auto	 Tali block
   ; Deferred words need the HC (Code Field) flag.
   ; """BLOCK-WRITE is a vectored word that the user needs to override
@@ -6852,7 +6794,7 @@ Block_Write_Vector:
 	FEnd
 
 
- FHdr "Block-Read",NN ; ( addr u -- ) "Read a block from storage (deferred word)"
+ FHdr "Block-Read",NN ; ( addr u -- )  Read a block from storage (deferred word)
   ; ## "block-read"  auto	 Tali block
   ; BLOCK-READ is a vectored word that the user needs to override
   ; with their own version to read a block from storage.
@@ -6873,7 +6815,7 @@ Block_Read_Vector:
 	FEnd
 
 
- FHdr "Save-Buffers",0 ; ( -- ) "Save all dirty buffers to storage"
+ FHdr "Save-Buffers",0 ; ( -- )  Save all dirty buffers to storage
   ; ## "save-buffers"  tested  ANS block
   ; https://forth-standard.org/standard/block/SAVE-BUFFERS
 Save_Buffers:
@@ -6896,7 +6838,7 @@ _done:
 		rts
 
 
- FHdr "Block",0 ; ( u -- a-addr ) "Fetch a block into a buffer"
+ FHdr "Block",0 ; ( u -- a-addr )  Fetch a block into a buffer
   ; ## "block"  auto  ANS block
   ; https://forth-standard.org/standard/block/BLOCK
 Block:
@@ -6957,7 +6899,7 @@ _done:
 		rts
 
 
- FHdr "Update",0 ; ( -- ) "Mark current block as dirty"
+ FHdr "Update",0 ; ( -- )  Mark current block as dirty
   ; ## "update"  auto  ANS block
   ; https://forth-standard.org/standard/block/UPDATE
 Update:
@@ -6969,7 +6911,7 @@ Update:
 		rts
 
 
- FHdr "Buffer",NN ; ( u -- a-addr ) "Get a buffer for a block"
+ FHdr "Buffer",NN ; ( u -- a-addr )  Get a buffer for a block
   ; ## "buffer"  auto  ANS block
   ; https://forth-standard.org/standard/block/BUFFER
 Buffer:
@@ -7005,7 +6947,7 @@ _done:
 		rts
 
 
- FHdr "Empty-Buffers",NN ; ( -- ) "Empty all block buffers without saving"
+ FHdr "Empty-Buffers",NN ; ( -- )  Empty all block buffers without saving
   ; ## "empty-buffers"  tested  ANS block ext
   ; https://forth-standard.org/standard/block/EMPTY-BUFFERS
 Empty_Buffers:	lda #0		; Set the buffer status to empty.
@@ -7014,7 +6956,7 @@ Empty_Buffers:	lda #0		; Set the buffer status to empty.
 		rts
 
 
- FHdr "Flush",NN ; ( -- ) "Save dirty block buffers and empty buffers"
+ FHdr "Flush",NN ; ( -- )  Save dirty block buffers and empty buffers
   ; ## "flush"  auto  ANS block
   ; https://forth-standard.org/standard/block/FLUSH
 Flush:		jsr Save_Buffers
@@ -7074,9 +7016,9 @@ _done:
 		rts
 
 
- FHdr "Thru",UF+NN ; ( scr# scr# -- ) "Load screens in the given range"
+ FHdr "Thru",UF+NN ; ( scr# scr# -- )  Load screens in the given range
   ; ## "thru"  tested  ANS block ext
-  ; """https://forth-standard.org/standard/block/THRU"""
+  ; https://forth-standard.org/standard/block/THRU
 Thru:
 		jsr underflow_2
 
@@ -7118,9 +7060,9 @@ _loop:
 		rts
 
 
- FHdr "List",NN ; ( scr# -- ) "List the given screen"
+ FHdr "List",NN ; ( scr# -- )  List the given screen
   ; ## "list"  tested  ANS block ext
-  ; """https://forth-standard.org/standard/block/LIST"""
+  ; https://forth-standard.org/standard/block/LIST
 List:		jsr PopYA	; Save the screen number
 		sta ScrV+0
 		sty ScrV+1
@@ -7184,7 +7126,7 @@ _line_loop:
 
  .section code
 
- FHdr "Defer",NN ; ( "name" -- ) "Create a placeholder for words by name"
+ FHdr "Defer",NN ; ( "name" -- )  Create a placeholder for words by name
   ; ## "defer"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/DEFER
   ; Compile a name that can point to various xt by Defer! or Is .
@@ -7203,7 +7145,7 @@ _undefined:  ; Error routine for undefined DEFER
 		jmp ThrowA
 
 
- FHdr "Defer@",NN ; ( xt1 -- xt2 ) "Get the current XT in a defer word"
+ FHdr "Defer@",NN ; ( xt1 -- xt2 )  Get the current XT in a defer word
   ; ## "defer@"  auto  ANS core ext
   ; http://forth-standard.org/standard/core/DEFERFetch
 Defer_Fetch:
@@ -7215,7 +7157,7 @@ Defer_Fetch:
 	FEnd
 
 
- FHdr "Defer!",NN ; ( xt2 xt1 -- ) "Set defer word xt1 to execute xt2"
+ FHdr "Defer!",NN ; ( xt2 xt1 -- )  Set defer word xt1 to execute xt2 
   ; ## "defer!"  auto  ANS core ext
   ; http://forth-standard.org/standard/core/DEFERStore
 Defer_Store:
@@ -7227,7 +7169,7 @@ Defer_Store:
 	FEnd
 
 
- FHdr "Is",IM+NN ; ( xt "name" -- ) "Set named DEFER word to execute xt"
+ FHdr "Is",IM+NN ; ( xt "name" -- )  Set named DEFER word to execute xt
   ; ## "is"  auto	 ANS core ext
   ; http://forth-standard.org/standard/core/IS
 Is:
@@ -7249,7 +7191,7 @@ _interpreting:
 	FEnd
 
 
- FHdr "Action-Of",IM+NN ; ( "name" -- xt ) "Get named deferred word's xt"
+ FHdr "Action-Of",IM+NN ; ( "name" -- xt )  Get named deferred word's xt
   ; ## "action-of"  auto	ANS core ext
   ; http://forth-standard.org/standard/core/ACTION-OF
 Action_Of:
@@ -7271,7 +7213,7 @@ _interpreting:
 	FEnd
 
 
- FHdr "UserAddr",NN ; ( -- addr ) "Push address of base address of user variables"
+ FHdr "UserAddr",NN ; ( -- addr )  Push address of base address of user variables
   ; ## "useraddr"	 tested	 Tali Forth
 UserAddr:	ldy #>User0
 		lda #<User0
@@ -7279,7 +7221,7 @@ UserAddr:	ldy #>User0
 	FEnd
 
 
- FHdr "Buffer:",NN ; ( u "<name>" -- ; -- addr ) "Create an uninitialized buffer"
+ FHdr "Buffer:",NN ; ( u "<name>" -- ; -- addr )  Create an uninitialized buffer
   ; ## "buffer:"	auto  ANS core ext
   ; https://forth-standard.org/standard/core/BUFFERColon
   ; Create a buffer of size u that puts its address on the stack
@@ -7289,14 +7231,14 @@ Buffer_Colon:	jsr Create
 	FEnd
 
 
- FHdr "Case",IM+CO+NN ; (C: -- 0) ( -- ) "Conditional flow control"
+ FHdr "Case",IM+CO+NN ; (C: -- 0) ( -- )  Case flow control
   ; ## "case"  auto  ANS core ext
   ; http://forth-standard.org/standard/core/CASE
 Case:
 		jmp Zero	; init jmp fixup chain
 	FEnd
 
- FHdr "EndCase",IM+CO+NN ; (C: case-sys -- ) ( x -- ) "Conditional flow control"
+ FHdr "EndCase",IM+CO+NN ; (C: case-sys -- ) ( x -- )  Case flow control
   ; ## "endcase"	auto  ANS core ext
   ; http://forth-standard.org/standard/core/ENDCASE
 EndCase:
@@ -7320,7 +7262,7 @@ _done:
 	FEnd
 		rts
 
- FHdr "Of",IM+CO+NN ; (C: -- of-sys) (x1 x2 -- |x1) "Conditional flow control"
+ FHdr "Of",IM+CO+NN ; (C: -- of-sys) (x1 x2 -- |x1)  Case flow control
   ; ## "of"  auto	 ANS core ext
   ; http://forth-standard.org/standard/core/OF
 Of:
@@ -7338,31 +7280,25 @@ Of:
 	FEnd
 
 _runtime: ; ( x1 x2 -- x1 )
-		lda DStack+0,x	; compare x1 with x2
-		cmp DStack+2,x
-		bne _NotEq
-		lda DStack+1,x
-		cmp DStack+3,x
-		bne _NotEq
-
 		inx		; Drop x2
 		inx
+		lda DStack-2,x	; compare x1 with x2
+		cmp DStack+0,x
+		bne _NotEq
+		lda DStack-1,x
+		cmp DStack+1,x
+		beq zbranch_run2 ; Drop x1 & return to after the jmp abs
+_NotEq:		rts		; return to the jmp abs to next test
 
-		bne zbranch_run2 ; Drop x1 & return to after the jmp abs
 
-_NotEq:		inx		; Drop x2
-		inx
-		rts		; return to the jmp abs to next test
-
- FHdr "EndOf",IM+CO+NN ; (C: case-sys1 of-sys1-- case-sys2) ( -- ) "Conditional flow control"
+ FHdr "EndOf",IM+CO+NN ; (C: case-sys1 of-sys1-- case-sys2) ( -- )  Case flow control
   ; ## "endof"  auto  ANS core ext
   ; http://forth-standard.org/standard/core/ENDOF
-EndOf:
-		jmp Else
+EndOf:		jmp Else
 	FEnd
 
 
- FHdr "If",IM+CO+NN ; (C: -- orig) (flag -- ) "Conditional flow control"
+ FHdr "If",IM+CO+NN ; (C: -- orig) (flag -- )  IF flow control
   ; ## "if"  auto	 ANS core
   ; http://forth-standard.org/standard/core/IF
 If:
@@ -7388,7 +7324,7 @@ zbranch_jsr_comma: ; Compile a 0BRANCH runtime jsr
 
 
 _runtime: ; ( f -- )
-	; """In some Forths, this is called (0BRANCH). """
+	; In some Forths, this is called (0BRANCH).
 
 		lda DStack+0,x		;flag is false?
 		ora DStack+1,x
@@ -7413,7 +7349,7 @@ zbranch_run_done:
 		rts
 
 
- FHdr "Then",IM+CO+NN ; (C: orig -- ) ( -- ) "Conditional flow control"
+ FHdr "Then",IM+CO+NN ; (C: orig -- ) ( -- )  IF flow control
   ; ## "then"  auto  ANS core
   ; http://forth-standard.org/standard/core/THEN
 Then:
@@ -7427,7 +7363,7 @@ Then:
 	FEnd
 
 
- FHdr "Else",IM+CO+NN ; (C: orig -- orig) ( -- ) "Conditional flow control"
+ FHdr "Else",IM+CO+NN ; (C: orig -- orig) ( -- )  IF flow control
   ; ## "else"  auto  ANS core
   ; http://forth-standard.org/standard/core/ELSE
   ;
@@ -7446,7 +7382,12 @@ Else:
 	FEnd
 
 
- FHdr "Begin",NN+CO+IM ; ( -- addr ) "Mark entry point for loop"
+;----------------------------------------------------
+; BEGIN ... AGAIN
+; BEGIN ... UNTIL
+; BEGIN ... WHILE ... REPEAT
+
+ FHdr "Begin",NN+CO+IM ; ( -- addr )  Mark entry point for loop
   ; ## "begin"  auto  ANS core
   ; https://forth-standard.org/standard/core/BEGIN
 Begin:		jsr Here	; remember the loop starting location
@@ -7455,7 +7396,7 @@ Begin:		jsr Here	; remember the loop starting location
 	FEnd
 
 
- FHdr "Again",NN+CO+IM+UF ; ( addr -- ) "Code backwards branch to address left by BEGIN"
+ FHdr "Again",NN+CO+IM+UF ; ( addr -- ) Code backwards branch to address left by BEGIN
   ; ## "again"  tested  ANS core ext
   ; https://forth-standard.org/standard/core/AGAIN
 Again:		jsr underflow_2
@@ -7465,7 +7406,7 @@ Again:		jsr underflow_2
 	FEnd
 
 
- FHdr "Until",IM+CO+NN ; (C: dest -- ) ( -- ) "Loop flow control"
+ FHdr "Until",IM+CO+NN ; (C: dest -- ) ( -- )  Loop flow control
   ; ## "until"  auto  ANS core
   ; http://forth-standard.org/standard/core/UNTIL
 Until:		lda #<Begin		; check pairing
@@ -7474,7 +7415,7 @@ Until:		lda #<Begin		; check pairing
 	FEnd
 
 
- FHdr "While",IM+CO+NN ; ( C: dest -- orig dest ) ( x -- ) "Loop flow control"
+ FHdr "While",IM+CO+NN ; ( C: dest -- orig dest ) ( x -- )  Loop flow control
   ; ## "while"  auto  ANS core
   ; http://forth-standard.org/standard/core/WHILE
 While:		lda #<Begin	; check pairing
@@ -7486,7 +7427,7 @@ While:		lda #<Begin	; check pairing
 	FEnd
 
 
- FHdr "Repeat",IM+CO+NN ; (C: orig dest -- ) ( -- ) "Loop flow control"
+ FHdr "Repeat",IM+CO+NN ; (C: orig dest -- ) ( -- )  Loop flow control
   ; ## "repeat"  auto  ANS core
   ; http://forth-standard.org/standard/core/REPEAT
 Repeat:		lda #<Begin	; check pairing
@@ -7510,10 +7451,11 @@ ZBranch_Comma: ; compile 0 test
 		jsr Comma_YA
 
 		lda #$f0		; BEQ
-		bne Branch_Comma
+		bne Branch_CommaA
 
- FHdr "Branch,",NN ; ( A addr -- )  compile branch
-Branch_Comma: ;  opcode in A, addr in TOS
+ FHdr "Branch,",NN ; ( addr A -- )  compile short or long branch
+		jsr PopA		; pop opcode to A
+Branch_CommaA: ;  opcode in A, addr in TOS
 		pha			; save branch opcode
 
 		sec			; AY= displacement+2
@@ -7541,7 +7483,7 @@ _1byte:		inx			; Drop address
 		jmp Comma_YA		; compile Bcc
 
 
- FHdr "Word",UF+NN ; ( char "name " -- caddr ) "Parse input stream"
+ FHdr "Word",UF+NN ; ( char "name " -- caddr )  Parse input stream
   ; ## "word"  auto  ANS core
   ; https://forth-standard.org/standard/core/WORD
   ; Obsolete parsing word included for backwards compatibility only.
@@ -7593,17 +7535,17 @@ _CopyStart:	jsr C_Comma_A
 		rts
 
 
- FHdr "(",IM+NN ; ( -- ) "Discard input up to close paren ( comment )"
+ FHdr "(",IM+NN ; ( -- )  Discard input up to close paren ( comment )
   ; ## "("  auto	ANS core
   ; http://forth-standard.org/standard/core/p
 Paren:		lda #')'		; separator
 		jsr Parse_A		; Call parse.
 
-		jmp Two_drop		; Throw away the result.
+		jmp Two_drop		; 2Drop the result.
 	FEnd
 
 
- FHdr ".(",IM+NN ; ( -- ) "Print input up to close paren .( comment )"
+ FHdr ".(",IM+NN ; ( -- )  Print input up to close paren .( comment )
   ; ## ".("  auto	 ANS core
   ; http://forth-standard.org/standard/core/Dotp
 Dot_paren:	lda #')'
@@ -7613,7 +7555,7 @@ Dot_paren:	lda #')'
 	FEnd
 
 
-.if "environment?" in TALI_OPTIONAL_WORDS
+.if "environment?" in TALI_OPTIONAL_WORDS ;---------------------------------------
 
  FHdr "Hash",NN ; ( addr u -- n )  Hash a string, case-insensitive
 Hash:		jsr PopA		; save length
@@ -7646,7 +7588,7 @@ _Next:		cpy tmp2+0
 		rts
 
 
- FHdr "Environment?",NN ; ( addr u -- 0 | i*x true )	 "Return system information"
+ FHdr "Environment?",NN ; ( addr u -- 0 | i*x true )  Return system information
   ; ## "environment?"  auto  ANS core
   ; https://forth-standard.org/standard/core/ENVIRONMENTq
 Environment_Q:
@@ -7718,7 +7660,7 @@ _Table: ; environment strings
 				;
 				; String       Value data type  Constant?  Meaning
 				; ------       ---------------  ---------  -------
-;	.word $f24a,$ffff	; "FLOATING"		flag	no	   floating-point word set present
+	.word $f24a,$ffff	; "FLOATING"		flag	no	   floating-point word set present
 ;	.word $272f,0		; "FLOATING-EXT"	flag	no	   floating-point extensions word set present
 	.word $9901,FDim	; "FLOATING-STACK"	n	yes	   If n = zero, floating-point numbers are 
 	 			;						kept on the data stack; otherwise n is 
@@ -7735,14 +7677,7 @@ _table_dbl = *-_Table	; These return a double-cell number
 .endif ; "environment?"
 
 
- FHdr "Bell",NN ; ( -- ) "Emit ASCII BELL"
-  ; ## "bell"  tested  Tali Forth
-Bell:		lda #7		; ASCII value for BELL
-		jmp Emit_A
-	FEnd
-
-
- FHdr "Dump",UF+NN ; ( addr u -- ) "Display a memory region"
+ FHdr "Dump",UF+NN ; ( addr u -- )  Display a memory region
   ; ## "dump"  tested  ANS tools
   ; https://forth-standard.org/standard/tools/DUMP
   ;
@@ -7830,7 +7765,6 @@ _done:
 		inx			; drop work area
 		inx
 		jmp Two_drop		; one byte less than 4x INX
-	FEnd
 
 
 dump_print_ascii:
@@ -7853,12 +7787,12 @@ _loop:
 		bcc _loop
 
 		rts
+	FEnd
 
 
  FHdr "C.Hex",NN ; ( u -- )  Type byte as hex
 C_Dot_Hex:	jsr PopA
-C_Dot_Hex_A:
-                pha
+C_Dot_Hex_A:	pha
 		lsr		; convert high nibble first
 		lsr
 		lsr
@@ -7866,19 +7800,20 @@ C_Dot_Hex_A:
 		jsr _nibble_to_ascii
 		pla
 
-_nibble_to_ascii: ; """Convert lower nibble of A to hex and and EMIT it."""
+_nibble_to_ascii: ; Convert lower nibble of A to hex and and EMIT it.
 		and #$0F	; only use lower nibble
 		cmp #9+1
 		bcc +
 		adc #6
 +		adc #'0'
 		jmp Emit_A
-
+	FEnd
 
  FHdr ".Hex",NN ; ( u -- )  Type cell as hex
 Dot_Hex:	lda DStack+1,x	; do hi byte
 		jsr C_Dot_Hex_A
 		jmp C_Dot_Hex	; do lo byte
+	FEnd
 
 
 is_printable:
@@ -7901,7 +7836,7 @@ _done:		rts
 
 
 ;is_whitespace:
-        ; """Given a character in A, check if it is a whitespace
+        ; Given a character in A, check if it is a whitespace
         ; character, that is, an ASCII value from 0 to 32 (where
         ; 32 is SPACE). Returns the result in the Carry Flag:
         ; 0 (clear) is no, it isn't whitespace, while 1 (set) means
@@ -7918,7 +7853,7 @@ _done:		rts
 ;		rts
 
 
- FHdr ".S",NN ; ( -- ) "Print content of Data Stack"
+ FHdr ".S",NN ; ( -- )  Non-destructive Print content of Data Stack
   ; ## ".s"  tested  ANS tools
   ; https://forth-standard.org/standard/tools/DotS
   ; Print content of Data Stack non-distructively. We follow the format
@@ -7967,7 +7902,7 @@ _done:
 		rts
 
 
- FHdr "Compare",UF+NN ; ( addr1 u1 addr2 u2 -- -1 | 0 | 1) "Compare two strings"
+ FHdr "Compare",UF+NN ; ( addr1 u1 addr2 u2 -- -1 | 0 | 1)  Compare two strings
   ; ## "compare"	 auto  ANS string
   ; https://forth-standard.org/standard/string/COMPARE
   ; Compare string1 (denoted by addr1 u1) to string2 (denoted by
@@ -8041,7 +7976,7 @@ _done:		sta DStack+7,x
 		rts
 
 
- FHdr "Search",UF+NN ; ( addr1 u1 addr2 u2 -- addr3 u3 flag) "Search for a substring"
+ FHdr "Search",UF+NN ; ( addr1 u1 addr2 u2 -- addr3 u3 flag)  Search for a substring
   ; ## "search"	auto  ANS string
   ; https://forth-standard.org/standard/string/SEARCH
   ; Search for string2 (denoted by addr2 u2) in string1 (denoted by
@@ -8200,7 +8135,7 @@ _letters_match:
 		rts
 
 
- FHdr "Marker",IM+NN ; ( "name" -- ) "Create a deletion boundry"
+ FHdr "Marker",IM+NN ; ( "name" -- )  Create a deletion boundry word
   ; ## "marker"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/MARKER
   ; This word replaces FORGET in earlier Forths. Old entries are not
@@ -8270,7 +8205,7 @@ _rloop:		; Copy back on top of the wordlists and search order.
 		rts
 
 
- FHdr "Words",NN ; ( -- ) "Print known words from Dictionary"
+ FHdr "Words",NN ; ( -- )  Print known words from Dictionary
   ; ## "words"  tested  ANS tools
   ; https://forth-standard.org/standard/tools/WORDS
   ; This is pretty much only used at the command line so we can
@@ -8339,7 +8274,7 @@ _wordslist_done:
 	FEnd
 
 
- FHdr "WordSize",NN ; ( nt -- u ) "Get size of word in bytes"
+ FHdr "WordSize",NN ; ( nt -- u )  Get size of word in bytes
   ; ## "wordsize"	 auto  Tali Forth
   ; Given an word's name token (nt), return the size of the
   ; word's payload size in bytes (CFA plus PFA) in bytes.
@@ -8352,7 +8287,7 @@ WordSize:	jsr PopTmp1
 	FEnd
 
 
- FHdr "Aligned",0 ; ( addr -- addr ) "Return the first aligned address"
+ FHdr "Aligned",0 ; ( addr -- addr )  Return the first aligned address
   ; ## "aligned"	auto  ANS core
   ; https://forth-standard.org/standard/core/ALIGNED
 Aligned:
@@ -8360,7 +8295,7 @@ Aligned:
 		rts
 
 
- FHdr "Align",0 ; ( -- ) "Make sure CP is aligned on word size"
+ FHdr "Align",0 ; ( -- )  Make sure CP is aligned on word size
   ; ## "align"  auto  ANS core
   ; https://forth-standard.org/standard/core/ALIGN
   ; On the 6502, this does nothing.
@@ -8369,7 +8304,7 @@ Align:
 		rts
 
 
- FHdr "Output",NN ; ( -- addr ) "Return the address of the EMIT vector address"
+ FHdr "Output",NN ; ( -- addr )  Return the address of the EMIT vector address
   ; ## "output"  tested  Tali Forth
 xt_output:
 	; Return the address where the jump target for EMIT is stored (but
@@ -8382,7 +8317,7 @@ xt_output:
 	FEnd
 
 
- FHdr "Input",NN ; ( -- addr ) "Return address of input vector"
+ FHdr "Input",NN ; ( -- addr )  Return address of input vector
   ; ## "input" tested Tali Forth
 xt_input:	ldy #>input
 		lda #<input
@@ -8390,7 +8325,7 @@ xt_input:	ldy #>input
 	FEnd
 
 
- FHdr "CR",NN ; ( -- ) "Print a line feed"
+ FHdr "CR",NN ; ( -- )  Print a line feed
   ; ## "cr"  auto	 ANS core
   ; https://forth-standard.org/standard/core/CR
 CR:
@@ -8406,7 +8341,7 @@ CR:
 		rts
 
 
- FHdr "Page",NN ; ( -- ) "Clear the screen"
+ FHdr "Page",NN ; ( -- )  Clear the screen
   ; ## "page"  tested  ANS facility
   ; https://forth-standard.org/standard/facility/PAGE
   ; Clears a page if supported by ANS terminal codes.
@@ -8418,7 +8353,7 @@ Page:		jsr SLiteral_Runtime
 	FEnd
 
 
- FHdr "At-XY",UF+NN ; ( ux uy -- ) "Move cursor to position given"
+ FHdr "At-XY",UF+NN ; ( ux uy -- )  Move cursor to position given
   ; ## "at-xy"  tested  ANS facility
   ; https://forth-standard.org/standard/facility/AT-XY
   ; On an ANSI compatible terminal, place cursor at row nx colum ny.
@@ -8452,7 +8387,7 @@ At_XY:
 		rts
 
 
- FHdr "Pad",0 ; ( -- addr ) "Return address of user scratchpad"
+ FHdr "Pad",0 ; ( -- addr )  Return address of user scratchpad
   ; ## "pad"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/PAD
   ; Return address to a temporary area in free memory for user.
@@ -8472,7 +8407,7 @@ Pad:		dex		; push cp+PadOffset
 		rts
 
 
- FHdr "<#",0 ; ( -- ) "Start number conversion"
+ FHdr "<#",0 ; ( -- )  Start number conversion
   ; ## "<#"  auto	 ANS core
   ; https://forth-standard.org/standard/core/num-start
   ; Start the process to create pictured numeric output.
@@ -8491,7 +8426,7 @@ Less_Number_Sign:
 		rts
 
 
- FHdr "#>",UF ; ( d -- addr u ) "Finish pictured number conversion"
+ FHdr "#>",UF ; ( d -- addr u )  Finish pictured number conversion
   ; ## "#>"  auto	 ANS core
   ; https://forth-standard.org/standard/core/num-end
   ; Finish conversion of pictured number string, putting address and
@@ -8517,12 +8452,11 @@ Number_Sign_Greater:
 		rts
 
 
- FHdr "Hold",0 ; ( char -- ) "Insert character at current output"
+ FHdr "Hold",0 ; ( char -- )  Insert character at current output
   ; ## "hold"  auto  ANS core
   ; https://forth-standard.org/standard/core/HOLD
-  ; Insert a character at the current position of a pictured numeric
-  ; output string on
-  ; https://github.com/philburk/pforth/blob/master/fth/numberio.fth
+  ; Prepend a character at the current position of a pictured numeric
+  ; output string.
 Hold:		jsr PopA
 Hold_A:		dec ToHold
 		ldy ToHold
@@ -8530,7 +8464,7 @@ Hold_A:		dec ToHold
 	FEnd
 		rts
 
-; FHdr "HoldS",NN ; ( c-addr u -- ) "Insert string at current output"
+; FHdr "HoldS",NN ; ( c-addr u -- )  Insert string at current output
   ; ## "hold"  auto  ANS core
   ; https://forth-standard.org/standard/core/HOLDS
 ;HoldS:		jsr PopA
@@ -8546,7 +8480,7 @@ Hold_A:		dec ToHold
 ;		jmp Two_Drop
 ;	FEnd
 
- FHdr "#",UF+NN ; ( ud -- ud ) "Add character to pictured output string"
+ FHdr "#",UF+NN ; ( ud -- ud )  Add character to pictured output string
   ; ## "#"  auto	ANS core
   ; https://forth-standard.org/standard/core/num
   ; Add one char to the beginning of the pictured output string.
@@ -8594,7 +8528,7 @@ Number_Sign_S:
 _loop:
 		jsr Number_sign	; convert a single number ("#")
 
-		lda DStack+0,x	; stop when double-celled number in TOS is zero
+		lda DStack+0,x	; until d is zero
 		ora DStack+1,x
 		ora DStack+2,x
 		ora DStack+3,x
@@ -8603,7 +8537,7 @@ _loop:
 		rts
 
 
- FHdr "Sign",NN ; ( n -- ) "Add minus to pictured output"
+ FHdr "Sign",NN ; ( n -- )  Add minus to pictured output
   ; ## "sign"  auto  ANS core
   ; https://forth-standard.org/standard/core/SIGN
 Sign:		jsr PopYA
@@ -8617,7 +8551,7 @@ _minus:		lda #'-'	; add minus sign
 	FEnd
 
 
- FHdr "Cleave",UF+NN ; ( addr u -- addr2 u2 addr1 u1 ) "Split off word from string"
+ FHdr "Cleave",UF+NN ; ( addr u -- addr2 u2 addr1 u1 )  Split off word from string
   ; ## "cleave"  auto  Tali Forth
   ; Given a range of memory with words delimited by whitespace,return
   ; the first word at the top of the stack and the rest of the word
@@ -8700,7 +8634,7 @@ _done:
 		rts
 
 
- FHdr "HexStore",UF+NN ; ( addr1 u1 addr2 -- u2 ) "Store a list of numbers"
+ FHdr "HexStore",UF+NN ; ( addr1 u1 addr2 -- u2 )  Store a list of numbers
   ; ## "hexstore"	 auto  Tali
   ; Given a string addr1 u1 with numbers in the current base seperated
   ; by spaces, store the numbers at the address addr2, returning the
@@ -8770,7 +8704,7 @@ _done:
 	FEnd
 
 
- FHdr "Within",UF+NN ; ( n1 n2 n3 -- ) "See if within a range"
+ FHdr "Within",UF+NN ; ( n1 n2 n3 -- )  See if within a range
   ; ## "within"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/WITHIN
   ;
@@ -8790,7 +8724,7 @@ Within:
 	FEnd
 
 
- FHdr "\",IM+NN ; ( -- ) "Ignore rest of line"
+ FHdr "\",IM+NN ; ( -- )  Ignore rest of line
   ; ## "\"  auto	ANS core ext
   ; https://forth-standard.org/standard/block/bs
   ; https://forth-standard.org/standard/core/bs
@@ -8824,7 +8758,7 @@ _not_block:
 _rts:		rts
 
 
- FHdr "Move",NN+UF ; ( addr1 addr2 u -- ) "Copy bytes"
+ FHdr "Move",NN+UF ; ( addr1 addr2 u -- )  Copy bytes, handle overlapping buffers
   ; ## "move"  auto  ANS core
   ; https://forth-standard.org/standard/core/MOVE
   ; Copy u "address units" from addr1 to addr2. Since our address
@@ -8853,7 +8787,7 @@ ThreeDrop:	txa		; drop three entries from Data Stack
 	FEnd
 		rts
 
- FHdr "CMove>",UF+NN ; ( add1 add2 u -- ) "Copy bytes from high to low"
+ FHdr "CMove>",UF+NN ; ( add1 add2 u -- )  Copy bytes from high to low
   ; ## "cmove>"  auto  ANS string
   ; https://forth-standard.org/standard/string/CMOVEtop
   ; Based on code in Leventhal, Lance A. "6502 Assembly Language
@@ -8911,7 +8845,7 @@ _done:
 Throw_Stack_14: jmp Throw_Stack
 
 
- FHdr "CMove",UF+NN ; ( addr1 addr2 u -- ) "Copy bytes going from low to high"
+ FHdr "CMove",UF+NN ; ( addr1 addr2 u -- )  Copy bytes going from low to high
   ; ## "cmove"  auto  ANS string
   ; https://forth-standard.org/standard/string/CMOVE
   ; Copy u bytes from addr1 to addr2, going low to high (addr2 is
@@ -8966,7 +8900,7 @@ _done:		jmp ThreeDrop	; clear the stack
 	FEnd
 
 
- FHdr "UM*",NN ; ( u1 u2 -- ud ) "Multiply 16 x 16 -> 32"
+ FHdr "UM*",NN ; ( u1 u2 -- ud )  Multiply 16 x 16 -> 32  unsigned
   ; ## "um*"  auto  ANS core
   ; https://forth-standard.org/standard/core/UMTimes
   ; Multiply two unsigned 16 bit numbers, producing a 32 bit result.
@@ -9043,7 +8977,7 @@ _zero:		lda #0
 	FEnd
 
 
- FHdr "M*",NN ; ( n n -- d ) "16 * 16 --> 32"
+ FHdr "M*",NN ; ( n n -- d )  16 * 16 --> 32 signed
   ; ## "m*"  auto	 ANS core
   ; https://forth-standard.org/standard/core/MTimes
   ; Multiply two 16 bit numbers, producing a 32 bit result. All
@@ -9071,19 +9005,19 @@ M_Star:		DStackCheck 2,Throw_Stack_15
 	FEnd
 		rts
 
- FHdr "*",0 ; ( n n -- n ) "16*16 --> 16 "
+ FHdr "*",0 ; ( n n -- n )  16*16 --> 16  signed or unsigned
   ; ## "*"  auto	ANS core
   ; https://forth-standard.org/standard/core/Times
   ; Multiply two signed 16 bit numbers, returning a 16 bit result.
 Star:		; UM_Star will check for underflow
 		jsr UM_Star
-		inx		; UD>U	drop hi cell
+		inx		; D>S	drop hi cell
 		inx
 	FEnd
 		rts
 
 
- FHdr "UM/Mod",NN ; ( ud u_div -- u_rem u_quot ) "32/16 -> 16,16 division"
+ FHdr "UM/Mod",NN ; ( ud u_div -- u_rem u_quot )  32/16 -> 16,16 division unsigned
   ; ## "um/mod"  auto  ANS core
   ; https://forth-standard.org/standard/core/UMDivMOD
   ; Divide double cell number by single cell number, returning the
@@ -9153,7 +9087,7 @@ Throw_Stack_15: jmp Throw_Stack
 ;	FEnd
 
 
- FHdr "SM/Rem",NN ; ( d n1 -- n2 n3 ) "Symmetic signed division"
+ FHdr "SM/Rem",NN ; ( d n1 -- n2 n3 )  Symmetic signed division
   ; ## "sm/rem"  auto  ANS core
   ; https://forth-standard.org/standard/core/SMDivREM
   ; Symmetic signed division. Compare FM/MOD. Based on F-PC 3.6
@@ -9203,7 +9137,7 @@ _done:
 		rts
 
 
- FHdr "FM/Mod",NN ; ( d n1  -- rem n2 ) "Floored signed division"
+ FHdr "FM/Mod",NN ; ( d n1  -- rem n2 )  Floored signed division
   ; ## "fm/mod"  auto  ANS core
   ; https://forth-standard.org/standard/core/FMDivMOD
   ; Note that by default, Tali Forth uses SM/REM for most things.
@@ -9259,7 +9193,7 @@ FM_Slash_Mod:
 		rts
 
 
- FHdr "/Mod",NN ; ( n1 n_div -- n_rem n_quot ) "Divide NOS by TOS with a remainder"
+ FHdr "/Mod",NN ; ( n1 n_div -- n_rem n_quot )  Divide NOS by TOS signed with a remainder
   ; ## "/mod"  auto  ANS core
   ; https://forth-standard.org/standard/core/DivMOD
 Slash_Mod:	jsr Dup			; ( n1 n_div n_div )
@@ -9274,7 +9208,7 @@ Slash_Mod:	jsr Dup			; ( n1 n_div n_div )
 	FEnd
 
 
- FHdr "/",NN ; ( n1 n2 -- n ) "Divide NOS by TOS"
+ FHdr "/",NN ; ( n1 n2 -- n )  Divide signed NOS by TOS
   ; ## "/"  auto	ANS core
   ; https://forth-standard.org/standard/core/Div
 Slash:		jsr Slash_Mod
@@ -9282,7 +9216,7 @@ Slash:		jsr Slash_Mod
 	FEnd
 
 
- FHdr "Mod",0 ; ( n1 n2 -- n ) "Divide NOS by TOS and return the remainder"
+ FHdr "Mod",0 ; ( n1 n2 -- n )  Divide signed NOS by TOS and return the remainder
   ; ## "mod"  auto  ANS core
   ; https://forth-standard.org/standard/core/MOD
 Mod:		jsr Slash_Mod
@@ -9293,7 +9227,7 @@ Mod:		jsr Slash_Mod
 		rts
 
 
- FHdr "*/Mod",UF+NN ;  ( n1 n2 n3 -- n4 n5 ) "n1 * n2 / n3 --> n-mod n"
+ FHdr "*/Mod",UF+NN ;  ( n1 n2 n3 -- n4 n5 )  n1 * n2 / n3 --> n-mod n
   ; ## "*/mod"  auto  ANS core
   ; https://forth-standard.org/standard/core/TimesDivMOD
   ; Multiply n1 by n2 producing the intermediate double-cell result d.
@@ -9309,7 +9243,7 @@ Star_Slash_Mod:
 	FEnd
 
 
- FHdr "*/",NN ; ( n1 n2 n3 -- n4 ) "n1 * n2 / n3 -->  n"
+ FHdr "*/",NN ; ( n1 n2 n3 -- n4 )  n1 * n2 / n3 -->  n
   ; ## "*/"  auto	 ANS core
   ; https://forth-standard.org/standard/core/TimesDiv
   ; Multiply n1 by n2 and divide by n3, returning the result
@@ -9325,7 +9259,7 @@ Star_Slash:
 	FEnd
 
 
- FHdr "M*/",NN ; ( d1 n1 n2 -- d2 )  Multiply d1 by n1 and divide by n2.
+ FHdr "M*/",NN ; ( d1 n1 n2 -- d2 )  Multiply signed d1 by n1 and divide by n2.
   ; ## "m*/"  auto  ANS double
   ; n2 may be negative.
   ; https://forth-standard.org/standard/double/MTimesDiv
@@ -9371,7 +9305,7 @@ _rts:		rts
 	FEnd
 
 
- FHdr "Evaluate",NN ; ( addr u -- ) "Execute a string"
+ FHdr "Evaluate",NN ; ( addr u -- )  Evaluate a string as Forth
   ; ## "evaluate"	 auto  ANS core
   ; https://forth-standard.org/standard/block/EVALUATE
   ; https://forth-standard.org/standard/core/EVALUATE
@@ -9430,7 +9364,7 @@ load_evaluate: ; special entry point.
 
 
  .if 0  ; >Number has this inlined
- FHdr "Digit?",UF+NN ; ( char -- u f | char f ) "Convert ASCII char to number"
+ FHdr "Digit?",UF+NN ; ( char -- u f | char f )  Convert ASCII char to number
   ; ## "digit?"  auto  Tali Forth
   ; Inspired by the pForth instruction DIGIT, see
   ; https://github.com/philburk/pforth/blob/master/fth/numberio.fth
@@ -9467,7 +9401,7 @@ _done:
   .endif
 
 
- FHdr ">Number",UF+NN ; ( ud addr u -- ud addr u ) "Convert a number"
+ FHdr ">Number",UF+NN ; ( ud addr u -- ud addr u )  Continue convert a string to an integer
   ; ## ">number"	auto  ANS core
   ; https://forth-standard.org/standard/core/toNUMBER
   ; Convert a string to a double number. Logic here is based on the
@@ -9565,7 +9499,7 @@ _done:		; no chars left or we hit an unconvertable char
 		rts
 
 
- FHdr "Number",UF+NN ; ( addr u -- u | d ) "Convert a string to an integer"
+ FHdr "Number",UF+NN ; ( addr u -- u | d )  Convert a string to an integer
   ; ## "number"  auto  Tali Forth
   ; Convert a number string to a double or single cell number. This
   ; is a wrapper for >NUMBER and follows the convention set out in the
@@ -9776,15 +9710,14 @@ _MinusCheck: ; If the first character is a minus, strip it off and set
 +		rts
 
 
- FHdr "Hex",NN ; ( -- ) "Change base radix to hexadecimal"
+ FHdr "Hex",NN ; ( -- )  Set radix base to hexadecimal
   ; ## "hex"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/HEX
 Hex:		lda #16
 		bne decimal_a
 	FEnd
 
-
- FHdr "Decimal",0 ; ( -- ) "Change radix base to decimal"
+ FHdr "Decimal",0 ; ( -- )  Set radix base to decimal
   ; ## "decimal"	auto  ANS core
   ; https://forth-standard.org/standard/core/DECIMAL
 Decimal:	lda #10
@@ -9794,8 +9727,16 @@ decimal_a:	sta base+0
 	FEnd
 		rts
 
+ FHdr "Base",NN ; ( -- addr )  Push address of radix base to stack
+  ; ## "base"  auto  ANS core
+  ; https://forth-standard.org/standard/core/BASE
+  ; The ANS Forth standard sees the base up to 36
+		ldy #>base
+		lda #<base
+		jmp PushYA
+	FEnd
 
- FHdr "Count",UF+NN ; ( c-addr -- addr u ) "Convert character string to normal format"
+ FHdr "Count",UF+NN ; ( c-addr -- addr u )  Convert counted character string to normal format
   ; ## "count"  auto  ANS core
   ; https://forth-standard.org/standard/core/COUNT
   ; Convert old-style character string to address-length pair. Note
@@ -9816,9 +9757,23 @@ Count:
 	FEnd
 
 
+ FHdr "?PairCtlA",NN ; ( A n -- )  Check control structure pairing
+QPairCtlA:	cmp DStack+0,x
+		beq _8
+		lda #$100+err_ControlMismatch
+		jmp ThrowA
+
+_8:		inx
+		inx	; Drop n
+		rts
+	FEnd
+
+
  .endsection code
 
+;-----------------------------------------------------------------------
  .if 1 ; separate stack based DO...LOOP
+
  .section bss
 DoLeave  .word ?	; head of leave addr patch chain
 DoStkIndex: .byte ?
@@ -9829,7 +9784,7 @@ DoFufaH:  .fill DoStkDim
  .endsection bss
  .section code
 
- FHdr "?Do",CO+IM+NN ; ( limit start -- )(R: -- limit start) "Conditional loop start"
+ FHdr "?Do",CO+IM+NN ; ( limit start -- )(R: -- limit start)  Conditional DO loop start
   ; ## "?do"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/qDO
 Question_Do:
@@ -9861,7 +9816,7 @@ _2:		lda DoIndex+1
 		rts		; return Z
 
 
- FHdr "Do",CO+IM+NN ; ( limit start -- )(R: -- limit start)  "Start a loop"
+ FHdr "Do",CO+IM+NN ; ( limit start -- )(R: -- limit start)  DO loop start
   ; ## "do"  auto	 ANS core
   ; https://forth-standard.org/standard/core/DO
   ;
@@ -9937,7 +9892,7 @@ _TooDeep:	lda #$100+err_DoLoop_TooDeep
 		jsr ThrowA
 
 
- FHdr "Loop",CO+IM+NN ; ( -- ) "Finish loop construct"
+ FHdr "Loop",CO+IM+NN ; ( -- )  DO loop end
   ; ## "loop"  auto  ANS core
   ; https://forth-standard.org/standard/core/LOOP
   ; Compile-time part of LOOP. This does nothing more but push 1 on
@@ -9949,7 +9904,7 @@ Loop:
 
 	;	jsr Over
 	;	lda #$d0		; compile BNE body
-	;	jsr Branch_Comma
+	;	jsr Branch_CommaA
 
 	;	lda #<_Runtime2
 	;	ldy #>_Runtime2
@@ -9973,7 +9928,7 @@ _Runtime2:	clc
 		rts			; return V to signal loop back
 
 
- FHdr "+Loop",CO+IM+NN ; ( -- ) "Finish DO loop construct"
+ FHdr "+Loop",CO+IM+NN ; ( -- )  DO loop end
   ; ## "+loop"  auto  ANS core
   ; https://forth-standard.org/standard/core/PlusLOOP
   ;
@@ -9989,9 +9944,9 @@ Plus_Loop:
 		ldy #>Plus_Loop_Runtime
 Plus_Loop_5:	jsr Loop_End		; compile JSR _runtime, BVC back
 
-		lda #<Unloop
-		ldy #>Unloop
-		jmp Compile_Comma_WithNT_YA ; compile JSR Unloop, return
+		lda #<(Unloop-wh_xt)
+		ldy #>(Unloop-wh_xt)
+		jmp Compile_Comma_NT_YA ; compile Unloop, return
 	FEnd
 
 Plus_Loop_Runtime:
@@ -10019,7 +9974,7 @@ Loop_End: ; compile loop end; YA=runtime subroutine
 Loop_End_3:	jsr QPairCtlA
 					; ( saved_DoLeave body_addr )
 		lda #$50		; compile BVC body
-		jsr Branch_Comma
+		jsr Branch_CommaA
 					; ( saved_DoLeave )
 		ldy DoLeave+0		; for each leave addr entry
 		lda DoLeave+1
@@ -10052,19 +10007,7 @@ _p9:
 		rts
 
 
- FHdr "?PairCtlA",NN ; ( A n -- )  check control structure pairing
-QPairCtlA:	cmp DStack+0,x
-		beq _8
-		lda #$100+err_ControlMismatch
-		jmp ThrowA
-
-_8:		inx
-		inx	; Drop n
-		rts
-	FEnd
-
-
- FHdr "Unloop",CO ; ( -- )(R: n1 n2 n3 ---) "Drop loop control from Return stack"
+ FHdr "Unloop",CO ; ( -- )(R: n1 n2 n3 ---)  Drop DO loop control
   ; ## "unloop"  auto  ANS core
   ; https://forth-standard.org/standard/core/UNLOOP
 Unloop:
@@ -10080,7 +10023,7 @@ Unloop:
 		rts
 
 
- FHdr "Leave",IM+NN+CO ; ( -- ) "Leave DO/LOOP construct"
+ FHdr "Leave",IM+NN+CO ; ( -- )  Leave DO/LOOP
   ; ## "leave"  auto  ANS core
   ; https://forth-standard.org/standard/core/LEAVE
   ; Note that this does not work with anything but a DO/LOOP in
@@ -10118,7 +10061,7 @@ Do_Leave_Init: ; ( -- saved_leave )
 		rts
 
 
- FHdr "I",CO ; ( -- n )(R: n -- n)  "Push DO loop index"
+ FHdr "I",CO ; ( -- n )(R: n -- n)  Push DO loop index
   ; ## "i"  auto	ANS core
   ; https://forth-standard.org/standard/core/I
   ; Note that this is not the same as R@ ;
@@ -10139,7 +10082,7 @@ I:		ldy DoStkIndex
 		rts
 
 
- FHdr "J",CO ; ( -- n ) (R: n -- n ) "Push second DO loop index"
+ FHdr "J",CO ; ( -- n ) (R: n -- n )  Push second DO loop index
   ; ## "j"  auto	ANS core
   ; https://forth-standard.org/standard/core/J
   ; see the Control Flow section of the manual for more details.
@@ -10163,25 +10106,7 @@ J:		ldy DoStkIndex
 
  .section code
 
- FHdr "Recurse",CO+IM+NN ; ( -- ) "Compile recursive call to word being defined"
-  ; ## "recurse"	auto  ANS core
-  ; https://forth-standard.org/standard/core/RECURSE
-  ; Compile a reference to the word that is being compiled.
-Recurse:
-		lda workword+0
-		ldy workword+1
-		jsr PushYA
-
-		bit status		; does WORKWORD contain xt or nt?
-		bvc +
-
-		jsr Name_To_Int		; convert nt to xt
-+
-		jmp Jsr_Comma		; compile JSR xt, return
-	FEnd
-
-
- FHdr 'Abort"',CO+IM+NN ; ( "string" -- ) "If flag TOS is true, ABORT with message"
+ FHdr 'Abort"',CO+IM+NN ; ( "string" -- )  If flag TOS is true, ABORT with message
   ; ## "abort""  tested  ANS core
   ; https://forth-standard.org/standard/exception/ABORTq
   ; https://forth-standard.org/standard/core/ABORTq
@@ -10210,7 +10135,7 @@ _do_abort:	; We're true
 		jmp ThrowA
 
 
- FHdr "Abort",NN ; ( -- ) "Reset the Data Stack and restart the CLI"
+ FHdr "Abort",NN ; ( -- )  Reset the Data Stack and restart the CLI
   ; ## "abort"  tested  ANS core
   ; https://forth-standard.org/standard/exception/ABORT
   ; https://forth-standard.org/standard/core/ABORT
@@ -10224,7 +10149,7 @@ Abort:		lda #$100+err_Abort
 	FEnd
 
 
- FHdr "PopA",NN ; """Pop TOS into A, with underflow check"""
+ FHdr "PopA",NN ; ( n -- )  Pop TOS into A, with underflow check
 PopA:		DStackCheck 1,Throw_Stack
 		lda DStack+0,x		; pop TOS to A (1 byte)
 		inx
@@ -10232,7 +10157,7 @@ PopA:		DStackCheck 1,Throw_Stack
 	FEnd
                 rts
 
-; FHdr "PopA2",NN ; """Pop TOS into A, with underflow check for 2 params"""
+; FHdr "PopA2",NN ; ( n1 n2 -- n1 )  Pop TOS into A, with underflow check for 2 params
 PopA2:		DStackCheck 2,Throw_Stack
 		lda DStack+0,x		; pop TOS to A (1 byte)
 		inx
@@ -10240,7 +10165,7 @@ PopA2:		DStackCheck 2,Throw_Stack
 ;	FEnd
                 rts
 
- FHdr "PopYA",NN ; """Pop TOS into YA, with underflow check"""
+ FHdr "PopYA",NN ; ( n -- )  Pop TOS into YA, with underflow check
 PopYA:		DStackCheck 1,Throw_Stack
 		lda DStack+0,x		; pop TOS to YA
 		ldy DStack+1,x
@@ -10250,7 +10175,7 @@ PopYA:		DStackCheck 1,Throw_Stack
 		rts
 
 
-PopTmp1: ; pop TOS to tmp1
+PopTmp1: ; ( n -- )  pop TOS to tmp1, with underflow check
 		DStackCheck 1,Throw_Stack
 		lda DStack+0,x	; PopYA
 		ldy DStack+1,x
@@ -10264,22 +10189,22 @@ PopTmp1: ; pop TOS to tmp1
 ; We JSR to the label with the number of cells (not: bytes)
 ; required for the word. This flows into the exception handling code
 
- FHdr "underflow_1",NN ; """Make sure we have at least one cell on the Data Stack"""
+ FHdr "underflow_1",NN ;  Make sure we have at least one cell on the Data Stack
 underflow_1:	DStackCheck 1,Throw_Stack
 	FEnd
 		rts
 
- FHdr "underflow_2",NN ; """Make sure we have at least two cells on the Data Stack"""
+ FHdr "underflow_2",NN ;  Make sure we have at least two cells on the Data Stack
 underflow_2:	DStackCheck 2,Throw_Stack
 	FEnd
                 rts
 
-; FHdr "underflow_3",NN ; """Make sure we have at least three cells on the Data Stack"""
+; FHdr "underflow_3",NN ;  Make sure we have at least three cells on the Data Stack
 underflow_3:	DStackCheck 3,Throw_Stack
 ;	FEnd
                 rts
 
-; FHdr "underflow_4",NN ; """Make sure we have at least four cells on the Data Stack"""
+; FHdr "underflow_4",NN ;  Make sure we have at least four cells on the Data Stack
 underflow_4:	DStackCheck 4,Throw_Stack
 ;	FEnd
                 rts
@@ -10398,7 +10323,7 @@ Empty_Stack:	ldx #DStack0	; empty data stack
 		rts
 
 
- FHdr "Quit",NN ; ( -- ) "Reset the input and get new input"
+ FHdr "Quit",NN ; ( -- ) Reset the input and get new input
   ; ## "quit"  tested  ANS core
   ; https://forth-standard.org/standard/core/QUIT
   ; Reset the input and start command loop
@@ -10462,7 +10387,7 @@ _print:		jsr Print_ASCIIZ_YA
 	FEnd			; no RTS required
 
 
-Interpret: ; """interpreter core
+Interpret: ; interpreter core
   ; called by EVALUATE and QUIT.
   ; Process one line only. Assumes that the address of name is in
   ; cib and the length of the whole input line string is in ciblen
@@ -10517,8 +10442,6 @@ _got_name_token:			; ( addr u nt )
 		sta tmp1+0		; save a work copy of nt
 		sty tmp1+1
 
-		jsr Name_To_Int		; ( nt -- xt )
-
 		ldy #Wh_Flags		; get word flags, we'll need them shortly
 		lda (tmp1),y		;    using saved nt
 
@@ -10528,17 +10451,18 @@ _got_name_token:			; ( addr u nt )
 
 		and #CO			; is the word COMPILE-ONLY?
 		beq _execute
-		lda #$100+err_CompileOnly	;   complain & quit
-		jmp ThrowA
+		lda #$100+err_CompileOnly ;   complain & quit
+		jsr ThrowA
 
-_execute:	jsr Execute		; EXECUTE the xt that is TOS
+_execute:	jsr Name_To_Int		; ( nt -- xt )
+		jsr Execute		; EXECUTE the xt that is TOS
                 jmp _loop
 
 _compile:	; We're compiling!
 		and #IM			; is the word IMMEDIATE?
 		bne _execute		;   IMMEDIATE word, execute now
 
-		jsr Compile_Comma_WithNT ; Compile the xt into the Dictionary
+		jsr Compile_Comma_NT	; Compile the nt into the Dictionary
 		jmp _loop
 
 _line_done:
@@ -10550,7 +10474,7 @@ _line_done:
 		rts
 
 
- FHdr "Immediate",NN ; ( -- ) "Mark most recent word as IMMEDIATE"
+ FHdr "Immediate",NN ; ( -- )  Mark most recent word as IMMEDIATE
   ; ## "immediate"  auto	ANS core
   ; https://forth-standard.org/standard/core/IMMEDIATE
   ; Make sure the most recently defined word is immediate. Will only
@@ -10567,7 +10491,7 @@ SetFlag:	pha
 	FEnd
 		rts
 
- FHdr "Compile-only",NN ; ( -- ) "Mark most recent word as COMPILE-ONLY"
+ FHdr "Compile-only",NN ; ( -- )  Mark most recent word as COMPILE-ONLY
   ; ## "compile-only"  tested  Tali Forth
   ; Set the Compile Only flag (CO) of the most recently defined word.
   ;
@@ -10577,7 +10501,7 @@ Compile_Only:	lda #CO
 		bne SetFlag
 	FEnd
 
- FHdr "never-native",NN ; ( -- ) "Flag last word as never natively compiled"
+ FHdr "never-native",NN ; ( -- )  Mark most recent word as never natively compiled
   ; ## "never-native"  auto  Tali Forth
 Never_Native:	jsr current_to_dp
 		ldy #Wh_Flags
@@ -10588,7 +10512,7 @@ Never_Native:	jsr current_to_dp
 	FEnd
 		rts
 
- FHdr "always-native",NN ; ( -- ) "Flag last word as always natively compiled"
+ FHdr "always-native",NN ; ( -- )  Mark most recent word as always natively compiled
   ; ## "always-native"  auto  Tali Forth
 Always_Native:	jsr current_to_dp
 		ldy #Wh_Flags
@@ -10599,7 +10523,7 @@ Always_Native:	jsr current_to_dp
 	FEnd
 		rts
 
- FHdr "allow-native",NN ; ( -- ) "Flag last word to allow native compiling"
+ FHdr "allow-native",NN ; ( -- )  Mark most recent word to allow native compiling
   ; ## "allow-native"  auto  Tali Forth
 Allow_Native:	jsr current_to_dp
 		ldy #Wh_Flags	; offset for status byte
@@ -10610,14 +10534,14 @@ Allow_Native:	jsr current_to_dp
 		rts
 
 
- FHdr "nc-limit",NN ; ( -- addr ) "Return address where NC-LIMIT value is kept"
+ FHdr "nc-limit",NN ; ( -- addr )  Variable: max # of bytes to inline
   ; ## "nc-limit"	 tested	 Tali Forth
 		ldy #>nc_limit
 		lda #<nc_limit
 		jmp PushYA
 	FEnd
 
- FHdr "strip-underflow",NN ; ( -- addr ) "Return address where underflow status is kept"
+ FHdr "strip-underflow",NN ; ( -- addr )  Variable: strip underflow flag
   ; ## "strip-underflow"	tested	Tali Forth
   ; `STRIP-UNDERFLOW` is a flag variable that determines if underflow
   ; checking should be removed during the compilation of new words.
@@ -10628,46 +10552,64 @@ Allow_Native:	jsr current_to_dp
 	FEnd
 
 
- FHdr "postpone",IM+CO+NN ; ( -- ) "Change IMMEDIATE status (it's complicated)"
+ FHdr "postpone",IM+CO+NN ; ( "name" -- )  Compile word, reducing IMMEDIATEness
   ; ## "postpone"	 auto	ANS core
   ; https://forth-standard.org/standard/core/POSTPONE
-  ; Add the compilation behavior of a word to a new word at
-  ; compile time. If the word that follows it is immediate, include
+  ; Add the compilation behavior of a word to a new word at compile time.
+  ; If the word that follows it is immediate, include
   ; it so that it will be compiled when the word being defined is
   ; itself used for a new word. Tricky, but very useful.
   ;
   ; Because POSTPONE expects a word (not an xt) in the input stream (not
   ; on the Data Stack). This means we cannot build words with
-  ; "jsr Postpone, jsr <word>" directly.
+  ;   "jsr Postpone, jsr <word>" directly.
 Postpone:
-		jsr parse_name_check	; ( -- addr n )
+		jsr parse_name_check	; get name string
+					; ( addr n )
+		jsr find_name_check	; lookup name
+					; ( nt | 0 )
 
-		jsr find_name_check	; ( -- nt | 0 )
-
-		; keep a copy of nt for later
-		lda DStack+0,x
-		sta tmp1+0
-		lda DStack+1,x
-		sta tmp1+1
-
-		; We need the xt instead of the nt
-		jsr Name_To_Int	; ( nt -- xt )
+					; tmp1 has a copy of nt
 
 		ldy #Wh_Flags		; IMMEDIATE word?
 		lda (tmp1),y		;    using saved nt
 		and #IM
 		beq _not_immediate
 
-		; We're immediate
-		jmp Compile_Comma_WithNT ; compile it
+		; It is immediate
+		jmp Compile_Comma_NT	; compile it as if it was not IMMEDIATE
 
-_not_immediate:	; This is not an immediate word
+_not_immediate:	; It is not an immediate word
 		; We do "deferred compilation" by compiling ' <NAME> COMPILE,
-		jsr LDYA_Immed_Comma		; compile LDA #; LDY # with xt of the word
-
-		ldy #>Compile_Comma_WithNT_YA	; compile COMPILE,
-		lda #<Compile_Comma_WithNT_YA
+		jsr LDYA_Immed_Comma		; compile LDA #; LDY # with nt of the word
+		ldy #>Compile_Comma_NT_YA	; compile COMPILE,
+		lda #<Compile_Comma_NT_YA
 		jmp Jsr_Comma_YA
+	FEnd
+
+
+ FHdr "Recurse",CO+IM+NN ; ( -- )  Compile recursive call to word being defined
+  ; ## "recurse"	auto  ANS core
+  ; https://forth-standard.org/standard/core/RECURSE
+  ; Compile a reference to the word that is being compiled.
+Recurse:
+		lda WorkWord+0
+		ldy WorkWord+1
+		jsr PushYA
+
+		bit status		; does WorkWord contain xt or nt?
+		bvc _xt
+
+		ldy #wh_Flags		; is it Always-Native ?
+		lda (WorkWord),y
+		and #AN
+		beq _NotAn
+		lda #$100+err_InvalidRecursion
+		jsr ThrowA
+_NotAN:
+		jsr Name_To_Int		; convert nt to xt
+_xt:
+		jmp Jsr_Comma		; compile JSR xt, return
 	FEnd
 
 
@@ -10677,31 +10619,38 @@ _not_immediate:	; This is not an immediate word
   ; Compile the given xt in the current word definition.
   ; Because we are using subroutine threading, we can't use
   ; , (COMMA) to compile new words the indirect-threaded way.
-Compile_Comma:	jsr PopYA		; pop xt (check stack, skippable)
-Compile_Comma_YA: jsr PushYA		; push xt
-
+Compile_Comma:	
 		jsr Dup			; ( xt xt )
-		jsr Int_To_Name		; ( xt nt )	does a dictionary search
-		jmp Compile_Comma_B
+		jsr Int_To_Name		; ( xt nt )	does a dictionary search, tmp1=nt
+		inx			; drop nt
+		inx
+		lda tmp1+1
+		bne Compile_Comma_NT_Tmp1
+					; no word header available
+		jmp Jsr_Comma		; compile jsr, return
 
-Compile_Comma_WithNT_YA: jsr PushYA
-Compile_Comma_WithNT: ; ( xt -- )  xt is guaranteed to have nt
-		jsr Dup
-		lda #$100-wh_xt		; convert xt to nt
-		jsr Minus_A
-Compile_Comma_B:			; ( xt nt )
-		lda DStack+0,x		; tmp5 = nt
-		sta tmp5+0
-		lda DStack+1,x
-		sta tmp5+1
-		beq _jsr		; no nt found (we have no flags) ?
+Compile_Comma_NT: ; ( nt -- )
+		jsr PopYA
+Compile_Comma_NT_YA: ; ( YA=nt -- )
+		sta tmp1+0		; tmp1= nt
+		sty tmp1+1
+Compile_Comma_NT_Tmp1:			; ( )
+		dex
+		dex
+		clc
+		lda tmp1+0
+		adc #wh_xt
+		sta DSTack+0,x
+		lda tmp1+1
+		adc #0
+		sta DStack+1,x		; ( xt )
 
 		ldy #wh_CodeLength
-		lda (tmp5),y
-		sta DStack+0,x		; ( xt u )
+		lda (tmp1),y
+		jsr PushZA		; ( xt u )
 
 		ldy #Wh_Flags		; save word flags
-		lda (tmp5),y
+		lda (tmp1),y
 		sta DStack+1,x
 
 		and #AN			; Always Native (AN) word?
@@ -10781,7 +10730,7 @@ _copy_end:
 	FEnd
 
 
- FHdr "[",IM+CO+NN ; ( -- ) "switch to interpret state"
+ FHdr "[",IM+CO+NN ; ( -- )  Switch to interpret state
   ; ## "["  auto	ANS core
   ; https://forth-standard.org/standard/core/Bracket
 Left_Bracket:	lda state+0		; Already in the interpret state?
@@ -10796,7 +10745,7 @@ Left_Bracket_3:	sta state+0
 	FEnd
 		rts
 
- FHdr "]",IM+NN ; ( -- ) "switch to compile state"
+ FHdr "]",IM+NN ; ( -- )  Switch to compile state
   ; ## "]"  auto	ANS core
   ; https://forth-standard.org/standard/right-bracket
 Right_Bracket:
@@ -10810,7 +10759,7 @@ Right_Bracket:
 	FEnd
 
 
- FHdr "Literal",IM+CO+UF+NN ; ( n -- ) "Compile code using TOS to push value at runtime"
+ FHdr "Literal",IM+CO+UF+NN ; ( n -- )  Compile code using TOS to push value at runtime
   ; ## "literal"	auto  ANS core
   ; https://forth-standard.org/standard/core/LITERAL
   ; Compile-only word to store TOS so that it is pushed on stack
@@ -10819,17 +10768,17 @@ Literal:
 		jsr underflow_1
 
 		jsr LitCompile		; compile load regs, choose a runtime routine
-		jmp Compile_Comma_WithNT_YA ; compile JSR runtime
+		jmp Compile_Comma_NT_YA ; compile JSR runtime
 	FEnd
 
-LitCompile: ; compile code using TOS to push value at runtime
-		; returns YA for Jsr_Comma_YA or Jmp_Comma_YA
+LitCompile: ; ( n -- ) compile code using TOS to push value at runtime
+	; returns YA=nt for Compile_Comma_NT or or Jmp_Comma_NT_YA
 		lda DStack+1,x		; hi byte zero?
 		beq _ZByte
 
 		jsr ldya_immed_comma	; compile "ldy #; lda #" using TOS
-		lda #<PushYA		; prepare for Jsr_Comma_YA or Jmp_Comma_YA
-		ldy #>PushYA
+		lda #<(PushYA-wh_xt)	; prepare for Compile_Comma_NT_YA or Jmp_Comma_NT_YA
+		ldy #>(PushYA-wh_xt)
 		rts
 
 _ZByte: ; zero-extended byte
@@ -10840,26 +10789,26 @@ _ZByte: ; zero-extended byte
 	;	dey			; is it 2 ?
 	;	beq _two
 		jsr lda_immed_comma	; compile "lda #" using TOS
-		lda #<PushZA		; prepare for Jsr_Comma_YA or Jmp_Comma_YA
-		ldy #>PushZA
+		lda #<(PushZA-wh_xt)	; prepare for Jsr_Comma_YA or Jmp_Comma_YA
+		ldy #>(PushZA-wh_xt)
 		rts
 
 _zero:		inx			; drop
 		inx
-		lda #<Zero		; prepare for Jsr_Comma_YA or Jmp_Comma_YA
-		ldy #>Zero
+		lda #<(Zero-wh_xt)	; prepare for Jsr_Comma_YA or Jmp_Comma_YA
+		ldy #>(Zero-wh_xt)
 		rts
 
 ;_one:		inx			; Drop
 ;		inx
-;		lda #<One		; prepare for Jsr_Comma_YA or Jmp_Comma_YA
-;		ldy #>One
+;		lda #<(One-wh_xt)	; prepare for Jsr_Comma_YA or Jmp_Comma_YA
+;		ldy #>(One-wh_xt)
 ;		rts
 
 ;_two:		inx			; Drop
 ;		inx
-;		lda #<Two		; prepare for Jsr_Comma_YA or Jmp_Comma_YA
-;		ldy #>Two
+;		lda #<(Two-wh_xt)	; prepare for Jsr_Comma_YA or Jmp_Comma_YA
+;		ldy #>(Two-wh_xt)
 ;		rts
 
 
@@ -10883,16 +10832,7 @@ PushYA:		dex
 	FEnd
 		rts
 
- FHdr "Base",NN ; ( -- addr ) "Push address of radix base to stack"
-  ; ## "base"  auto  ANS core
-  ; https://forth-standard.org/standard/core/BASE
-  ; The ANS Forth standard sees the base up to 36
-		ldy #>base
-		lda #<base
-		jmp PushYA
-	FEnd
-
- FHdr "True",0 ; ( -- f ) "Push TRUE flag to Data Stack"
+ FHdr "True",0 ; ( -- f )  Push TRUE flag to Data Stack
   ; ## "true"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/TRUE
 True:		lda #$FF
@@ -10903,7 +10843,7 @@ PushAA:		dex
 	FEnd
 		rts
 
- FHdr "False",NN ; ( -- f ) "Push flag FALSE to Data Stack"
+ FHdr "False",NN ; ( -- f )  Push flag FALSE to Data Stack
   ; ## "false"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/FALSE
 False:		lda #0
@@ -10919,40 +10859,40 @@ PushZA:		dex
 	FEnd
 		rts
 
- FHdr "0",NN ; ( -- 0 ) "Push 0 to Data Stack"
+ FHdr "0",NN ; ( -- 0 )  Push 0 to Data Stack
   ; ## "0"  auto	Tali Forth
   ; This routine preserves Y.
 Zero:		lda #0
 		beq PushZA
 	FEnd
 
- FHdr "1",NN ; ( -- n ) "Push the number 1 to the Data Stack"
+ FHdr "1",NN ; ( -- n )  Push the number 1 to the Data Stack
   ; ## "1"  auto	Tali Forth
 One:		lda #1
 		bne PushZA
 	FEnd
 
- FHdr "2",NN ; ( -- u ) "Push the number 2 to stack"
+ FHdr "2",NN ; ( -- u )  Push the number 2 to stack
   ; ## "2"  auto	Tali Forth
 Two:		lda #2
 		bne PushZA
 	FEnd
 
- FHdr "Bl",NN ; ( -- c ) "Push ASCII value of SPACE to stack"
+ FHdr "Bl",NN ; ( -- c )  Push ASCII value of SPACE to stack
   ; ## "bl"  auto	 ANS core
   ; https://forth-standard.org/standard/core/BL
 Bl:		lda #AscSP
 		bne PushZA
 	FEnd
 
- FHdr ">In",NN ; ( -- addr ) "Return address of the input pointer"
+ FHdr ">In",NN ; ( -- addr )  Return address of the input pointer
   ; ## ">in"  auto  ANS core
   ; https://forth-standard.org/standard/core/toIN
 		lda #ToIn
 		jmp PushZA	; jmp to be a recognizable constant
 	FEnd
 
- FHdr "State",NN ; ( -- addr ) "Return the address of compilation state flag"
+ FHdr "State",NN ; ( -- addr )  Return the address of compilation state flag
   ; ## "state"  auto  ANS core
   ; https://forth-standard.org/standard/core/STATE
   ; STATE is true when in compilation state, false otherwise. Note
@@ -10983,7 +10923,7 @@ Bl:		lda #AscSP
   ; ## "2literal"	 auto  ANS double
   ; https://forth-standard.org/standard/double/TwoLITERAL
 Two_literal:
-		jsr underflow_2 ; double number
+		jsr underflow_2 ; check double number
 
 		jsr Swap
 		jsr Literal	; do lo cell
@@ -10991,7 +10931,7 @@ Two_literal:
 	FEnd
 
 
- FHdr "SLiteral",CO+IM+UF+NN ; ( addr u -- )( -- addr u ) "Compile a string for runtime"
+ FHdr "SLiteral",CO+IM+UF+NN ; ( addr u -- )( -- addr u )  Compile a string for runtime
   ; ## "sliteral" auto  ANS string
   ; https://forth-standard.org/standard/string/SLITERAL
   ; Add the runtime for an existing string.
@@ -11079,7 +11019,7 @@ SLiteral_Run2:	lda RStack+1,x	; tmp1= RTS addr
 		rts
 
 
- FHdr '."',CO+IM+NN ; ( "string" -- ) "Print string from compiled word"
+ FHdr '."',CO+IM+NN ; ( "string" -- )  Print string in compiled word
   ; ## ".""  auto	 ANS core ext
   ; https://forth-standard.org/standard/core/Dotq
   ; Compile string that is printed during run time. ANS Forth wants
@@ -11100,7 +11040,7 @@ Dot_quote:
   ; https://forth-standard.org/standard/core/Cq
 
 
- FHdr 'S"',IM+NN ; ( "string" -- )( -- addr u ) "Store string in memory"
+ FHdr 'S"',IM+NN ; ( "string" -- )( -- addr u )  Store string in memory
   ; ## "s""  auto	 ANS core
   ; https://forth-standard.org/standard/core/Sq
   ; Store address and length of string given, returning ( addr u ).
@@ -11368,7 +11308,7 @@ _digit: ; It's 0-9
 		rts
 
 
- FHdr 'S\"',IM+NN ; ( "string" -- )( -- addr u ) "Store string in memory"
+ FHdr 'S\"',IM+NN ; ( "string" -- )( -- addr u )  Store string in memory
   ; ## "s\""  auto  ANS core
   ; https://forth-standard.org/standard/core/Seq
   ; Store address and length of string given, returning ( addr u ).
@@ -11382,14 +11322,14 @@ S_Backslash_Quote:
 	FEnd
 
 
- FHdr "LatestXt",NN ; ( -- xt ) "Push most recent xt to the stack"
+ FHdr "LatestXt",NN ; ( -- xt )  Push most recent xt to the stack
   ; ## "latestxt"	 auto  Gforth
   ; http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Anonymous-Definitions.html
 LatestXt:	jsr LatestNt	; ( nt )
 		jmp Name_To_Int	; ( xt )
 	FEnd
 
- FHdr "LatestNt",NN ; ( -- nt ) "Push most recent nt to the stack"
+ FHdr "LatestNt",NN ; ( -- nt )  Push most recent nt to the stack
   ; ## "latestnt"	 auto  Tali Forth
   ; www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
   ; The Gforth version of this word is called LATEST
@@ -11431,7 +11371,7 @@ dp_to_current: ; wordlists[current] = dp
                 rts
 
 
- FHdr "Parse-Name",NN ; ( "name" -- addr u ) "Parse the input"
+ FHdr "Parse-Name",NN ; ( "name" -- addr u )  Get a whitespaced delimited string from the input 
   ; ## "parse-name"  auto	 ANS core ext
   ; https://forth-standard.org/standard/core/PARSE-NAME
   ; Find next word in input string, skipping leading whitespace. This is
@@ -11501,7 +11441,7 @@ _empty:		lda #$100+err_UndefinedWord	; complain & abort
 		jmp ThrowA
 
 
- FHdr "Parse",NN ; ( "name" c -- addr u ) "Parse input with delimiter character"
+ FHdr "Parse",NN ; ( "name" c -- addr u )  Get a delimited string from the input
   ; ## "parse"  tested  ANS core ext
   ; https://forth-standard.org/standard/core/PARSE
   ; Find word in input string delimited by character given. Do not
@@ -11615,7 +11555,7 @@ _eol:
 		rts
 
 
- FHdr "Execute-Parsing",UF+NN ; ( addr u xt -- ) "Pass a string to a parsing word"
+ FHdr "Execute-Parsing",UF+NN ; ( addr u xt -- )  Pass a string to a parsing word
   ; ## "execute-parsing"	auto  Gforth
   ; https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/The-Input-Stream.html
   ; Execute the parsing word defined by the execution token (xt) on the
@@ -11650,7 +11590,7 @@ Execute_parsing:
 		rts
 
 
- FHdr "Source",NN ; ( -- addr u ) "Return location and size of input buffer""
+ FHdr "Source",NN ; ( -- addr u )  Return location and size of input buffer
   ; ## "source"  auto  ANS core
   ; https://forth-standard.org/standard/core/SOURCE
 Source:
@@ -11664,7 +11604,7 @@ Source:
 	FEnd
 
 
- FHdr "Source-Id",NN ; ( -- n ) "Return source identifier"
+ FHdr "Source-Id",NN ; ( -- n )  Return source identifier
   ; ## "source-id"  tested  ANS core ext
   ; https://forth-standard.org/standard/core/SOURCE-ID
   ; Identify the
@@ -11677,7 +11617,7 @@ Source_Id:	lda insrc+0
 	FEnd
 
 
- FHdr "Exit",AN+CO ; ( -- ) "Return control to the calling word immediately"
+ FHdr "Exit",AN+CO ; ( -- )  Return control to the calling word immediately
   ; ## "exit"  auto  ANS core
   ; https://forth-standard.org/standard/core/EXIT
   ; If we're in a loop, we need to UNLOOP first and get everything
@@ -11687,13 +11627,13 @@ Exit:
 	FEnd			; never reached
 
 
- FHdr ";",CO+IM+NN ; ( -- ) "End compilation of new word"
+ FHdr ";",CO+IM+NN ; ( -- )  End compilation of new word
   ; ## ";"  auto	ANS core
   ; https://forth-standard.org/standard/core/Semi
   ; End the compilation of a new word into the Dictionary.
   ;
   ; When we
-  ; enter this, WORKWORD is pointing to the nt_ of this word in the
+  ; enter this, WorkWord is pointing to the nt_ of this word in the
   ; Dictionary, DP to the previous word, and CP to the next free byte.
   ; A Forth definition would be (see "Starting Forth"):
   ; : POSTPONE EXIT  REVEAL POSTPONE ; [ ; IMMEDIATE  Following the
@@ -11709,8 +11649,8 @@ Semicolon:
 		lda #$60		; compile an RTS
 		jsr C_Comma_A
 
-		lda workword+0		; push xt, return
-		ldy workword+1
+		lda WorkWord+0		; push xt, return
+		ldy WorkWord+1
 		jmp PushYA
 
 _colonword:
@@ -11725,7 +11665,7 @@ _colonword:
 		bpl _new_word	; Bit 7 is clear = new word
 					; This word is already in the Dictionary
 
-		; WORKWORD points to the head of our new word
+		; WorkWord points to the head of our new word
 		; We can't use LATESTNT because we haven't added the new
 		; word to the Dictionary yet
 		lda WorkWord+0		; push our nt
@@ -11790,7 +11730,7 @@ _short:		tya			; fill in length in header
 		rts
 
 
- FHdr ":",NN ; ( "name" -- ) "Start compilation of a new word"
+ FHdr ":",NN ; ( "name" -- )  Start compilation of a new word, with word header
   ; ## ":"  auto	ANS core
   ; https://forth-standard.org/standard/core/Colon
 Colon:
@@ -11804,12 +11744,12 @@ Colon:
 		; Header_Build will build the header, but not link it into the dictionary.
  		; This is so FIND-NAME etc won't find a half-finished word when
 		; looking in the Dictionary.
-		; The new nt is saved in WORKWORD until we're finished with a SEMICOLON.
+		; The new nt is saved in WorkWord until we're finished with a SEMICOLON.
 		jmp Header_Build	; compile word header (but don't link)
 	FEnd
 
 
- FHdr ":NoName",NN ; ( -- ) "Start compilation of a new word""
+ FHdr ":NoName",NN ; ( -- )  Start compilation of a new word, no word header
   ; ## ":NONAME"	auto  ANS core
   ; https://forth-standard.org/standard/core/ColonNONAME
   ; Compile a word with no header.
@@ -11821,18 +11761,18 @@ Colon_NoName:
 		and status		; a :NONAME word.
 		sta status
 
-		; Put cp (the xt for this word) in WORKWORD. The flag above
+		; Put cp (the xt for this word) in WorkWord. The flag above
 		; lets both ";" and RECURSE know that is is an xt instead of an
 		; nt and they will modify their behavior.
 		lda cp+0
-		sta workword+0
+		sta WorkWord+0
 		lda cp+1
-		sta workword+1
+		sta WorkWord+1
 	FEnd
 		rts
 
 
- FHdr "'",NN ; ( "name" -- xt ) "Return a word's execution token (xt)"
+ FHdr "'",NN ; ( "name" -- xt )  Return a word's execution token (xt)
   ; ## "'"  auto	ANS core
   ; https://forth-standard.org/standard/core/Tick
 Tick:		jsr Tick_Nt
@@ -11844,7 +11784,7 @@ Tick_Nt:	jsr parse_name_check	; ( -- addr u )
 		jmp find_name_check	; ( addr u -- nt )
 
 
- FHdr "[']",CO+IM+NN ; ( -- ) "Store xt of following word during compilation"
+ FHdr "[']",CO+IM+NN ; ( -- )  Store xt of following word during compilation
   ; ## "[']"  auto  ANS core
   ; https://forth-standard.org/standard/core/BracketTick
 Bracket_Tick:	jsr Tick
@@ -11852,7 +11792,7 @@ Bracket_Tick:	jsr Tick
 	FEnd
 
 
- FHdr "Find",UF+NN ; ( caddr -- addr 0 | xt 1 | xt -1 ) "Find word in Dictionary"
+ FHdr "Find",UF+NN ; ( caddr -- addr 0 | xt 1 | xt -1 )  Find word in Dictionary
   ; ## "find"  auto  ANS core
   ; https://forth-standard.org/standard/search/FIND
   ; https://forth-standard.org/standard/core/FIND
@@ -11924,7 +11864,7 @@ _immediate:
 		rts
 
 
- FHdr "Find-Name",UF+NN ; ( addr u -- nt|0 ) "Get the name token for this name"
+ FHdr "Find-Name",UF+NN ; ( addr u -- nt|0 )  Get the name token for this name
   ; ## "find-name"  auto	Gforth
 find_name:
   ; www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
@@ -12059,11 +11999,12 @@ _char_next:	iny			; to next char
 		bcs _word_next
 
 
- FHdr "Int>Name",UF+NN ; ( xt -- nt ) "Get name token from execution token"
+ FHdr "Int>Name",UF+NN ; ( xt -- nt )  Get name token from execution token
   ; ## "int>name"	 auto  Tali Forth
   ; www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
   ; This is called >NAME in Gforth, but we change it to
   ; INT>NAME to match NAME>INT
+  ; Also returns nt in tmp1 and sets P.Z .
 Int_To_Name:
 		jsr underflow_1
 
@@ -12073,35 +12014,35 @@ Int_To_Name:
 
 		lda #$100-Wh_xt		; convert xt on stack to proposed nt
 		jsr Minus_A
-
+					; ( nt )
 		lda DStack+0,x		; tmp3= proposed nt
 		ldy DStack+1,x
 		sta tmp3+0
 		sty tmp3+1
 
-		stx tmp1+0		; save data stack index
+		stx tmp2+0		; save data stack index
 
 		lda #$100-2		; for each wordlist
-		sta tmp1+1
+		sta tmp2+1
 _wordlist_next:
-		ldy tmp1+1		; get next wordlist index
+		ldy tmp2+1		; get next wordlist index
 		iny
 		iny
-		sty tmp1+1
+		sty tmp2+1
 		cpy #(Num_OrderV-WordlistsV)/2
 		bcs _fail
 		ldx WordlistsV+0,y
 		lda WordlistsV+1,y
 		jmp _word_3
 
-_word_next:	stx tmp2+0
-		sta tmp2+1
+_word_next:	stx tmp1+0
+		sta tmp1+1
 
 		ldy #wh_WordListLink	; follow wh_WordListLink to next word
-		lda (tmp2),y
+		lda (tmp1),y
 		tax
 		iny
-		lda (tmp2),y
+		lda (tmp1),y
 _word_3:	beq _wordlist_next	;  end of list?
 		cmp tmp3+1		;  match?
 		bne _word_next
@@ -12109,20 +12050,21 @@ _word_3:	beq _wordlist_next	;  end of list?
 		bne _word_next
 
 		; We found it!
-		ldx tmp1+0		; restore data stack index
+		ldx tmp2+0		; restore data stack index
 					; proposed nt already on the stack
-		rts
+		rts			; return P.Z=0
 
 _fail: ; We didn't find it in any of the wordlists.
-		ldx tmp1+0		; restore data stack index
+		ldx tmp2+0		; restore data stack index
 		lda #0			; return a zero to indicate that we didn't find it.
 		sta DStack+0,x
 		sta DStack+1,x
-		rts
+		sta tmp1+1
+		rts			; return P.Z=1
 	FEnd
 
 
- FHdr "Name>Int",UF+NN ; ( nt -- xt ) "Convert Name Token to Execute Token"
+ FHdr "Name>Int",UF+NN ; ( nt -- xt )  Convert Name Token to Execute Token
   ; ## "name>int"	 tested	 Gforth
   ; See https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
 Name_To_Int:
@@ -12133,7 +12075,7 @@ Name_To_Int:
 	FEnd
 
 
- FHdr "Name>String",UF+NN ; ( nt -- addr u ) "Given a name token, return string of word"
+ FHdr "Name>String",UF+NN ; ( nt -- addr u )  Given a name token, return string of word
   ; ## "name>string"  tested  Gforth
   ; http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
 Name_To_String:
@@ -12158,15 +12100,14 @@ Name_To_String:
 	FEnd
 
 
- FHdr ">Body",UF+NN ; ( xt -- addr ) "Return a word's Param Field Area (PFA)"
+ FHdr ">Body",UF+NN ; ( xt -- addr )  Return a word's Param Field Area (PFA)
   ; ## ">body"  auto  ANS core
   ; https://forth-standard.org/standard/core/toBODY
   ; Given a word's execution token (xt), return the address of the
   ; start of that word's parameter field (PFA). This is defined as the
   ; address that HERE would return right after CREATE.
   ;
-  ; This is a
-  ; difficult word for STC Forths, because most words don't actually
+  ; This is a difficult word for STC Forths, because most words don't actually
   ; have a Code Field Area (CFA) to skip.
   ; We assume the user will only call this on a word with:
   ;   a CFA consisting of a jsr abs
@@ -12179,34 +12120,29 @@ To_Body:
 	FEnd
 
 
- FHdr "Erase",NN ; ( addr u -- ) "Fill memory region with zeros"
+ FHdr "Erase",NN ; ( addr u -- )  Fill memory region with zeros
   ; ## "erase"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/ERASE
   ; Note that ERASE works with "address" units (bytes), not cells.
-Erase:
-		; We don't check for underflow here because
-		; we deal with that in FILL
+Erase:		; FILL will check for underflow
 		jsr Zero
 		jmp Fill
 	FEnd
 
- FHdr "Blank",NN ; ( addr u -- ) "Fill memory region with spaces"
+ FHdr "Blank",NN ; ( addr u -- )  Fill memory region with spaces
   ; ## "blank"  auto  ANS string
   ; https://forth-standard.org/standard/string/BLANK
-Blank:
-		; We don't check for underflow here because
-		; we deal with that in FILL
+Blank:		; Fill will check for underflow.
 		jsr Bl
 		jmp Fill
 	FEnd
 
- FHdr "Fill",UF+NN ; ( addr u char -- ) "Fill a memory region with a character"
+ FHdr "Fill",UF+NN ; ( addr u char -- )  Fill a memory region with a byte
   ; ## "fill"  auto  ANS core
   ; https://forth-standard.org/standard/core/FILL
   ; Fill u bytes of memory with char starting at addr.
   ; Note that this works on bytes, not on cells.
-  ; It is not defined what
-  ; happens when we reach the end of the address space
+  ; It is not defined what happens when we reach the end of the address space
 Fill:
 		jsr underflow_3
 
@@ -12236,7 +12172,7 @@ _test2:		dec DStack+3,x		; any more pages?
 	FEnd
 
 
- FHdr "Variable",NN ; ( "name" -- ) "Define a variable"
+ FHdr "Variable",NN ; ( "name" -- )  Define a variable
   ; ## "variable"	 auto  ANS core
   ; https://forth-standard.org/standard/core/VARIABLE
   ; There are various Forth definitions for this word, such as
@@ -12249,7 +12185,7 @@ Variable:	jsr Create		; compile word header & push PFA
 		jmp Comma_YA
 	FEnd
 
- FHdr "2Variable",NN ; ( "name" -- ) "Create a double word variable"
+ FHdr "2Variable",NN ; ( "name" -- )  Create a double word variable
   ; ## "2variable"  auto	ANS double
   ; https://forth-standard.org/standard/double/TwoVARIABLE
   ; The variable is initialized to zero.
@@ -12258,7 +12194,7 @@ Two_variable:	jsr Variable		; compile word header & push PFA & 1st cell of data
 	FEnd
 
 
- FHdr "Constant",UF+NN ; ( n "name" -- ) "Define a constant"
+ FHdr "Constant",UF+NN ; ( n "name" -- )  Define a constant
   ; ## "constant"	 auto  ANS core
   ; https://forth-standard.org/standard/core/CONSTANT
 Constant:
@@ -12267,12 +12203,12 @@ Constant:
 		jsr Header_Comma	; compile word header
 
 		jsr LitCompile		; compile code to load registers, & pick a subroutine
-		jsr Jmp_Comma_YA	; compile code to JMP to the subroutine
+		jsr Jmp_Comma_NT_YA	; compile code to JMP to the subroutine
 		jmp adjust_z		; fix word length
 	FEnd
 
 
- FHdr "2Constant",UF+NN ; (C: d "name" -- ) ( -- d) "Create a double word constant"
+ FHdr "2Constant",UF+NN ; (C: d "name" -- ) ( -- d )  Create a double word constant
   ; ## "2constant"  auto	ANS double
   ; https://forth-standard.org/standard/double/TwoCONSTANT
 Two_constant:
@@ -12282,12 +12218,12 @@ Two_constant:
 		jsr Swap
 		jsr Literal		; compile push lo cell
 		jsr LitCompile		; compile push hi cell, YA=exit routine
-		jsr Jmp_Comma_YA	; compile JMP from above
+		jsr Jmp_Comma_NT_YA	; compile JMP from above
 		jmp adjust_z		; fix word length
 	FEnd
 
 
- FHdr "Value",UF+NN ; ( n "name" -- ) "Define a value word"
+ FHdr "Value",UF+NN ; ( n "name" -- )  Define a value word
   ; ## "value"  auto  ANS core
   ; https://forth-standard.org/standard/core/VALUE
 Value:
@@ -12323,14 +12259,12 @@ TwoValue:
 	FEnd
 
 TwoValue_Runtime:
-		pla			; pop RTS addr, +1, 
-		clc
-		adc #1
+		pla			; pop RTS addr
 		sta tmp1+0
 		pla
-		adc #0
 		sta tmp1+1
-		jmp Two_Fetch_tmp1	; fetch the data, return
+		ldy #1			; start at offset 1 (for RTS addr behavior)
+		jmp Two_Fetch_Tmp1Y	; fetch the data, return
 
 
  FHdr "To",NN+IM ; ( n "name" -- ) or ( "name")  Gives a new value to a VALUE or 2VALUE or FVALUE
@@ -12419,7 +12353,7 @@ _Test2:		cmp #$20		;   JSR abs ?
 		jsr ldya_immed_comma	; compile LDY #; LDA #  of xt+3
 		lda #<Two_Store_YA
 		ldy #>Two_Store_YA
-		jmp Jsr_Comma_YA	; compile JSR TwoValue_runtime; return
+		jmp Jsr_Comma_YA	; compile JSR Two_Store_YA; return
 
 _2Value_runtime: jmp Two_Store
 
@@ -12436,7 +12370,7 @@ _Test3:
 		jsr ldya_immed_comma	; compile LDY #; LDA #  of xt+3
 		lda #<FStore_YA
 		ldy #>FStore_YA
-		jmp Jsr_Comma_YA	; compile JSR FValue_runtime; return
+		jmp Jsr_Comma_YA	; compile JSR FStore_YA; return
 
 _FValue_interpret: jmp FStore
   .endif ; fp
@@ -12491,7 +12425,7 @@ TwoNip_NoUf:	lda DStack+0,x	; copy dTOS to dNOS
 	FEnd
 
 
- FHdr "S>D",UF ; ( n -- d ) "Convert single cell number to double cell"
+ FHdr "S>D",UF ; ( n -- d )  Convert single cell number to double cell
   ; ## "s>d"  auto  ANS core
   ; https://forth-standard.org/standard/core/StoD
 S_To_D:
@@ -12510,7 +12444,7 @@ S_To_D:
 		rts
 
 
- FHdr "D>S",UF ; ( d -- n ) "Convert a double number to single"
+ FHdr "D>S",UF ; ( d -- n )  Convert a double number to single
   ; ## "d>s"  auto  ANS double
   ; https://forth-standard.org/standard/double/DtoS
   ; Though this is basically just DROP, we keep it
@@ -12524,7 +12458,7 @@ D_To_S:
 		rts
 
 
- FHdr "D-",UF ; ( d d -- d ) "Subtract two double-celled numbers"
+ FHdr "D-",UF ; ( d1 d2 -- d )  Subtract two double-celled numbers
   ; ## "d-"  auto	 ANS double
   ; https://forth-standard.org/standard/double/DMinus
 D_Minus:
@@ -12557,7 +12491,7 @@ D_Minus:
 		rts
 
 
- FHdr "D+",UF ; ( d d -- d ) "Add two double-celled numbers"
+ FHdr "D+",UF ; ( d1 d2 -- d )  Add two double-celled numbers
   ; ## "d+"  auto	 ANS double
   ; https://forth-standard.org/standard/double/DPlus
 D_Plus:
@@ -12621,7 +12555,7 @@ _1:		dec DStack+2,x
 		rts
 
 
- FHdr "Allot",UF+NN ; ( n -- ) "Reserve or release memory"
+ FHdr "Allot",UF+NN ; ( n -- )  Reserve or release memory
   ; ## "allot"  auto  ANS core
   ; https://forth-standard.org/standard/core/ALLOT
   ; Reserve a certain number of bytes (not cells) or release them.
@@ -12712,7 +12646,7 @@ _done:
 		rts
 
 
- FHdr "Header,",NN ; ( "name" -- )  "Compile word header"
+ FHdr "Header,",NN ; ( "name" -- )  Compile word header
   ; See the definition of FHdr towards the top of this file for details on the header.
 Header_Comma:
 		jsr Header_Build
@@ -12824,13 +12758,13 @@ _process_name:
 	FEnd
 
 
- FHdr "Create",NN ; ( "name" -- ) "Create Dictionary entry for 'name'"
+ FHdr "Create",NN ; ( "name" -- )  Create Dictionary entry for 'name'
   ; ## "create"  auto  ANS core
   ; https://forth-standard.org/standard/core/CREATE
 Create:
 		jsr Header_Comma	; compile word header
 
-		lda #<DoVar
+		lda #<DoVar		; compile JSR DoVar
 		ldy #>DoVar
 		jsr Jsr_Comma_YA
 
@@ -12856,7 +12790,7 @@ DoVar:	;  Push the address of the PFA onto the stack.
 				; routine that itself called DOVAR.
 
 
- FHdr "Does>",CO+IM+NN ; ( -- ) "Add payload when defining new words"
+ FHdr "Does>",CO+IM+NN ; ( -- )  Add payload when defining new words
   ; ## "does>"  auto  ANS core
   ; https://forth-standard.org/standard/core/DOES
   ; Create the payload for defining new defining words. See
@@ -12864,8 +12798,7 @@ DoVar:	;  Push the address of the PFA onto the stack.
   ; the Developer Guide in the manual for a discussion of
   ; DOES>'s internal workings. This uses tmp1 and tmp2.
 Does:
-		; compile a subroutine jump to runtime of DOES>
-		ldy #>_runtime
+		ldy #>_runtime		; compile JSR _runtime
 		lda #<_runtime
 		jsr Jsr_Comma_YA
 
@@ -12877,20 +12810,16 @@ Does:
 		jsr Comma_YA
 		lda #$68		; compile PLA
 		jsr C_Comma_A
-		ldy #>_dodoes
-		lda #<_dodoes
+		ldy #>_DoDoes		; compile JSR _DoDoes
+		lda #<_DoDoes
 		jmp Jsr_Comma_YA
 	FEnd
 
-
-_runtime:
-	; """Runtime portion of DOES>. This replaces the subroutine jump
-	; to DOVAR that CREATE automatically encodes by a jump to the
-	; address that contains a subroutine jump to DODOES. We don't
+_runtime: ; Runtime portion of DOES>.
+	; We don't
 	; jump to DODOES directly because we need to work our magic with
-	; the return addresses. This routine is also known as "(DOES)" in
-	; other Forths
-	; """
+	; the return addresses.
+	; This routine is also known as "(DOES)" in other Forths
 
 		; CREATE has also already modified the DP to point to the new
 		; word. We have no idea which instructions followed the CREATE
@@ -12916,8 +12845,8 @@ _runtime:
 		rts
 
 
-_dodoes: ; Execute the runtime portion of DOES>. See DOES> and
-	; docs/create-does.txt for details and
+_DoDoes: ; Execute the runtime portion of DOES>.
+	; See DOES> and docs/create-does.txt for details and
 	; http://www.bradrodriguez.com/papers/moving3.htm
 
 		; RTS addr (PFA-1) is already in AY from inline code
@@ -12930,7 +12859,7 @@ _dodoes: ; Execute the runtime portion of DOES>. See DOES> and
 		jmp PushAY
 
 
- FHdr "Unused",0 ; ( -- u ) "Return size of space available to Dictionary"
+ FHdr "Unused",0 ; ( -- u )  Return size of space available to Dictionary
   ; ## "unused"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/UNUSED
   ; UNUSED only includes dictionary space.
@@ -12949,7 +12878,7 @@ _last = cp_end-2*padoffset
 		rts
 
 
- FHdr "Depth",NN ; ( -- u ) "Get number of cells (not bytes) used by stack"
+ FHdr "Depth",NN ; ( -- u )  Get number of cells (not bytes) used by stack
   ; ## "depth"  auto  ANS core
   ; https://forth-standard.org/standard/core/DEPTH
 Depth:
@@ -12964,7 +12893,7 @@ Depth:
 	FEnd
 
 
- FHdr "Key",NN ; ( -- char ) "Get one character from the input"
+ FHdr "Key",NN ; ( -- char )  Get one character from the input
   ; ## "key"  tested  ANS core
   ; https://forth-standard.org/standard/core/KEY
   ; Get a single character of input from the vectored
@@ -12988,7 +12917,7 @@ KeyQ:		jsr KeyQ_A
 KeyQ_A:		jmp (HaveKey)
 
 
- FHdr "Refill",NN ; ( -- f ) "Refill the input buffer"
+ FHdr "Refill",NN ; ( -- f )  Refill the input buffer
   ; ## "refill"  tested  ANS core ext
   ; https://forth-standard.org/standard/block/REFILL
   ; https://forth-standard.org/standard/core/REFILL
@@ -13064,7 +12993,7 @@ _src_not_string:
 	FEnd
 
 
- FHdr "Accept",UF+NN ; ( addr n -- n ) "Receive a string of characters from the keyboard"
+ FHdr "Accept",UF+NN ; ( addr n -- n )  Receive a string of characters from the keyboard
   ; ## "accept"  auto  ANS core
   ; https://forth-standard.org/standard/core/ACCEPT
   ; Receive a string of at most n1 characters, placing them at
@@ -13369,7 +13298,7 @@ accept_total_recall:
 		rts
 
 
- FHdr "Input>R",NN ; ( -- ) ( R: -- n n n n ) "Save input state to the Return Stack"
+ FHdr "Input>R",NN+R6 ; ( -- ) ( R: -- n1 n2 n3 n4 )  Save input state to the Return Stack
   ; ## "input>r"	tested	Tali Forth
   ; Save the current input state as defined by insrc, cib, ciblen, and
   ; toin to the Return Stack. Used by EVALUATE.
@@ -13398,8 +13327,7 @@ Input_To_R:
 		sta tmp1+1
 
 		; This assumes that insrc is the first of eight bytes and
-		; toin+1 the last in the sequence we want to save from the Zero
-		; Page.
+		; toin+1 the last in the sequence we want to save.
 		.cerror InSrc+2!=Cib
 		.cerror Cib+2!=CibLen
 		.cerror CibLen+2!=ToIn
@@ -13417,7 +13345,7 @@ _loop:		lda InSrc,y	; insrc+7 is toin+1
 		rts
 
 
- FHdr "R>Input",NN ; ( -- ) ( R: n n n n -- ) "Restore input state from Return Stack"
+ FHdr "R>Input",NN+R6 ; ( -- ) ( R: n1 n2 n3 n4 -- )  Restore input state from Return Stack
   ; ## "r>input"	tested	Tali Forth
   ; Restore the current input state as defined by insrc, cib, ciblen,
   ; and toin from the Return Stack.
@@ -13427,7 +13355,7 @@ _loop:		lda InSrc,y	; insrc+7 is toin+1
 R_To_Input:
 		; We arrive here with the return address on the top of the
 		; 6502's stack.
-		pla		 ; move it out of the way
+		pla		 ; move RTS addr out of the way
 		sta tmp1+0
 		pla
 		sta tmp1+1
@@ -13443,7 +13371,7 @@ _loop:		pla
 		cpy #8
 		bne _loop
 
-		lda tmp1+1		; Restore address for return jump
+		lda tmp1+1	; Restore RTS address
 		pha
 		lda tmp1+0
 		pha
@@ -13451,7 +13379,7 @@ _loop:		pla
 		rts
 
 
- FHdr "Bounds",UF ; ( addr u -- addr+u addr ) "Prepare address for looping"
+ FHdr "Bounds",UF ; ( addr u -- addr+u addr )  Prepare address for looping
   ; ## "bounds"  auto  Gforth
   ; http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Memory-Blocks.html
   ; Given a string, return the correct Data Stack parameters for
@@ -13476,14 +13404,13 @@ Bounds:
 		rts
 
 
- FHdr "Spaces",UF+NN ; ( n -- ) "Print a number of spaces"
+ FHdr "Spaces",UF+NN ; ( n -- )  Print a number of spaces
   ; ## "spaces"  auto  ANS core
   ; https://forth-standard.org/standard/core/SPACES
-Spaces:
+  ; ANS says this word takes a signed value but prints no spaces for negative values.
+ Spaces:
 		jsr underflow_1
 
-		; ANS says this word takes a signed value but prints no spaces
-		; for negative values.
 		jmp _test
 
 _loop:
@@ -13498,7 +13425,7 @@ _test:		dec DStack+0,x		; decrement & test
 		rts
 
 
- FHdr "-Trailing",UF+NN ; ( addr u1 -- addr u2 ) "Remove trailing spaces"
+ FHdr "-Trailing",UF+NN ; ( addr u1 -- addr u2 )  Remove trailing spaces
   ; ## "-trailing"  auto	ANS string
   ; https://forth-standard.org/standard/string/MinusTRAILING
   ; Remove trailing spaces
@@ -13533,7 +13460,7 @@ _done:		iny			; forward 1 char
 		rts		
 
 
- FHdr "-Leading",UF+NN ; ( addr1 u1 -- addr2 u2 ) "Remove leading spaces"
+ FHdr "-Leading",UF+NN ; ( addr1 u1 -- addr2 u2 )  Remove leading spaces
   ; ## "-leading"	 auto  Tali String
   ; Remove leading whitespace. This is the reverse of -TRAILING
 Minus_leading:
@@ -13558,7 +13485,7 @@ _done:
 		rts
 
 
- FHdr "/String",UF+NN ; ( addr u n -- addr u ) "Shorten string by n"
+ FHdr "/String",UF+NN ; ( addr u n -- addr u )  Shorten string by n
   ; ## "/string"	auto  ANS string
   ; https://forth-standard.org/standard/string/DivSTRING
 Slash_String:	DStackCheck 3,Throw_Stack_20
@@ -13603,10 +13530,10 @@ Two_drop:
 		rts
 
 
- Fhdr "2Swap",NN ; ( n1 n2 n3 n4 -- n3 n4 n1 n1 ) "Exchange two double words"
+ Fhdr "2Swap",NN ; ( n1 n2 n3 n4 -- n3 n4 n1 n1 )  Exchange two double words
   ; ## "2swap"  auto  ANS core
   ; https://forth-standard.org/standard/core/TwoSWAP
-Two_swap:	DStackCheck 4,Throw_Stack_20
+Two_Swap:	DStackCheck 4,Throw_Stack_20
 
 		stx tmp1
 		dex
@@ -13624,7 +13551,7 @@ _loop:		inx
 		rts
 
 
- FHdr "2Over",UF+NN ; ( d1 d2 -- d1 d2 d1 ) "Copy double word NOS to TOS"
+ FHdr "2Over",UF+NN ; ( d1 d2 -- d1 d2 d1 )  Copy double word NOS to TOS
   ; ## "2over"  auto  ANS core
   ; https://forth-standard.org/standard/core/TwoOVER
 Two_over:	DStackCheck 4,Throw_Stack_20
@@ -13639,7 +13566,7 @@ _loop:		dex
 		rts
 
 
- FHdr "2!",UF ; ( n1 n2 addr -- ) "Store two numbers at given address"
+ FHdr "2!",UF ; ( n1 n2 addr -- )  Store two numbers at given address
   ; ## "2!"  auto	 ANS core
   ; https://forth-standard.org/standard/core/TwoStore
   ; Stores so n2 goes to addr and n1 to the next consecutive cell.
@@ -13671,7 +13598,7 @@ Two_Store_YA:	sta tmp1+0	; save addr
 		rts
 
 
- FHdr "2@",0 ; ( addr -- n1 n2 ) "Fetch the cell pair n1 n2 stored at addr"
+ FHdr "2@",0 ; ( addr -- n1 n2 )  Fetch the cell pair n1 n2 stored at addr
   ; ## "2@"  auto	 ANS core
   ; https://forth-standard.org/standard/core/TwoFetch
   ; Note n2 stored at addr and n1 in the next cell -- in our case,
@@ -13679,13 +13606,13 @@ Two_Store_YA:	sta tmp1+0	; save addr
 Two_fetch:	jsr PopYA
 Two_Fetch_YA:	sta tmp1+0	; save addr
 		sty tmp1+1
-Two_Fetch_tmp1:
+		ldy #0
+Two_Fetch_Tmp1Y:
 		dex
 		dex
 		dex
 		dex
-		ldy #0		; copy LSB
-		lda (tmp1),y
+		lda (tmp1),y	; copy LSB
 		sta DStack+0,x
 		iny		; copy next
 		lda (tmp1),y
@@ -13724,8 +13651,29 @@ DFetchYA:	sta tmp1+0	; save addr
 	FEnd
 		rts
 
+ FHdr "D!",NN ; ( d addr -- )  store double, XINU format
+DStore:		jsr PopYA
+DStoreYA:	sta tmp1+0	; save addr
+		sty tmp1+1
 
- FHdr "2R@",CO+NN ; ( -- n n ) "Copy top two entries from Return Stack"
+		lda DStack+2,x	; LSB
+		ldy #0
+		sta (tmp1),y
+		lda DStack+3,x
+		iny
+		sta (tmp1),y
+		lda DStack+0,x
+		iny
+		sta (tmp1),y
+		lda DStack+1,x	; MSB
+		iny
+		sta (tmp1),y
+
+		jmp Two_Drop	; also check underflow, return
+	FEnd
+
+
+ FHdr "2R@",CO+NN ; ( -- n n )  Copy top two entries from Return Stack
   ; ## "2r@"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/TwoRFetch
   ;
@@ -13760,7 +13708,7 @@ Two_r_fetch:
 		rts
 
 
- FHdr "2R>",CO+R6 ; ( -- n1 n2 ) (R: n1 n2 -- ) "Pull two cells from Return Stack"
+ FHdr "2R>",CO+R6 ; ( -- n1 n2 ) (R: n1 n2 -- )  Move two cells from Return Stack
   ; ## "2r>"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/TwoRfrom
   ; Pull top two entries from Return Stack.
@@ -13808,7 +13756,7 @@ Two_r_from:
 		rts
 
 
- FHdr "2>R",CO+UF+R6 ; ( n1 n2 -- )(R: -- n1 n2) "Push top two entries to Return Stack"
+ FHdr "2>R",CO+UF+R6 ; ( n1 n2 -- )(R: -- n1 n2)  Move two cells to Return Stack
   ; ## "2>r"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/TwotoR
   ; Push top two entries to Return Stack.
@@ -13853,7 +13801,7 @@ Two_to_r:
 		rts
 
 
- FHdr "Invert",UF ; ( n1 -- n2 ) "Bitwise complement TOS"
+ FHdr "Invert",UF ; ( n1 -- n2 )  Bitwise complement
   ; ## "invert"  auto  ANS core
   ; https://forth-standard.org/standard/core/INVERT
 Invert:
@@ -13870,7 +13818,7 @@ Invert:
 		rts
 
 
- FHdr "Negate",UF ; ( n1 -- n2 ) "Two's complement"
+ FHdr "Negate",UF ; ( n1 -- n2 )  Two's complement
   ; ## "negate"  auto  ANS core
   ; https://forth-standard.org/standard/core/NEGATE
 Negate:
@@ -13887,7 +13835,7 @@ Negate4:	lda #0
 		rts
 
 
- FHdr "Abs",NN ; ( n -- u ) "Return absolute value of a number"
+ FHdr "Abs",NN ; ( n -- u )  Return absolute value of a number
   ; ## "abs"  auto  ANS core
   ; https://forth-standard.org/standard/core/ABS
 Abs:		DStackCheck 1,Throw_Stack_17
@@ -13900,7 +13848,7 @@ Abs:		DStackCheck 1,Throw_Stack_17
 Throw_Stack_17: jmp Throw_Stack
 
 
- FHdr "DNegate",NN ; ( d -- d ) "Negate double cell number"
+ FHdr "DNegate",NN ; ( d -- d )  2s complement double cell number
   ; ## "dnegate"	auto  ANS double
   ; https://forth-standard.org/standard/double/DNEGATE
 DNegate:	DStackCheck 2,Throw_Stack_17 ; double number
@@ -13917,7 +13865,7 @@ DNegate3:	sec
 	FEnd
 
 
- FHdr "DAbs",NN ; ( d -- d ) "Return the absolute value of a double"
+ FHdr "DAbs",NN ; ( d -- d )  Return the absolute value of a double
   ; ## "dabs"  auto  ANS double
   ; https://forth-standard.org/standard/double/DABS
 DAbs:		DStackCheck 2,Throw_Stack_17 ; double number
@@ -14142,7 +14090,7 @@ U_Less_Than:	lda DStack+2,x
 		bcc True1
 	FEnd
 
- FHdr "U>",NN ; ( u1 u2 -- f )  return u1 > u2 (unsigned)"
+ FHdr "U>",NN ; ( u1 u2 -- f )  return u1 > u2 (unsigned)
   ; ## "u>"  auto	 ANS core ext
   ; https://forth-standard.org/standard/core/Umore
 U_Greater_Than:	lda DStack+0,x
@@ -14248,7 +14196,7 @@ Zero_Less:	lda DStack+1,x	; MSB
 Throw_Stack_05: jmp Throw_Stack
 
 
- FHdr "Min",UF+NN ; ( n1 n2 -- n ) "Keep smaller of two signed numbers"
+ FHdr "Min",UF+NN ; ( n1 n2 -- n )  Keep smaller of two signed numbers
   ; ## "min"  auto  ANS core
   ; https://forth-standard.org/standard/core/MIN
   ; See http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
@@ -14265,7 +14213,7 @@ Min_3:		bmi Nip_NoUf	; if negative, NOS is larger and needs to be dumped
 	FEnd
 		rts
 
- FHdr "Max",NN ; ( n1 n2 -- n ) "Keep larger of two signed numbers"
+ FHdr "Max",NN ; ( n1 n2 -- n )  Keep larger of two signed numbers
   ; ## "max"  auto  ANS core
   ; https://forth-standard.org/standard/core/MAX
   ; See also
@@ -14285,7 +14233,7 @@ Max_3:		bpl Nip_NoUf	; if negative, NOS is larger and needs to be kept
 		rts
 
 
- FHdr "Nip",UF ; ( n1 n2 -- n2 ) "Delete NOS"
+ FHdr "Nip",UF ; ( n1 n2 -- n2 )  Delete NOS
   ; ## "nip"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/NIP
 Nip:
@@ -14301,7 +14249,7 @@ Nip_NoUf:	lda DStack+0,x	; PopYA
 		rts
 
 
- FHdr "Pick",0 ; ( n n u -- n n n ) "Move element u of the stack to TOS"
+ FHdr "Pick",0 ; ( n n u -- n n n )  Move element u of the stack to TOS
   ; ## "pick"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/PICK
   ; Take the u-th element out of the stack and put it on TOS,
@@ -14327,7 +14275,7 @@ Pick:
 		rts
 
 
- FHdr "Char",NN ; ( "c" -- u ) "Convert character to ASCII value"
+ FHdr "Char",NN ; ( "c" -- u )  Convert character to ASCII value
   ; ## "char"  auto  ANS core
   ; https://forth-standard.org/standard/core/CHAR
 Char:
@@ -14340,7 +14288,7 @@ Char:
 	FEnd
 
 
- FHdr "[Char]",CO+IM+NN ; ( "c" -- ) "Compile character literal"
+ FHdr "[Char]",CO+IM+NN ; ( "c" -- )  Compile character literal
   ; ## "[char]"  auto  ANS core
   ; https://forth-standard.org/standard/core/BracketCHAR
   ; Compile the ASCII value of a character as a literal. This is an
@@ -14354,21 +14302,14 @@ Bracket_Char:	jsr Char
 	FEnd
 
 
- FHdr "Char+",0 ; ( addr -- addr+1 ) "Add the size of a character unit to address"
+ FHdr "Char+",NN ; ( addr -- addr+1 )  Add the size of a character unit to address
   ; ## "char+"  auto  ANS core
   ; https://forth-standard.org/standard/core/CHARPlus
-Char_Plus:
-		jsr underflow_1
-
-		inc DStack+0,x
-		bne +
-		inc DStack+1,x
-+
+Char_Plus:	jmp One_Plus
 	FEnd
-		rts
 
 
- FHdr "Chars",AN ; ( n -- n ) "Number of bytes that n chars need"
+ FHdr "Chars",AN ; ( n -- n )  Number of bytes that n chars need
   ; ## "chars"  auto  ANS core
   ; https://forth-standard.org/standard/core/CHARS
   ; Return how many address units n chars are.
@@ -14381,11 +14322,10 @@ Chars:
 		rts
 
 
- FHdr "Cells",UF ; ( u -- u ) "Convert cells to size in bytes"
+ FHdr "Cells",UF ; ( u1 -- u2 )  Convert cells to size in bytes
   ; ## "cells"  auto  ANS core
   ; https://forth-standard.org/standard/core/CELLS
-Cells:
-		jsr underflow_1
+Cells:		jsr underflow_1
 
 		asl DStack+0,x		; 2*
 		rol DStack+1,x
@@ -14393,13 +14333,12 @@ Cells:
 		rts
 
 
- FHdr "Cell+",UF ; ( u -- u ) "Add cell size in bytes"
+ FHdr "Cell+",UF ; ( u -- u )  Add cell size in bytes
   ; ## "cell+"  auto  ANS core
   ; https://forth-standard.org/standard/core/CELLPlus
   ; Add the number of bytes ("address units") that one cell needs.
   ; Since this is an 8 bit machine with 16 bit cells, we add two bytes.
-Cell_Plus:
-		jsr underflow_1
+Cell_Plus:	jsr underflow_1
 
 Cell_Plus_NoUf:	lda #2		; our cells are 2 bytes
 
@@ -14423,7 +14362,7 @@ Nos_Plus_A: ; add unsigned A to NOS
 +		rts
 
 
- FHdr "Here",NN ; ( -- addr ) "Push Compiler Pointer on Data Stack"
+ FHdr "Here",NN ; ( -- addr )  Push Compiler Pointer on Data Stack
   ; ## "here"  auto  ANS core
   ; https://forth-standard.org/standard/core/HERE
 Here:		lda cp+0
@@ -14432,11 +14371,10 @@ Here:		lda cp+0
 	FEnd
 
 
- FHdr "1-",UF ; ( u -- u-1 ) "Decrement TOS"
+ FHdr "1-",UF ; ( u -- u-1 )  Decrement TOS
   ; ## "1-"  auto	 ANS core
   ; https://forth-standard.org/standard/core/OneMinus
-One_Minus:
-		jsr underflow_1
+One_Minus:	jsr underflow_1
 One_Minus_NoUf:
 		lda DStack+0,x
 		bne +
@@ -14463,11 +14401,10 @@ Minus_A: ; ( n1 A -- n2 ) add negative extended A to TOS
 +		rts
 
 
- FHdr "1+",UF ; ( u -- u+1 ) "Increase TOS by one"
+ FHdr "1+",UF ; ( u -- u+1 )  Increase TOS by one
   ; ## "1+"  auto	 ANS core
   ; https://forth-standard.org/standard/core/OnePlus
-One_Plus:
-		jsr underflow_1
+One_Plus:	jsr underflow_1
 
 		inc DStack+0,x
 		bne +
@@ -14543,7 +14480,7 @@ DU2Slash:	jsr underflow_2
 	FEnd
 
 
- FHdr "2*",UF ; ( n -- n ) "Multiply TOS by two"
+ FHdr "2*",UF ; ( n -- n )  Multiply TOS by two
   ; ## "2*"  auto	 ANS core
   ; https://forth-standard.org/standard/core/TwoTimes
 Two_Star:
@@ -14555,7 +14492,7 @@ Two_Star:
 		rts
 
 
- FHdr "2/",UF ; ( n1 -- n ) "Divide TOS by two"
+ FHdr "2/",UF ; ( n1 -- n )  Divide TOS by two
   ; ## "2/"  auto	 ANS core
   ; """https://forth-standard.org/standard/core/TwoDiv"""
 Two_Slash:
@@ -14569,7 +14506,7 @@ Two_Slash:
 		rts
 
 
- FHdr "U2/",UF ; ( u1 -- u ) "Divide TOS by two (unsigned)"
+ FHdr "U2/",UF ; ( u1 -- u )  Divide TOS by two (unsigned)
 UTwo_Slash:
 		jsr underflow_1
 
@@ -14596,7 +14533,7 @@ _9:
 		rts
 
 
- FHdr "RShift",0 ; ( x u -- x ) "Shift TOS to the right"
+ FHdr "RShift",0 ; ( x u -- x )  Shift TOS to the right
   ; ## "rshift"  auto  ANS core
   ; https://forth-standard.org/standard/core/RSHIFT
 RShift:		jsr PopA2	; pop u, check for 2 params
@@ -14613,9 +14550,9 @@ _done:
 		rts
 
 
- FHdr "LShift",0 ; ( x u -- u ) "Shift TOS left"
+ FHdr "LShift",0 ; ( x u -- u )  Shift TOS left
   ; ## "lshift"  auto  ANS core
-  ; """https://forth-standard.org/standard/core/LSHIFT"""
+  ; https://forth-standard.org/standard/core/LSHIFT
 LShift:		jsr PopA2	; pop u, check for 2 params
 LShift_A:	tay		; get shift count
 		beq _done
@@ -14630,7 +14567,7 @@ _done:
 		rts
 
 
- FHdr "And",UF ; ( n1 n2 -- n ) "Bitwise AND TOS and NOS"
+ FHdr "And",UF ; ( n1 n2 -- n )  Bitwise AND TOS and NOS
   ; ## "and"  auto  ANS core
   ; https://forth-standard.org/standard/core/AND
 And2:
@@ -14650,7 +14587,7 @@ And2:
 		rts
 
 
- FHdr "Or",UF ; ( n1 n2 -- n ) "Bitwise OR TOS and NOS"
+ FHdr "Or",UF ; ( n1 n2 -- n )  Bitwise OR TOS and NOS
   ; ## "or"  auto	 ANS core
   ; https://forth-standard.org/standard/core/OR
 Or:
@@ -14670,7 +14607,7 @@ Or:
 		rts
 
 
- FHdr "Xor",UF ; ( n1 n2 -- n ) "Bitwise XOR TOS and NOS"
+ FHdr "Xor",UF ; ( n1 n2 -- n )  Bitwise XOR TOS and NOS
   ; ## "xor"  auto  ANS core
   ; https://forth-standard.org/standard/core/XOR
 Xor:
@@ -14690,7 +14627,7 @@ Xor:
 		rts
 
 
- FHdr "+",UF ; ( n n -- n ) "Add TOS to NOS"
+ FHdr "+",UF ; ( n1 n2 -- n )  Add TOS to NOS
   ; ## "+"  auto	ANS core
   ; https://forth-standard.org/standard/core/Plus
 Plus:
@@ -14710,7 +14647,7 @@ Plus:
 		rts
 
 
- FHdr "-",UF ; ( n1 n2 -- n ) "Subtract TOS from NOS"
+ FHdr "-",UF ; ( n1 n2 -- n )  Subtract TOS from NOS
   ; ## "-"  auto	ANS core
   ; https://forth-standard.org/standard/core/Minus
 Minus:
@@ -14730,7 +14667,7 @@ Minus:
 		rts
 
 
- FHdr ".",NN ; ( n -- ) "Print TOS"
+ FHdr ".",NN ; ( n -- )  Print signed single
   ; ## "."  auto	ANS core
   ; https://forth-standard.org/standard/core/d
 Dot:		lda DStack+1,x		; ( n )	save sign
@@ -14741,7 +14678,7 @@ Dot:		lda DStack+1,x		; ( n )	save sign
 	FEnd
 
 
- FHdr "D.",NN ; ( d -- ) "Print double"
+ FHdr "D.",NN ; ( d -- )  Print signed double
   ; ## "d."  tested  ANS double
   ; http://forth-standard.org/standard/double/Dd
 D_Dot:		lda DStack+1,x		; save sign
@@ -14757,7 +14694,7 @@ fmt_d3:		jsr Less_Number_Sign	; ( ud )	start formatting
 	FEnd
 
 
- FHdr "U.",UF+NN ; ( u -- ) "Print TOS as unsigned number"
+ FHdr "U.",UF+NN ; ( u -- )  Print TOS as unsigned number
   ; ## "u."  tested  ANS core
   ; https://forth-standard.org/standard/core/Ud
 U_Dot:		jsr underflow_1
@@ -14766,7 +14703,7 @@ U_Dot:		jsr underflow_1
 	FEnd
 
 
- FHdr "UD.",UF+NN ; ( ud -- ) "Print double as unsigned"
+ FHdr "UD.",UF+NN ; ( ud -- )  Print double as unsigned
   ; ## "ud."  auto  Tali double
 UD_Dot:		jsr underflow_2 ; double number
 		jsr print_ud
@@ -14784,7 +14721,7 @@ print_ud: ; ( ud -- )  Print, without trailing space
 		jmp Type
 
 
- FHdr "U.R",NN ; ( u u -- ) "Print NOS as unsigned number right-justified with TOS width"
+ FHdr "U.R",NN ; ( u u -- )  Print NOS as unsigned number right-justified with TOS width
   ; ## "u.r"  tested  ANS core ext
   ; https://forth-standard.org/standard/core/UDotR
 U_Dot_R:	jsr PopA		; save field width
@@ -14794,7 +14731,7 @@ U_Dot_R_A:	pha
 	FEnd
 
 
- FHdr "UD.R",NN ; ( ud u -- ) "Print unsigned double right-justified u wide"
+ FHdr "UD.R",NN ; ( ud u -- )  Print unsigned double right-justified u wide
   ; ## "ud.r"  auto  Tali double
 UD_Dot_R:	jsr PopA			; save field width
 UD_Dot_R_A:	pha
@@ -14811,7 +14748,7 @@ fmt_r:		jsr Number_sign_greater		; finish formatted
 	FEnd
 
 
- FHdr ".R",NN ; ( n u -- ) "Print NOS as unsigned number in TOS width"
+ FHdr ".R",NN ; ( n u -- )  Print NOS as unsigned number in TOS width
   ; ## ".r"  tested  ANS core ext
   ; https://forth-standard.org/standard/core/DotR
 Dot_R:		jsr PopA		; save field width
@@ -14824,7 +14761,7 @@ Dot_R_A:	pha
 	FEnd
 
 
- FHdr "D.R",NN ; ( d u -- ) "Print double right-justified u wide"
+ FHdr "D.R",NN ; ( d u -- )  Print double right-justified u wide
   ; ## "d.r"  tested  ANS double
   ; http://forth-standard.org/standard/double/DDotR"""
 D_Dot_R:	jsr PopA		; save field width
@@ -14840,7 +14777,7 @@ fmt_dr3:	jsr Less_Number_Sign	; start formatted output
 	FEnd
 
 
- FHdr "?",NN ; ( addr -- ) "Print content of a variable"
+ FHdr "?",NN ; ( addr -- )  Print content of a variable
   ; ## "?"  tested  ANS tools
   ; https://forth-standard.org/standard/tools/q
   ;
@@ -14853,7 +14790,7 @@ Question:
 	FEnd
 
 
- FHdr "2Dup",UF ; ( a b -- a b a b ) "Duplicate top two stack elements"
+ FHdr "2Dup",UF ; ( n1 n2 -- n1 n2 n1 n2 )  Duplicate top two stack elements
   ; ## "2dup"  auto  ANS core
   ; https://forth-standard.org/standard/core/TwoDUP
 Two_Dup:
@@ -14877,7 +14814,7 @@ Two_Dup:
 		rts
 
 
- FHdr "Tuck",UF ; ( b a -- a b a ) "Copy TOS below NOS"
+ FHdr "Tuck",UF ; ( b a -- a b a )  Copy TOS below NOS
   ; ## "tuck"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/TUCK
 Tuck:
@@ -14901,12 +14838,12 @@ Tuck:
 		rts
 
 
- FHdr "C,",NN ; ( c -- ) "Append one byte/char in memory"
+ FHdr "C,",NN ; ( c -- )  Append one byte/char in memory
   ; ## "c,"  auto	 ANS core
   ; https://forth-standard.org/standard/core/CComma
 C_Comma:	jsr PopA	; pop c, with underflow check
 C_Comma_A: ; A=byte
-		; We preserves Y.
+		; We preserve Y.
 		dex
 		sty DStack+0,x	; save Y
 		ldy #0		; store A
@@ -14921,7 +14858,7 @@ C_Comma_A: ; A=byte
 		rts
 
 
- FHdr ",",NN ; ( n -- ) "Append one cell in memory"
+ FHdr ",",NN ; ( n -- )  Append one cell in memory
   ; ## ","  auto	ANS core
   ; https://forth-standard.org/standard/core/Comma
   ; Store TOS at current place in memory.
@@ -14960,10 +14897,15 @@ Jmp_Comma:	jsr PopYA	; pop addr (optimize can skip)
 Jmp_Comma_YA:	jsr PushYA	; push addr
 		lda #$4c	; JMP abs opcode
 		bne Jsr_Comma_3
+
+Jmp_Comma_NT_YA: ; ( YA=nt -- )
+		jsr PushYA
+		jsr Name_To_Int	; convert nt to xt
+		jmp Jmp_Comma
 	FEnd
 
 
- FHdr "C@",UF ; ( addr -- c ) "Get a character/byte from given address"
+ FHdr "C@",UF ; ( addr -- c )  Get a character/byte from given address
   ; ## "c@"  auto	 ANS core
   ; https://forth-standard.org/standard/core/CFetch
 C_Fetch:	jsr underflow_1
@@ -14976,7 +14918,7 @@ C_Fetch:	jsr underflow_1
 		rts
 
 
- FHdr "C!",UF ; ( c addr -- ) "Store character at address given"
+ FHdr "C!",UF ; ( c addr -- )  Store character at address given
   ; ## "c!"  auto	 ANS core
   ; https://forth-standard.org/standard/core/CStore
 C_Store:	jsr underflow_2
@@ -15015,7 +14957,7 @@ _7:
 		rts 
 
 
- FHdr "+!",UF+NN ; ( n addr -- ) "Add number to value at given address"
+ FHdr "+!",UF+NN ; ( n addr -- )  Add number to value at given address
   ; ## "+!"  auto	 ANS core
   ; https://forth-standard.org/standard/core/PlusStore
 Plus_store:
@@ -15038,23 +14980,26 @@ Plus_store:
 	FEnd
 
 
- FHdr "Emit",NN ; ( char -- ) "Print character to current output"
+ FHdr "Bell",NN ; ( -- )  Emit ASCII Bell
+  ; ## "bell"  tested  Tali Forth
+Bell:		lda #7		; ASCII value for BELL
+		bne Emit_A
+	FEnd
+
+
+ FHdr "Emit",NN ; ( char -- )  Print character to current output
   ; ## "emit"  auto  ANS core
   ; https://forth-standard.org/standard/core/EMIT
   ; Run-time default for EMIT. The user can revector this by changing
   ; the value of the OUTPUT variable. We ignore the MSB completely, and
   ; do not check to see if we have been given a valid ASCII character.
 Emit:		jsr PopA		; pop char, with underflow check
-Emit_A:
-	; We frequently want to print the character in A without fooling
-	; around with the Data Stack. This is Emit_A's job, which still
-	; allows the output to be vectored. Call it with JSR as you
-	; would Emit
+Emit_A: ; print char in A
 		jmp (output)		; JSR/RTS
 	FEnd
 
 
- FHdr "Space",NN ; ( -- ) "Print a single space"
+ FHdr "Space",NN ; ( -- )  Print a single space
   ; ## "space"  auto  ANS core
   ; https://forth-standard.org/standard/core/SPACE
 Space:		lda #AscSP
@@ -15062,7 +15007,7 @@ Space:		lda #AscSP
 	FEnd
 
 
- FHdr "Type",UF+NN ; ( addr u -- ) "Print string"
+ FHdr "Type",UF+NN ; ( addr u -- )  Print string
   ; ## "type"  auto  ANS core
   ; https://forth-standard.org/standard/core/TYPE
   ; Works through EMIT to allow OUTPUT revectoring.
@@ -15087,11 +15032,6 @@ _test:		lda DStack+0,x		; decrement length & test for <0
 	FEnd
 
 
-Print_ASCIIZ_YA: ; Print zero-terminated string at YA, with newline
-		jsr Print_ASCIIZ_YA_no_lf
-                jmp CR
-
-
 Print_ASCIIZ_YA_no_lf: ; Print zero-terminated string at YA, no newline
   ; Uses tmp3 & Y .
 		sta tmp3+0		; save string address
@@ -15109,7 +15049,12 @@ _done:
 		rts
 
 
- FHdr "Execute",NN ; ( xt -- ) "Jump to word based on execution token"
+Print_ASCIIZ_YA: ; Print zero-terminated string at YA, with newline
+		jsr Print_ASCIIZ_YA_no_lf
+                jmp CR
+
+
+ FHdr "Execute",NN ; ( xt -- )  Jump to word using execution token
   ; ## "execute"	auto  ANS core
   ; https://forth-standard.org/standard/core/EXECUTE
 Execute:	DStackCheck 1,Throw_Stack_03
@@ -15125,7 +15070,7 @@ Execute:	DStackCheck 1,Throw_Stack_03
 	FEnd
 
 
- FHdr "2Rot",NN ; ( da db dc -- db dc da ) "Rotate first three stack entries downwards"
+ FHdr "2Rot",NN ; ( da db dc -- db dc da )  Rotate first three stack entries downwards
   ; ## "2rot"  auto  ANS double
   ; https://forth-standard.org/standard/double/TwoROT
 TwoRot:		DStackCheck 6,Throw_Stack_03
@@ -15149,10 +15094,10 @@ TwoRot:		DStackCheck 6,Throw_Stack_03
 
 Throw_Stack_03: jmp Throw_Stack
 
-; FHdr "Roll",NN ; ( ... u -- ... )   Rotate u+1 items on the top of the stack
+; FHdr "Roll",NN ; ( ... u -- ... )  Rotate u+1 items on the top of the stack
   ; https://forth-standard.org/standard/core/ROLL
 
- FHdr "Rot",NN ; ( a b c -- b c a ) "Rotate first three stack entries downwards"
+ FHdr "Rot",NN ; ( a b c -- b c a )  Rotate first three stack entries downwards
   ; ## "rot"  auto  ANS core
   ; https://forth-standard.org/standard/core/ROT
   ; Remember "R for 'Revolution'" - the bottom entry comes out
@@ -15176,7 +15121,7 @@ Rot:		DStackCheck 3,Throw_Stack_03
 		rts
 
 
- FHdr "-Rot",NN ; ( a b c -- c a b ) "Rotate upwards"
+ FHdr "-Rot",NN ; ( a b c -- c a b )  Rotate upwards
   ; ## "-rot"  auto  Gforth
   ; http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Data-stack.html
 Not_Rot:	DStackCheck 3,Throw_Stack_03
@@ -15198,7 +15143,7 @@ Not_Rot:	DStackCheck 3,Throw_Stack_03
 		rts
 
 
- FHdr "!",NN ; ( n addr -- ) "Store TOS in memory"
+ FHdr "!",NN ; ( n addr -- )  Store TOS in memory
   ; ## "!"  auto	ANS core
   ; https://forth-standard.org/standard/core/Store
 Store:		DStackCheck 2,Throw_Stack_03
@@ -15220,7 +15165,7 @@ Store:		DStackCheck 2,Throw_Stack_03
 	FEnd
 		rts
 
- FHdr "@",NN ; ( addr -- n ) "Push cell content from memory to stack"
+ FHdr "@",NN ; ( addr -- n )  Push cell content from memory to stack
   ; ## "@"  auto	ANS core
   ; https://forth-standard.org/standard/core/Fetch
 Fetch:		DStackCheck 1,Throw_Stack_03
@@ -15239,14 +15184,14 @@ Fetch:		DStackCheck 1,Throw_Stack_03
 		rts
 
 
- FHdr ">R",CO+R6 ; ( n -- )(R: -- n) "Push TOS to the Return Stack"
+ FHdr ">R",CO+R6 ; ( n -- )(R: -- n)  Move TOS to the Return Stack
   ; ## ">r"  auto	 ANS core
   ; native is special case
   ; https://forth-standard.org/standard/core/toR
   ; This word is handled differently for native and for
   ; subroutine coding, see `COMPILE,`.
 To_R:
-		pla		; move the return address out of the way
+		pla		; move the RTS address out of the way
 		sta tmp5+0
 		pla
 		sta tmp5+1
@@ -15268,7 +15213,7 @@ To_R:
 
 		; --- CUT HERE FOR NATIVE CODING ---
 
-		lda tmp5+1	; move the return address back in
+		lda tmp5+1	; move the RTS address back in
 		pha
 		lda tmp5+0
 		pha
@@ -15276,7 +15221,7 @@ To_R:
 		rts
 
 
- FHdr "R>",CO+R6 ; ( -- n )(R: n --) "Move top of Return Stack to TOS"
+ FHdr "R>",CO+R6 ; ( -- n )(R: n --)  Move top of Return Stack to TOS
   ; ## "r>"  auto	 ANS core
   ; native is special case
   ; https://forth-standard.org/standard/core/Rfrom
@@ -15313,7 +15258,7 @@ R_From:
 		rts
 
 
- FHdr "R@",NN+CO ; ( -- n ) "Get copy of top of Return Stack"
+ FHdr "R@",NN+CO ; ( -- n )  Get copy of top of Return Stack
   ; ## "r@"  auto	 ANS core
   ; https://forth-standard.org/standard/core/RFetch
   ; This word is Compile Only in Tali Forth, though Gforth has it
@@ -15329,7 +15274,7 @@ R_Fetch:
 	FEnd
 
 
- FHdr "Over",UF ; ( b a -- b a b ) "Copy NOS to TOS"
+ FHdr "Over",UF ; ( b a -- b a b )  Copy NOS to TOS
   ; ## "over"  auto  ANS core
   ; https://forth-standard.org/standard/core/OVER
 Over:
@@ -15346,7 +15291,7 @@ Over:
 		rts
 
 
- FHdr "?Dup",UF+NN ; ( n -- 0 | n n ) "Duplicate TOS non-zero"
+ FHdr "?Dup",UF+NN ; ( n -- 0 | n n )  Duplicate TOS if non-zero
   ; ## "?dup"  auto  ANS core
   ; https://forth-standard.org/standard/core/qDUP
 Question_Dup:
@@ -15358,7 +15303,7 @@ Question_Dup:
 	FEnd
 		rts
 
- FHdr "Dup",UF ; ( u -- u u ) "Duplicate TOS"
+ FHdr "Dup",UF ; ( u -- u u )  Duplicate TOS
   ; ## "dup"  auto  ANS core
   ; https://forth-standard.org/standard/core/DUP
 Dup:
@@ -15383,7 +15328,7 @@ PushAY: ; ( AY -- n )
 		rts
 
 
- FHdr "Swap",UF ; ( b a -- a b ) "Exchange TOS and NOS"
+ FHdr "Swap",UF ; ( b a -- a b )  Exchange TOS and NOS
   ; ## "swap"  auto  ANS core
   ; https://forth-standard.org/standard/core/SWAP
 Swap:
@@ -15402,7 +15347,7 @@ Swap:
 		rts
 
 
- FHdr "Drop",UF ; ( u -- ) "Pop top entry on Data Stack"
+ FHdr "Drop",UF ; ( u -- )  Discard top entry on Data Stack
   ; ## "drop"  auto  ANS core
   ; https://forth-standard.org/standard/core/DROP
 Drop:
@@ -15452,7 +15397,7 @@ root_dictionary_start = WordListLink ; END of ROOT-WORDLIST
 
 ; ASSEMBLER-WORDLIST-------------------------------------------------------------------
 
-assembler:		; used to calculate size of assembler code
+;assembler:		; used to calculate size of assembler code
 WordListLink .var 0
 .if "assembler" in TALI_OPTIONAL_WORDS
 
@@ -15765,8 +15710,8 @@ asm_back_branch:
 	FEnd
 
 
- FHdr "DisAsm",NN ; ( addr n -- )  ""Disassemble a block of 6502 code.
-  ; Using assembler word lists
+ FHdr "DisAsm",NN ; ( addr n -- )  Disassemble a block of 6502 code.
+  ; Using assembler wordlist.
   ; Convert a segment of memory to assembler output.
   ; This produces Simpler Assembly Notation (SAN) code
   ; see the section on The Disassembler in the manual for more details.
@@ -16016,7 +15961,7 @@ WordListLink .var 0	; start wordlist
 .if "editor" in TALI_OPTIONAL_WORDS && "block" in TALI_OPTIONAL_WORDS
 
 
- FHdr "l",NN ; ( -- ) "List the current screen"
+ FHdr "l",NN ; ( -- )  List the current screen
   ; ## "l"  tested  Tali Editor
 Editor_l:	jmp ListScr
 	FEnd
@@ -16032,7 +15977,7 @@ Editor_Screen_Helper: ; ( scr# -- addr )  Get block in buffer, return addr of bu
 		jmp Buffer
 
 
- FHdr "enter-screen",NN ; ( scr# -- ) "Enter all lines for given screen"
+ FHdr "enter-screen",NN ; ( scr# -- )  Enter all lines for given screen
   ; ## "enter-screen"  auto  Tali Editor
 Editor_Enter_Screen:
 		; Set the variable SCR and get a buffer for the
@@ -16059,7 +16004,7 @@ _loop:		sta DStack+0,x
 		rts
 
 
- FHdr "line",NN ; ( line# -- c-addr ) "Turn a line number into address in current screen"
+ FHdr "line",NN ; ( line# -- c-addr )  Turn a line number into address in current screen
   ; ## "line"  tested  Tali Editor
 Editor_line:
 ;		jsr underflow_1
@@ -16078,7 +16023,7 @@ Editor_line:
 	FEnd
 
 
- FHdr "erase-screen",NN ; ( scr# -- ) "Erase all lines for given screen"
+ FHdr "erase-screen",NN ; ( scr# -- )  Erase all lines for given screen
   ; ## "erase-screen"  tested  Tali Editor
 Editor_Erase_Screen:
 		; Set the variable SCR and get a buffer for the
@@ -16094,7 +16039,7 @@ Editor_Erase_Screen:
 	FEnd
 
 
- FHdr "el",NN ; ( line# -- ) "Erase the given line number"
+ FHdr "el",NN ; ( line# -- )  Erase the given line number
   ; ## "el"  tested  Tali Editor
 Editor_el:
 		; Turn the line number into buffer offset.
@@ -16110,7 +16055,7 @@ Editor_el:
 	FEnd
 
 
- FHdr "o",NN ; ( line# -- ) "Overwrite the given line"
+ FHdr "o",NN ; ( line# -- )  Overwrite the given line
   ; ## "o"  tested  Tali Editor
 Editor_o:
 		; Print prompt
