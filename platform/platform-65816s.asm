@@ -96,7 +96,7 @@ DoStkDim = 8	; # of entries in Do stack
 ; assembled.  If TALI_OPTIONAL_WORDS is not defined in your platform file,
 ; you will get all of the words.
 
-;TALI_OPTIONAL_WORDS := ["fp","fpe", "fpieee","fptrancendentals", "ed", "editor", "ramdrive", "block", "environment?", "assembler", "wordlist" ]
+;TALI_OPTIONAL_WORDS := ["fp","fpe","fptrancendentals", "ed", "editor", "ramdrive", "block", "environment?", "assembler", "wordlist" ]
 
 
 ; TALI_OPTION_CR_EOL sets the character(s) that are printed by the word
