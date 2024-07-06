@@ -13,20 +13,10 @@ str_ok:         .text " ok", 0         ; note space at beginning
 str_compiled:   .text " compiled", 0   ; note space at beginning
 str_redefined:  .text "redefined ", 0  ; note space at end
 
-str_wid_asm:    .text "Assembler ", 0  ; Wordlist ID 2, note space at end
-str_wid_editor: .text "Editor ", 0     ; Wordlist ID 1, note space at end
-str_wid_forth:  .text "Forth ", 0      ; Wordlist ID 0, note space at end
-str_wid_root:   .text "Root ", 0       ; Wordlist ID 3, note space at end
-
 str_see_flags:  .text "flags:", 0
 str_see_nt:     .text "nt: $", 0
 str_see_xt:     .text "xt: $", 0
 str_see_size:   .text "size: #", 0
-
-;str_disasm_lit: .text "LITERAL ", 0
-;str_disasm_sdc: .text "STACK DEPTH CHECK", 0
-;str_disasm_bra: .text "BRANCH ",0
-
 
 ;s_abc_lower:  .text "0123456789abcdefghijklmnopqrstuvwxyz"
 ;s_abc_upper:  .text "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -34,7 +24,7 @@ str_see_size:   .text "size: #", 0
    
 ; ## ERROR STRINGS
 
-; If the string texts are changed, the test suite must be as well
+; If the string texts are changed, the test suite must be as well.
 ; They're changed!
 
 Exception_Text_List:

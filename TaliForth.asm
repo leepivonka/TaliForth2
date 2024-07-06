@@ -313,16 +313,15 @@ AscDEL  = $7f	; delete (CTRL-h)
 ;
  .virtual 0 ; FORTH word header structure (what nt points to)
 				; +---------------+
-		.fill $80	; |  unused space |   to align the last char of name
-				; |		  |   space before used name chars is never touched, can overlap previous code.
+		.fill $80	; |  unused space |   To align the last char of name.
+				; |		  |   Space before used name chars is never touched, can overlap previous code.
 				; |  Name string  |   8-bit mixed case ascii, right justified
-				; |		  |   position chosen so incrementing beyond it flagged as negative
-				; |		  |   last char of name
-wh_NameLastChar	= *-1		; |		  |   Note string is not zero-terminated
-				; +---------------+   Arranged so next index is negative ($80)
+				; |		  |   String is not zero-terminated.
+wh_NameLastChar	= *-1		; |		  |   Last char of name.
+				; +---------------+   Arranged so next index is negative ($80).
 wh_HashNameLen:			    .byte ?	; |
-wh_HNL_HashMask =		    %11100000	; |      lo 3 bits of last char of name
-wh_HNL_NameLengthMask =		    %00011111	; |      length of name
+wh_HNL_HashMask		=	    %11100000	; |      lo 3 bits of last char of name
+wh_HNL_NameLengthMask	=	    %00011111	; |      length of name
 				; +---------------+
 wh_Flags:			    .byte ?	; |  flag bits
 FP	=			    %00000001	; |	Far previous NT (two byte pointer rather than one byte offset)
@@ -330,19 +329,19 @@ DB	=			    %00000010	; |	Disjoint body (two byte pointer rather than adjoining b
 CO	=			    %00000100	; |	Compile Only
 IM	=			    %00001000	; |     Immediate Word
 						; |     Never/always native flags using this table:
-				;		  |	     NN  AN
-				;		  |	    +---+---+
-				;		  |	    | 0 | 0 |  -- : Normal word called by JSR (non-native) or inlined (native)
+				; |		  |	     NN  AN
+				; |		  |	    +---+---+
+				; |		  |	    | 0 | 0 |  -- : Normal word called by JSR (non-native) or inlined (native)
 NN	=			    %00010000	; |	    | 1 | 0 |  NN : Word can only be called by JSR (never native)
 AN	=			    %00100000  	; |	    | 0 | 1 |  AN : Word can only be inlined (always native)
 ST	=			    %00110000	; |	    | 1 | 1 |  ST : Normal word with return stack juggling that
-				;		  |	    +---+---+       must be removed when inlining (R>, R@, >R etc)
-				;		  |
-				;		  |	The total header length is between 4 and 7 bytes plus the the word's name.     
-				;		  |	Flag bits 0 and 1, FP and DB, can be used to calculate the variable part
+				; |		  |	    +---+---+       must be removed when inlining (R>, R@, >R etc)
+				; |		  |
+				; |		  |	The total header length is between 4 and 7 bytes plus the the word's name.     
+				; |		  |	Flag bits 0 and 1, FP and DB, can be used to calculate the variable part
 wh_HeaderExtendMask =		     FP+DB	; |	of the header length directly by adding 4 to `flags & %00000011`.
-				;		  |	For example a header with both FP and DB equal to zero has length 4,
-				;		  |	whereas a header with FP=0 and DB=1 has length 6.
+				; |		  |	For example a header with both FP and DB equal to zero has length 4,
+				; |		  |	whereas a header with FP=0 and DB=1 has length 6.
 UF	=			    %01000000   ; |     strippable underflow
 				; +---------------+
 wh_CodeLength:			   .byte ?	; |  Code length  |   Code length for native compile, max 255
@@ -356,10 +355,10 @@ wh_LinkNt:			; | 1 or 2 bytes  |   Previous NT  |   FP=0: prev NT = NT start - o
 				; +---------------+
 				;          ...
 ; XT start			; +---------------+
-				; |  Word body	  |   When BD=0 the code body follows the header
+				; |  Word body	  |   When BD=0 the code body follows the header.
 				; : (65c02 code)  :
-				; :		  :   Words that want CFA & DFA (eg CREATEd words) have a JSR to the handler code,
-				; :		  :   followed by the DFA area.  The JSR return address (+1) is the pointer to the DFA.
+				; :		  :   Words that want CFA & PFA (eg CREATEd words) have a JSR to the handler code,
+				; :		  :   followed by the PFA area.
 ; XT end			; +---------------+
 
  .endvirtual ; end of word header struct
@@ -369,29 +368,30 @@ XtPtr1  .var 0  ; initialize for macro
 
 WordHeader .macro name,flags=NN,XtPtr=0,XtLen=3 ; compile a FORTH Word Header
 ;	WordHeader_Extend	; user-supplied extension
-L1:	.text \name	;  name of word as a string, ending at wh_NameLastChar
-	.cerror (*-L1)>wh_HNL_NameLengthMask ; name too long
+Name0:	.text \name	;  name of word as a string, ending at wh_NameLastChar
+NameLength = *-Name0
+	.cerror NameLength>wh_HNL_NameLengthMask ; name too long
 Nt0 = *-(wh_NameLastChar+1)	; remember our nt
 	.cerror wh_HNL_HashMask!=$e0 ; hard coded
-	.byte ((\name[-1]&7)<<5)+(*-L1)	;wh_HashNameLen
+	.byte ((\name[-1]&7)<<5)+NameLength	;wh_HashNameLen
 
-WordFlags ::= \flags	; modifyable copy, remember for later
+WordFlags ::= \flags	; modifiable copy, remember for later
 LinkDisplacement = Nt0-WordListLink
 	.if (LinkDisplacement & $ff00) != 0
 	  WordFlags ::= WordFlags | FP 
 	 .endif
-	.if \XtPtr!=0 ; supplied pointer
+	.if \XtPtr!=0 ; supplied code pointer?
 	  WordFlags ::= WordFlags | DB
 	 .endif
 	.byte WordFlags	;wh_Flags
-	.byte \xtlen	;wh_CodeLength
+	.byte \XtLen	;wh_CodeLength
 	.if (WordFlags & FP)!=0 ;wh_LinkNt	link to previous word in dictionary chain (0=end)
 	  .word WordListLink
 	 .else
-	  .byte LinkDisplacement
+	  .byte LinkDisplacement	; offset to previous nt
 	 .endif
 	.if (WordFlags & DB)!=0
-	  .word \XtPtr
+	  .word \XtPtr		; pointer to xt
 XtPtr1 ::= 0
 	 .else
 XtPtr1 ::= *
@@ -401,15 +401,15 @@ WordListLink ::= Nt0 ; remember the nt of this word for later
 
 WordEnd .macro  ; Mark end of a word's appended code
 	.cerror (WordFlags & DB )!=0 ; does not work on words with disjoint body
-CL	.var *-XtPtr1
-	.if CL>$ff
+CodeLen	.var *-XtPtr1
+	.if CodeLen>$ff
 	  .cerror (WordFlags & NN)==0 ; "code size >255 & not marked NN"
-CL	 .var $ff
+CodeLen	 .var $ff
 	 .endif
-en = *	; remember here
+Here1 = *	; remember here
   * = WordListLink+wh_CodeLength
-	.byte CL	;wh_CodeLength
-  * = en  ; back to here
+	.byte CodeLen	;patch wh_CodeLength
+  * = Here1  ; back to here
 	.endmacro
 
 
@@ -747,7 +747,7 @@ _LinkShort:	ldy #wh_LinkNt		; tmp1 -= tmp1->LinkNt byte offset
 		jmp PushYA
 	WordEnd
 
- WordHeader "Rand",0 ; ( -- YA )  generate next random #
+ WordHeader "Rand",0 ; ( -- YA )  generate next random # state
   ; 32bit Galois LFSR  https://en.wikipedia.org/wiki/Linear-feedback_shift_register#Galois_LFSRs
 Rand:
 		lsr RndState+1
@@ -2327,10 +2327,10 @@ FStar:
 		plp			; RDrop sign flag
 		jsr Throw_FpOutOfRange
 
-_zero:		inx			; F2Drop
+_zero:		inx			; F2Drop r1 & r2
 		inx
 		stx FIndex
-		plp			; rdrop saved result sign
+		plp			; RDrop saved result sign
 		ldx tmp1+0		; restore data stack index
 		jmp F0			; return zero
 
@@ -2533,6 +2533,7 @@ F1Slash:	jsr F1
 ; but only use 16bits of the input mantissa values.
 ; They are faster, for when lower precision can be tolerated.
 
+  .if 0
  WordHeader "E*",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3. (16bit precision)
 EStar:
 		jsr FPos		; make r1 & r2 positive
@@ -2569,26 +2570,83 @@ _Zero:		lda #0
 		beq EFix3
 
 _Byte: ; do a multiplier byte in A
+		eor #$ff
 		sta tmp1+1
 		ldy #8			; for 8 bits
 _b1:		lsr tmp1+1		;   if bit set
-		bcc _b5
-		clc			;     r3 += r2 
-		lda FSMant1+0,x
+		bcs _b5
+		lda FSMant1+0,x		;     r3 += r2 
 		adc FSMant1+1,x
 		sta FSMant1+1,x
 		lda FSMant0+0,x
 		adc FSMant0+1,x
 		sta FSMant0+1,x
-_b5:
-		ror FSMant0+1,x		;   r3 <<= 1
+_b5:		lsr FSMant0+1,x		;   r3 <<= 1
 		ror FSMant1+1,x
 		dey			;  next bit
 		bne _b1
 		rts
 	WordEnd
 
-EFix3: ; commonm code
+  .else
+ WordHeader "E*",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3. (16bit precision)
+EStar:
+		jsr FPos		; make r1 & r2 positive
+		php			;   remember result sign
+
+		lda FSExp+0,x		; add exponents
+		sec
+		adc FSExp+1,x
+		sta FSExp+1,x
+		bvs _ExpOvfl
+
+		ldy #0
+		sty tmp2+0
+		sty tmp2+1		; zero result
+
+		lda FSMant1+1,x
+		jsr _Byte		; do FSMant1+1 byte
+		lda FSMant0+1,x
+		jsr _Byte		; do FSMant0+1 byte
+
+		lda tmp2+0		; r3 = tmp2
+		sta FSMant1+1,x
+		lda tmp2+1
+		sta FSMant0+1,x
+
+		jmp EFix3		; finish
+
+_ExpOvfl: ; exponent overflowed
+		bcs _Zero		;underflow?
+		ldx tmp1+0		; restore X
+		jsr Throw_FpOutOfRange	;overflow
+
+_Zero:		lda #0
+		sta FSMant1+1,x
+		sta FSMant0+1,x
+		beq EFix3
+
+_Byte: ; do a multiplier byte in A
+		eor #$ff
+		sta tmp1+1
+		ldy #8			; for 8 bits
+_b1:		lsr tmp1+1		;   if bit set
+		bcs _b5
+		lda tmp2+0		;     tmp2 += r2 
+		adc FSMant1+0,x
+		sta tmp2+0
+		lda tmp2+1
+		adc FSMant0+0,x
+		sta tmp2+1
+_b5:		lsr tmp2+1		;   tmp2 <<= 1
+		ror tmp2+0
+		dey			;  next bit
+		bne _b1
+		rts
+	WordEnd
+  .endif
+
+EFix3: ; common code
 		lda #0			; zero unused mantissa
 		sta FSMant2+1,x
 		sta FSMant3+1,x
@@ -10720,7 +10778,7 @@ _jsr_opt:
 		ldy #wh_Flags		; underflow strip & not stack strip?
 		lda (tmp1),y
 		and #UF
-		bne _jsr
+		beq _jsr
 
 		lda #3			;   strip the underflow check
 		jsr Nos_Plus_A
@@ -10745,15 +10803,14 @@ _inline: ; do native compile
 
 		lda uf_strip+0		; user wants underflow stripping?
 		beq +
-		lda DStack+1,x		; this word contains underflow checking?
+		ldy #wh_Flags		; this word contains underflow checking?
+		lda (tmp1),y
 		and #UF
 		beq +
 
 		; --- SPECIAL CASE 2: REMOVE UNDERFLOW CHECKING ---
-
 		lda #3			;   Adjust xt: Start after underflow check
 		jsr Nos_Plus_A
-
 		lda #$100-3		;   Adjust u: omit underflow check
 		jsr minus_a
 +
@@ -11975,7 +12032,6 @@ _char_next:	iny			; to next char
 		cmp #'Z'-'A'+1
 		bcc _char_next
 		bcs _word_next
-
 
 
  WordHeader "Find",NN ; ( caddr -- caddr 0 | xt 1 | xt -1 )  Find word in Dictionary
@@ -14976,17 +15032,16 @@ Tuck:
   ; https://forth-standard.org/standard/core/CComma
 C_Comma:	jsr PopA	; pop c, with underflow check
 C_Comma_A: ; A=byte
-		; We preserve Y.
-		dex
-		sty DStack+0,x	; save Y
+		; preserves Y.
+		sty DStack-1,x	; save Y
+
 		ldy #0		; store A
 		sta (cp),y
 		inc cp+0	; increment cp
 		bne +
 		inc cp+1
 +
-		ldy DStack+0,x	; restore Y
-		inx
+		ldy DStack-1,x	; restore Y
 	WordEnd
 		rts
 
@@ -15491,7 +15546,7 @@ Swap:
 		rts
 
 
- WordHeader "Drop",UF ; ( u -- )  Discard top entry on Data Stack
+ WordHeader "Drop",UF ; ( u -- )  Discard top cell on Data Stack
   ; ## "drop"  auto  ANS core
   ; https://forth-standard.org/standard/core/DROP
 Drop:
@@ -15589,8 +15644,8 @@ asm_1: ; opcode follows JSR, 1byte on param stack
 	jsr asm_op	; compile opcode
 	lda DStack+1,x	; compile operand
 	beq _store	;   unsigned byte?
-	cmp #$ff	;   signed byte?
-	bne _err
+;	cmp #$ff	;   signed byte?
+;	bne _err
 _store:	jmp C_Comma
 
 _err:	lda #$100+err_OutOfRange
@@ -15917,6 +15972,9 @@ _unknown: ; no opcode word found
 		jsr _tab		; to source area
 		lda #'?'
 		jsr Emit_A
+		pla			; RDrop nt
+		pla
+		pla			; RDrop opcode
 		jmp _instr
 
 
