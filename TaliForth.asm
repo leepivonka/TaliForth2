@@ -298,24 +298,16 @@ AscDEL  = $7f	; delete (CTRL-h)
 ; First version: 05. Dec 2016 (Liara Forth)
 ; This version: 24 Apr 2024
 
-; Dictionary headers are usually together with the code, which allows
-; the xt pointer to be sometimes omitted.
-; code length to be 1 byte.
 ; We roughly follow the Gforth terminology:
 ;   The Execution Token (xt) is the address of the first byte of a word's code.
 ;   The Name Token (nt) is a pointer to the word's header structure.
 
-;   prev NT --> +---------------+
-;               :               :
-;               :               :
-;
-;                     ...
-;
- .virtual 0 ; FORTH word header structure (what nt points to)
-				; +---------------+
+ .virtual 0 ; FORTH word header structure
+		;	nt -->	; +---------------+
 		.fill $80	; |  unused space |   To align the last char of name.
-				; |		  |   Space before used name chars is never touched, can overlap previous code.
-				; |  Name string  |   8-bit mixed case ascii, right justified
+				; |		  |   Space before used name chars is never touched,
+				; |		  |	can overlap previous code.
+				; |  Name string  |   8-bit mixed case ASCII, right justified
 				; |		  |   String is not zero-terminated.
 wh_NameLastChar	= *-1		; |		  |   Last char of name.
 				; +---------------+   Arranged so next index is negative ($80).
@@ -414,7 +406,7 @@ Here1 = *	; remember here
 
 
 DStackCheck .macro depth,ErrorDestination ; compile a data stack underflow check
-	cpx #-2*\depth+DStack0+1
+	cpx #-2*\depth+DStack0+1	; far enough below end of data stack (& not negative)?
 	bcs \ErrorDestination
 	.endmacro
 
@@ -426,11 +418,11 @@ DStackCheck .macro depth,ErrorDestination ; compile a data stack underflow check
 ; just after defining their new word.  The NN flag forbids native compiling,
 ; the AN flag forces it.
 
-; The words are sorted roughly with the more common ones closer to the head of
+; The Forth wordlist is sorted roughly with the more common ones closer to the head of
 ; the dictionary (further down in code) so they are found earlier.
 ; This only affects dictionary search speed, not execution speed.
 
-; Each word a two special
+; Each word has a special
 ; status line that begins with "  ; ## ", which allows auto-generation of the
 ; WORDLIST.md file and other entries in the docs folder. Status entries are:
 ;
@@ -535,23 +527,20 @@ user_words_len = *-user_words_start
 		rts
 
 
- WordHeader "CC@",NN,platform_CCAT,3 ; ( -- ud ) fetch cpu cycle counter
+ WordHeader "CC@",NN,platform_CCAT,8 ; ( -- ud ) fetch cpu cycle counter
 
 
- WordHeader "Bye",NN,platform_bye,3 ; ( -- )  Exit FORTH
+ WordHeader "Bye",NN,platform_bye,8 ; ( -- )  Exit FORTH
   ; ## "bye"  tested  ANS tools ext
   ; https://forth-standard.org/standard/tools/BYE
 
 
  WordHeader "TypeSymbol",NN ; ( addr -- )  print addr as symbol
-TypeSymbol:	jsr Two
-		jsr Spaces
-		lda #'('
-		jsr Emit_A
-		jsr Space
+TypeSymbol:	jsr SLiteral_runtime
+		  jmp +
+		  .text "  ( $"
++		jsr Type
 		jsr Dup
-		lda #'$'
-		jsr Emit_A
 		jsr Dot_Hex
 		jsr Space
 		jsr DictSearchXt	; ( addr_end addr operand offset nt )
@@ -574,9 +563,9 @@ TypeSymbol:	jsr Two
 
 ; WordHeader "DictSearchXt",NN ; ( xt -- offset nt ) search wordlists for word with best match
 DictSearchXt:
+		dex			; alloc nt
 		dex
-		dex
-		jsr Over
+		jsr Over		; alloc xt
 		lda #$ff		; init best offset
 		sta DStack+5,x		; ( offset nt xt )
 
@@ -701,7 +690,7 @@ LinkNext: ; step to next nt in wordlist
 	; in: tmp1= nt
 	; out: tmp1= next nt
 	; 	P.Z=end of list
-		ldy #wh_Flags
+		ldy #wh_Flags		; which kind of wh_LinkNt?
 		lda (tmp1),y
 		and #FP
 		beq _LinkShort
@@ -6624,29 +6613,17 @@ _done:
 Search_WordList:
 		jsr PopA		; Pop wid
 		pha
+					; ( addr u )
+		jsr swl_prepare 	; ( )
 
-		jsr swl_prepare 	; ( 0 u )
-		inx
-		inx			; ( 0 )
-
-		pla			; pop wid
+		pla			; get wid
 		jsr swl_search_wordlist ; tmp1= nt of matching word
 		beq _NotFound
 
 	; The strings match.
+		jsr Name_To_Int_T	; ( xt )
 
-		ldy #wh_Flags
-		lda (tmp1),y
-		and #FP+DB
-		clc
-		adc #wh_LinkNt-1
-		adc tmp1+0		; TOS= xt
-		sta DStack+0,x
-		lda #0
-		adc tmp1+1
-		sta DStack+1,x
-
-	;	ldy #Wh_Flags		; get flags
+		ldy #Wh_Flags		; get flags
 		lda (tmp1),y
 		and #IM
 		bne _immediate		; bit set, we're immediate
@@ -6656,9 +6633,7 @@ Search_WordList:
 _immediate:	jmp One			; We're immediate, return 1
 
 
-_NotFound:
-					; NOS already zeroed
-		rts
+_NotFound:	jmp Zero		; ( 0 )
 	WordEnd
 
 .endif ; "wordlist"
@@ -9823,14 +9798,14 @@ _MinusCheck: ; If the first character is a minus, strip it off and set
   ; ## "hex"  auto  ANS core ext
   ; https://forth-standard.org/standard/core/HEX
 Hex:		lda #16
-		bne decimal_a
+		bne Decimal_a
 	WordEnd
 
  WordHeader "Decimal",0 ; ( -- )  Set radix base to decimal
   ; ## "decimal"	auto  ANS core
   ; https://forth-standard.org/standard/core/DECIMAL
 Decimal:	lda #10
-decimal_a:	sta base+0
+Decimal_a:	sta base+0
 		lda #0
 		sta base+1		; paranoid
 	WordEnd
@@ -10006,7 +9981,7 @@ _TooDeep:	lda #$100+err_DoLoop_TooDeep
   ; https://forth-standard.org/standard/core/LOOP
   ; Compile-time part of LOOP.
 Loop:
-  .if 0
+  .if 0 ; more compiled code but much faster
 		lda #$e6		; compile INC DoIndex+0
 		ldy #DoIndex+0
 		jsr Comma_YA
@@ -10180,7 +10155,6 @@ I:		ldy DoStkIndex
 
 		dex
 		dex
-
 		sec		; n= fudged index - fudge factor (FUFA)
 		lda DoIndex+0
 		sbc DoFuFaL,y
@@ -10200,7 +10174,6 @@ J:		ldy DoStkIndex
 
 		dex
 		dex
-
 		sec		; n= 2nd fudged index - 2nd fudge factor (FUFA)
 		lda DoIndexL+0,y	; LSB
 		sbc DoFufaL+1,y
@@ -10521,7 +10494,7 @@ _loop:
 		; make a copy of the address in case it isn't a word we know and
 		; we have to go see if it is a number
 		jsr Two_dup		; ( addr u -- addr u addr u )
-		jsr find_name		; ( addr u addr u -- addr u nt|0 )
+		jsr Find_Name		; ( addr u addr u -- addr u nt|0 )
 		lda DStack+1,x		; word found?
 		bne _got_name_token
 
@@ -10677,9 +10650,7 @@ Postpone:
 		jsr parse_name_check	; get name string
 					; ( addr n )
 		jsr find_name_check	; lookup name
-					; ( nt | 0 )
-
-					; tmp1 has a copy of nt
+					; ( nt )  tmp1=nt
 
 		ldy #Wh_Flags		; IMMEDIATE word?
 		lda (tmp1),y		;    using saved nt
@@ -11128,10 +11099,23 @@ Dot_quote:
 	WordEnd
 
 
-; WordHeader 'C";,IM+NN ; ( "string" -- )( -- addr )  compile counted string literal
+; WordHeader 'C"',IM+NN ; ( "string" -- )( -- addr )  compile counted string literal
   ; ## "c""  ???  ANS core ext
   ; https://forth-standard.org/standard/core/Cq
 
+
+ WordHeader 'S\"',IM+NN ; ( "string" -- )( -- addr u )  Store string in memory
+  ; ## "s\""  auto  ANS core
+  ; https://forth-standard.org/standard/core/Seq
+  ; Store address and length of string given, returning ( addr u ).
+  ; ANS core claims this is compile-only, but the file set expands it
+  ; to be interpreted, so it is a state-sensitive word, which in theory
+  ; are evil. We follow general usage. This is just like S" except
+  ; that it allows for some special escaped characters.
+S_Backslash_Quote:
+		lda #$ff	; Do handle escaped chars.
+		bne S_Quote_start
+	WordEnd
 
  WordHeader 'S"',IM+NN ; ( "string" -- )( -- addr u )  Store string in memory
   ; ## "s""  auto	 ANS core
@@ -11399,20 +11383,6 @@ _alpha:		and #$1F		; Make it uppercase.
 _digit: ; It's 0-9
 		sbc #'0'-1
 		rts
-
-
- WordHeader 'S\"',IM+NN ; ( "string" -- )( -- addr u )  Store string in memory
-  ; ## "s\""  auto  ANS core
-  ; https://forth-standard.org/standard/core/Seq
-  ; Store address and length of string given, returning ( addr u ).
-  ; ANS core claims this is compile-only, but the file set expands it
-  ; to be interpreted, so it is a state-sensitive word, which in theory
-  ; are evil. We follow general usage. This is just like S" except
-  ; that it allows for some special escaped characters.
-S_Backslash_Quote:
-		lda #$ff	; Do handle escaped chars.
-		jmp S_Quote_start
-	WordEnd
 
 
  WordHeader "LatestXt",NN ; ( -- xt )  Push most recent xt to the stack
@@ -11833,7 +11803,7 @@ Colon:
 		jsr Right_Bracket	; switch to compile state
 
 		lda status
-		ora #%01000000	; tell ";" and RECURSE this is a normal word
+		ora #%01000000	; tell ";" and RECURSE that WorkWord contains nt
 		ora #%10000000	; Tell Header_Build not to print warning for duplicate name.
 		sta status
 
@@ -11841,7 +11811,7 @@ Colon:
  		; This is so FIND-NAME etc won't find a half-finished word when
 		; looking in the Dictionary.
 		; The new nt is saved in WorkWord until we're finished with a SEMICOLON.
-		jmp Header_Build	; compile word header (but don't link)
+		jmp Header_Build	; compile word header (but don't link into wordlist)
 	WordEnd
 
 
@@ -11853,8 +11823,8 @@ Colon:
 Colon_NoName:
 		jsr Right_Bracket	; switch to compile state
 
-		lda #$ff-%01000000	; tell ";" and RECURSE this is
-		and status		; a :NONAME word.
+		lda #$ff-%01000000	; tell ";" and RECURSE that WorkWord contains xt
+		and status
 		sta status
 
 		; Put cp (the xt for this word) in WorkWord. The flag above
@@ -11890,7 +11860,6 @@ Bracket_Tick:	jsr Tick
 
  WordHeader "Find-Name",NN ; ( addr u -- nt|0 )  Get the name token for this name
   ; ## "find-name"  auto	Gforth
-find_name:
   ; www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
   ; Given a string, find the Name Token (nt) of a word or return
   ; zero if the word is not in the dictionary. We use this instead of
@@ -11898,13 +11867,13 @@ find_name:
   ; PARSE-NAME. Note this returns the nt, not the xt of a word like
   ; FIND. To convert, use NAME>INT. This is a Gforth word.
   ; FIND calls this word.
-
+Find_Name:				; ( addr u )
 		jsr swl_prepare 	; setup for search
-					; ( 0 u )
-		lda #$ff		; for each wordlist in the wordlist search order.
+		dex
+		dex			; ( ? )
+		lda #$ff		; for each entry in search order
 		sta DStack+1,x
-_wordlist_next: ; step to next wordlist in wordlists
-		inc DStack+1,x
+_wordlist_next:	inc DStack+1,x		; step to next search order entry
 		ldy DStack+1,x
 		cpy Num_OrderV		; at end of list?
 		bcc _nextS
@@ -11912,32 +11881,32 @@ _wordlist_next: ; step to next wordlist in wordlists
 		lda #wid_Root		; also try root wordlist
 		bne _nextA
 
-_nextS:		lda Search_OrderV,y	; A = search_order[Y]  get wordlist ID
+_nextS:		lda Search_OrderV,y	; A= search_order[Y]  get wordlist ID
 _nextA:		jsr swl_search_wordlist
 		beq _wordlist_next
 					; found a match.
-		lda tmp1+0		; NOS= nt
-		sta DStack+2,x
-		lda tmp1+1
-		sta DStack+3,x
+		lda tmp1+0		; return nt
+		ldy tmp1+1
+_exit:		sta DStack+0,x
+		sty DStack+1,x
+		rts			; ( ? )
 
-_fail:					; ( nt ? )
-		inx			; Drop work cell
-		inx
+_fail:		lda #0			; return 0
+		tay
+		beq _exit
 	WordEnd
-		rts
 
-find_name_check: ; ( addr u -- nt|0 )
-		jsr find_name
+find_name_check: ; ( addr u -- nt|0 )  Find_Name, throw error on not found
+		jsr Find_Name
 		lda DStack+1,x		; check that we found a word
 		beq _NotFound
 		rts
 
-_NotFound:	lda #$100+err_UndefinedWord	; complain & quit
+_NotFound:	lda #$100+err_UndefinedWord ; complain & quit
 		jmp ThrowA
 
 
-swl_prepare: ; ( addr u -- 0 u )  prepare for swl_search_wordlist
+swl_prepare: ; ( addr u -- )  prepare for swl_search_wordlist
 		jsr underflow_2
 
 		sec			; A= 0 - name start offset
@@ -11965,14 +11934,10 @@ swl_prepare: ; ( addr u -- 0 u )  prepare for swl_search_wordlist
 		ora DStack+0,x
 		sta tmp3+0
 
-		lda #0			; assuming failure
-		sta DStack+2,x
-		sta DStack+3,x
-
-		rts
+		jmp Two_Drop		; Drop addr & u
 
 
-swl_search_wordlist:
+swl_search_wordlist: ; ( -- ) search a wordlist for a name
   ; wordlist # in A
   ; returns Z=1 (not found)
   ;	 or Z=0 (found, tmp1=nt)
@@ -12046,43 +12011,30 @@ _char_next:	iny			; to next char
   ; FIND-NAME, we get this all over with as quickly as possible. See
   ; https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Word-Lists.html
   ; https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
-Find:
-		lda DStack+1,x		; Save caddr in case conversion fails.
-		pha
-		lda DStack+0,x
-		pha
-
-		; Convert counted string address to modern format
-		jsr Count		; ( caddr -- addr u )
-		jsr find_name		; ( addr u -- nt | 0 )
-					; tmp1= nt
+Find:					; ( caddr )
+		jsr Dup			; Save caddr in case conversion fails, check underflow
+					; ( caddr caddr )
+		jsr Count		; Convert counted string address to modern format
+					; ( caddr addr u )
+		jsr Find_Name		; ( caddr nt | 0 ) tmp1=nt
 
 		lda DStack+1,x		; word found?
 		bne _found_word
 					; No word found.
+		rts			; ( caddr 0 )
 
-		pla			; restore caddr
-		sta DStack+0,x
-		pla
-		sta DStack+1,x
+_found_word:				; ( caddr nt )
+		jsr Nip			; ( nt )
+		jsr Name_To_Int		; ( xt ) tmp1=nt
 
-		jmp False		; ( addr 0 )
-
-_found_word:
-		pla			; RDrop saved caddr
-		pla
-					; ( nt )
-		jsr Name_To_Int		; convert the return values to FIND's format
-					; ( xt )
-
-		ldy #Wh_Flags		; get flags
+		ldy #Wh_Flags		; immediate?
 		lda (tmp1),y
 		and #IM
 		bne _immediate
 
-		jmp True		; We're not immediate, return -1
+		jmp True		; not immediate, return ( xt -1 )
 
-_immediate:	jmp One			; We're immediate, return 1
+_immediate:	jmp One			; immediate, return ( xt 1 )
 	WordEnd
 
 
@@ -12149,7 +12101,7 @@ _fail: ; We didn't find it in any of the wordlists.
   ; ## "name>int"	 tested	 Gforth
   ; See https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
 Name_To_Int:	jsr PopTmp1
-		jsr NameToIntTmp
+Name_To_Int_T:	jsr NameToIntTmp
 		lda tmp2+0
 		ldy tmp2+1
 		jmp PushYA
@@ -15915,6 +15867,12 @@ DisAsm:
 _instr: ; instruction loop
 		jsr underflow_2
 
+;		.byte $3B	; tsc  debug???
+;		cmp #$fb	; debug???
+;		beq +		; debug???
+;		.byte $db ; stp	; debug???
+;+		
+
 		lda DStack+0,x		; addr >= addr_end?
 		cmp DStack+2,x
 		lda DStack+1,x
@@ -15940,7 +15898,7 @@ _instr: ; instruction loop
 		bne _WTest
 
 _WNext:		jsr LinkNext		;   next entry
-		beq _unknown
+		beq _unknown2
 
 _WTest:		jsr NameToIntTmp	; tmp2= xt
 		ldy #3			;   opcode match?
@@ -15969,12 +15927,12 @@ _WTest:		jsr NameToIntTmp	; tmp2= xt
 		beq _cr
 
 _unknown: ; no opcode word found
-		jsr _tab		; to source area
-		lda #'?'
-		jsr Emit_A
 		pla			; RDrop nt
 		pla
 		pla			; RDrop opcode
+_unknown2:	jsr _tab		; to source area
+		lda #'?'
+		jsr Emit_A
 		jmp _instr
 
 
@@ -16063,7 +16021,7 @@ _2drop:		inx			; Drop jsr_nt
 _jsr: ; it's a jsr
 		; ( addr_end addr operand )
 
-		jsr PopYA
+		jsr PopYA		; pop JSR operand
 
 		cmp #<sliteral_runtime	; string literal?
 		bne _not_sliteral
