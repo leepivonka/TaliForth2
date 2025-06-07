@@ -1,4 +1,4 @@
-; Tali Forth 2 Remix for the 6502
+; Tali Forth 2 Remix for the 6502 NMos
 
 ; Based on Tali Forth 2 by
 ; Scot W. Stevenson <scot.stevenson@gmail.com>
@@ -10,12 +10,12 @@
 ; does not have anything assigned to it.  The user can override these
 ; defaults by assigning values in their platform file before
 ; including this file.
-
 ; Assemble all words unless overridden in the platform file.
-TALI_OPTIONAL_WORDS := ["fp","fpe", "fpieee","fptrancendentals", "fphyperbolic", "ed", "editor", "ramdrive", "block", "environment?", "assembler", "wordlist" ]
+TALI_OPTIONAL_WORDS := ["fp","fpe","fpe2", "fpieee","fptrancendentals", "fphyperbolic", "ed", "editor", "ramdrive", "block", "environment?", "assembler", "wordlist" ]
 
 ; "fp" is floating-point (~3.8k)
 ; "fpe" is floating-point 16bit-precision multiply & divide (~0.2k)
+; "fpe2" is remainder of floating-pint 16bit precision words
 ; "fpieee" is IEEE floating-point fetch & store (~0.4K)
 ; "fptrancendentals" is floating-point trancendental functions (~1K)
 ; "fphyperbolic" is floating-point hyperbolic functions
@@ -129,15 +129,15 @@ err_TooManyWordlists   	= -154
 
 
 
-; These are the general
-; definitions; platform-specific definitions such as the
+; These are the general definitions
+; platform-specific definitions such as the
 ; memory map are kept in the platform folder.
 
 
  .section zp
 zp0: ; ZERO PAGE VARIABLES
 ; These are kept at the top of Zero Page, with the most important variables at
-; the begin because the Data Stack grows towards this area from DStack0: If there is
+; the begin because the Data Stack grows towards this area from DStack: If there is
 ; an overflow, the lower, less important variables will be clobbered first,
 ; giving the system a chance to recover. In other words, they are part of the
 ; floodplain.
@@ -154,7 +154,7 @@ ToIn:	.word ?		; pointer to CIB (>IN in Forth)
 state:	.word ?		; STATE: -1 compile, 0 interpret
 status: .word ?		; internal status flags
 			; (used by : :NONAME ; ACCEPT)
-			;   Bit 7 = Redefined word message postpone
+			; Bit 7 = Redefined word message postpone
 			;         When set before calling CREATE, it will
 			;         not print the "redefined xxxx" message if
 			;         the word exists. Instead, this bit will
@@ -185,7 +185,6 @@ editor1: .word ?	; temporary for editors
 editor2: .word ?	; temporary for editors
 editor3: .word ?	; temporary for editors
 DStack:	.fill DDim*2	; data stack
-DStack0 = *-DStack	;   initial Data Stack index value
  .endsection zp
 
  .section code
@@ -312,8 +311,8 @@ AscDEL  = $7f	; delete (CTRL-h)
 wh_NameLastChar	= *-1		; |		  |   Last char of name.
 				; +---------------+   Arranged so next index is negative ($80).
 wh_HashNameLen:			    .byte ?	; |
-wh_HNL_HashMask		=	    %11100000	; |      lo 3 bits of last char of name
-wh_HNL_NameLengthMask	=	    %00011111	; |      length of name
+wh_HashMask		=	    %11100000	; |      lo 3 bits of last char of name
+wh_NameLengthMask	=	    %00011111	; |      length of name
 				; +---------------+
 wh_Flags:			    .byte ?	; |  flag bits
 FP	=			    %00000001	; |	Far previous NT (two byte pointer rather than one byte offset)
@@ -362,9 +361,9 @@ WordHeader .macro name,flags=NN,XtPtr=0,XtLen=3 ; compile a FORTH Word Header
 ;	WordHeader_Extend	; user-supplied extension
 Name0:	.text \name	;  name of word as a string, ending at wh_NameLastChar
 NameLength = *-Name0
-	.cerror NameLength>wh_HNL_NameLengthMask ; name too long
+	.cerror NameLength>wh_NameLengthMask ; name too long
 Nt0 = *-(wh_NameLastChar+1)	; remember our nt
-	.cerror wh_HNL_HashMask!=$e0 ; hard coded
+	.cerror wh_HashMask!=$e0 ; hard coded
 	.byte ((\name[-1]&7)<<5)+NameLength	;wh_HashNameLen
 
 WordFlags ::= \flags	; modifiable copy, remember for later
@@ -405,8 +404,18 @@ Here1 = *	; remember here
 	.endmacro
 
 
+styta .macro adr1,adr2 ; compile appropriate sty adr,x
+	.if \adr1<$100
+		sty \adr1,\adr2	; sty dir,x exists
+	.else			; sty abs,x doesn't exist, so we work around
+		tya		; uses A
+		sta \adr1,\adr2
+	.endif
+	.endmacro
+
+
 DStackCheck .macro depth,ErrorDestination ; compile a data stack underflow check
-	cpx #-2*\depth+DStack0+1	; far enough below end of data stack (& not negative)?
+	cpx #(DDim-\depth)*2+1	; far enough below end of data stack (& not negative)?
 	bcs \ErrorDestination
 	.endmacro
 
@@ -772,7 +781,7 @@ RandM:		jsr Dup		; ( umod umod )
 ; 12. The optional Floating-Point word set
 
 ; Not fully IEEE compliant.
-; Has SF@ & SF! & DF@ & DF! to interoperate with IEEE formats
+; Has SF@ & SF! & DF@ & DF! to load & store IEEE formats
 ; Trying to be small, fast, simple
 ; NANs not supported
 ; Denormals not supported
@@ -783,76 +792,113 @@ RandM:		jsr Dup		; ( umod umod )
 ;   4 bytes of 2s complement binary mantissa
 ;   1 byte  of 2s complement binary exponent
 
- .section zp
+ .section zp ; bss
 FIndex:	.byte ?		; floating-point stack index. empty=FDim, full=0
 
 ; FP stack has FDim entries, defined in platform.
 ; FP stack is a set of byte arrays, each with FDim # of entries indexed by FIndex:
-FSExp:   .fill FDim	; FP stack exponent        array
-FSMant0: .fill FDim	; FP stack mantissa MSByte array
-FSMant1: .fill FDim	; FP stack mantissa 2nd    array
-FSMant2: .fill FDim	; FP stack mantissa 3rd    array
-FSMant3: .fill FDim	; FP stack mantissa 4th    array
+FSExp:   .fill FDim	; byte array[FDim] FP stack exponent
+FSMant0: .fill FDim	; byte array[FDim] FP stack mantissa MSByte
+FSMant1: .fill FDim	; byte array[FDim] FP stack mantissa 2nd
+FSMant2: .fill FDim	; byte array[FDim] FP stack mantissa 3rd
+FSMant3: .fill FDim	; byte array[FDim] FP stack mantissa 4th
   ; Will FP stack fit in ZP?  It could be placed in bss if needed.
   ; How to move this decision out to platform???
 
- .endsection zp
+ .endsection zp ; bss
 
  .section code
 
 ;--- labels for writing words that play with FP internals------------------------
 
- WordHeader "FIndex",NN ; ( -- addr )  Byte Variable: FP stack index
+ WordHeader "FIndex",NN ; ( -- addr )   Variable: FP stack arrays index
+	.if FIndex<$100
 		lda #FIndex
 		jmp PushZA
+	.else
+		lda #<FIndex
+		ldy #>FIndex
+		jmp PushYA
+	.endif
 	WordEnd
 
- WordHeader "FDim",NN ; ( -- n )  Constant: # of FP stack entries
+ WordHeader "FDim",NN ; ( -- n )  Constant: # of FP stack entries allocated
 		lda #FDim
 		jmp PushZA
 	WordEnd
 
- WordHeader "FSExp",NN ; ( -- addr )  Byte variable: FP exponent byte array
+ WordHeader "FSExp",NN ; ( -- addr )  Byte array variable
+	.if FSExp<$100
 		lda #FSExp
 		jmp PushZA
+	.else
+		lda #<FSExp
+		ldy #>FSExp
+		jmp PushYA
+	.endif
 	WordEnd
 
- WordHeader "FSMant0",NN ; ( -- addr )  Byte variable: FP mantissa MSByte array
+ WordHeader "FSMant0",NN ; ( -- addr )  Byte array variable
+	.if FSMant0<$100
 		lda #FSMant0
 		jmp PushZA
+	.else
+		lda #<FSMant0
+		ldy #>FSMant0
+		jmp PushYA
+	.endif
 	WordEnd
 
- WordHeader "FSMant1",NN ; ( -- addr )  Byte variable: FP mantissa 2nd byte array
+ WordHeader "FSMant1",NN ; ( -- addr )  Byte array variable
+	.if FSMant1<$100
 		lda #FSMant1
 		jmp PushZA
+	.else
+		lda #<FSMant1
+		ldy #>FSMant1
+		jmp PushYA
+	.endif
 	WordEnd
 
- WordHeader "FSMant2",NN ; ( -- addr )  Byte variable: FP mantissa 3rd byte array
+ WordHeader "FSMant2",NN ; ( -- addr )  Byte array variable
+	.if FSMant2<$100
 		lda #FSMant2
 		jmp PushZA
+	.else
+		lda #<FSMant2
+		ldy #>FSMant2
+		jmp PushYA
+	.endif
 	WordEnd
 
- WordHeader "FSMant3",NN ; ( -- addr )  Byte variable: FP mantissa 4th byte array
+ WordHeader "FSMant3",NN ; ( -- addr )  Byte array variable
+	.if FSMant3<$100
 		lda #FSMant3
 		jmp PushZA
+	.else
+		lda #<FSMant3
+		ldy #>FSMant3
+		jmp PushYA
+	.endif
 	WordEnd
 
 
-; WordHeader "Float",NN ; ( -- u )  size of a float  gforth
-;		lda #5
-;		jmp PushZA
-;	WordEnd
+Float_Size = 5 ; # of bytes in memory for a float
+ WordHeader "Float",NN ; ( -- u )  Constant: size of a float
+  ; gforth
+Float:		lda #Float_Size
+		jmp PushZA
+	WordEnd
 
  WordHeader "Float+",NN ; ( r-addr1 -- r-addr2 )  Add the size in address units of a floating-point number.
   ; https://forth-standard.org/standard/float/FLOATPlus
-FloatPlus:	lda #5
+FloatPlus:	lda #Float_Size
 		jmp Plus_A
 	WordEnd
 
  WordHeader "Floats",NN ; ( n1 -- n2 )  return size of n1 floats
   ; https://forth-standard.org/standard/float/FLOATS
-Floats:		lda #5
-		jsr PushZA
+Floats:		jsr Float
 		jmp Star
 	WordEnd
 
@@ -860,20 +906,20 @@ Floats:		lda #5
  WordHeader "FAlign",0 ; ( -- )  reserve enough space to align the compiler pointer
   ; If the data-space pointer is not float aligned, reserve enough data space to make it so. 
   ; https://forth-standard.org/standard/float/FALIGN
-FAlign: 		; 6502 doesn't need any alignment, do nothing.
+FAlign: 		; 6502 doesn't need any alignment.
 	WordEnd
 		rts
 
  WordHeader "FAligned",0 ; ( addr -- r-addr )  FP align the address
   ; https://forth-standard.org/standard/float/FALIGNED
   ; r-addr is the first float-aligned address greater than or equal to addr. 
-FAligned:		; 6502 doesn't need any alignment, do nothing
+FAligned:		; 6502 doesn't need any alignment
 	WordEnd
 		rts
 
 
  WordHeader "Hex>F",NN ; ( d_mant n_exp -- ) ( F: -- r )  create r from parts
-HexToF:		jsr FAllocX		; alloc FP stack entry, X= fp stack index
+PartsToF:	jsr FAllocX		; alloc FP stack entry, X= FP stack index
 		ldx tmp1+0		; restore data stack index
 		ldy FIndex		; Y= FP stack index
 		jsr PopA		; pop n_exp
@@ -890,12 +936,12 @@ HexToF:		jsr FAllocX		; alloc FP stack entry, X= fp stack index
 	WordEnd
 
  WordHeader "F>Hex",NN ; ( F: r -- ) ( -- d_mantissa n_exponent )  get parts of r
-FToHex:		ldy FIndex	; Y= FP stack index
+FToParts:	ldy FIndex	; Y= FP stack index
+		dex		; alloc d_mantissa
 		dex
 		dex
 		dex
-		dex
-		dex
+		dex		; alloc n_exponent
 		dex
 		lda FSMant0,y	; copy mantissa
 		sta DStack+3,x
@@ -911,12 +957,12 @@ FToHex:		ldy FIndex	; Y= FP stack index
 		beq +
 		lda #$ff
 +		sta DStack+1,x
-		inc FIndex	; FDrop
-		rts
+		inc FIndex	; FDrop r
 	WordEnd
+		rts
 
  WordHeader "F.Hex",NN ; ( F: r -- )	display r in hex
-FDotHex:	jsr FToHex	; get parts of r
+FDotHex:	jsr FToParts	; get parts of r
 		jsr Not_Rot
 		jsr Dot_Hex	; do mantissa
 		jsr Dot_Hex
@@ -926,21 +972,23 @@ FDotHex:	jsr FToHex	; get parts of r
 	WordEnd
 
 
-; WordHeader "FCmp",NN ; ( F: r1 r2 -- r1 r2 ) ( -- n )  wrapper for FCmpA
-;		jsr FCmpA		; compare #s
-;		tay			; return >0, 0, <0
-;		jmp PushYA
-;	WordEnd
+ .if 0
+ WordHeader "FCmp",NN ; ( F: r1 r2 -- r1 r2 ) ( -- n )  wrapper for FCmpA
+		jsr FCmpA		; compare #s
+		tay			; return >0, 0, <0
+		jmp PushYA
+	WordEnd
+  .endif
 
  WordHeader "FCmpA",NN ; ( F: r1 r2 -- r1 r2 CPU_regs ) \ floating point compare
   ; assumes normalized values
-  ; returns: flags N & Z, A=0 for NOS=TOS, A<0 for NOS<TOS, A>0 for NOS>TOS
+  ; returns: flags N & Z, A=0 for r1==r2, A<0 for r1<r2, A>0 for r1>r2
 FCmpA:		stx tmp1		; save data stack index
 		ldx FIndex		; X= FP stack index
 
-		lda FSMant0+0,x		; r2 mantissa = 0 ?
+		lda FSMant0+0,x		; r2 mantissa == 0 ?
 		beq _r2Zero
-		ldy FSMant0+1,x		; r1 mantissa = 0 ?
+		ldy FSMant0+1,x		; r1 mantissa == 0 ?
 		beq _r1Zero
 		eor FSMant0+1,x		; compare mantissa sign
 		bmi _MantissaSignDifferent
@@ -969,11 +1017,11 @@ _13:		ldx tmp1		; restore data stack index
 		tay			; set CPU flags
 		rts
 
-_r1Zero:	lda FSMant0+0,x		; return r2
+_r1Zero:	lda FSMant0+0,x		; return 0-r2
 		bne _14
 		beq _13
 
-_r2Zero:	lda FSMant0+1,x		; return 0-r1
+_r2Zero:	lda FSMant0+1,x		; return r1
 		jmp _13
 
 _ExponentDifferent:
@@ -993,11 +1041,12 @@ _MantissaSignDifferent:
 	WordEnd
 
 
- WordHeader "FAllocX",NN ; ( F: -- r )  alloc a FP stack entry, returns X=fp
-FAllocX:	stx tmp1+0	; save data stack index
+ WordHeader "FAllocX",NN ; ( F: -- r )  alloc a FP stack entry, returns X=FIndex
+FAllocX:	; preserves A & Y
+		stx tmp1+0	; save data stack index
 		ldx FIndex	; X= floating point stack index
 		dex		; alloc FP stack entry
-		cpx #FDim	; overflow or underflow?
+		cpx #FDim	; stack overflow or underflow?
 		bcs _err
 		stx FIndex
 		rts		; return X= FP stack index
@@ -1044,7 +1093,7 @@ F2Drop:		inc FIndex
 	WordEnd
 		rts
 
- WordHeader "FNip",0 ; ( F: r1 r2 -- r2 )   Drop NOS on FP stack
+ WordHeader "FNip",0 ; ( F: r1 r2 -- r2 )   Drop the first item below the top of FP stack
   ; like https://forth-standard.org/standard/core/NIP
 FNip:		stx tmp1		; save data stack index
 		ldx FIndex		; X= FP stack index
@@ -1079,20 +1128,6 @@ FDup:		jsr FAllocX		; alloc FP stack entry, X=fp stack index
 		ldx tmp1+0		; restore data stack index
 	WordEnd
 		rts
-
-; WordHeader "FDup0<>",NN ; ( F: r -- r ) ( -- flag )
-;FDup0Eq:	ldy FIndex
-;		lda FSMant0,y		; =0 ?
-;		bne FDup
-;	WordEnd
-;		rts
-
-; WordHeader "FDup0<",NN ; ( F: r -- r ) ( -- flag )
-;FDup0Lt:	ldy FIndex
-;		lda FSMant0,y		; <0 ?
-;		bmi FDup
-;	WordEnd
-;		rts
 
  WordHeader "FOver",0 ; ( F: r1 r2 -- r1 r2 r1 )  Push a copy of FP NOS
   ; https://forth-standard.org/standard/float/FOVER
@@ -1153,37 +1188,80 @@ FSwap:		stx tmp1+0		; save data stack index
 		lda FSExp+0,x		; do FSExp
 		ldy FSExp+1,x
 		sta FSExp+1,x
-		sty FSExp+0,x
+		styta FSExp+0,x
 
 		lda FSMant0+0,x		; do FSMant0
 		ldy FSMant0+1,x
 		sta FSMant0+1,x
-		sty FSMant0+0,x
+		styta FSMant0+0,x
 
 		lda FSMant1+0,x		; do FSMant1
 		ldy FSMant1+1,x
 		sta FSMant1+1,x
-		sty FSMant1+0,x
+		styta FSMant1+0,x
 
 		lda FSMant2+0,x		; do FSMant2
 		ldy FSMant2+1,x
 		sta FSMant2+1,x
-		sty FSMant2+0,x
+		styta FSMant2+0,x
 
 		lda FSMant3+0,x		; do FSMant3
 		ldy FSMant3+1,x
 		sta FSMant3+1,x
-		sty FSMant3+0,x
+		styta FSMant3+0,x
 
 		ldx tmp1+0		; restore data stack index
 	WordEnd
 		rts
 
-; WordHeader "FNSwap",NN ; ( F: rN+1  rN  rN-1... r0 --  rN+1  r0  rN-1 ... r1 rN ) ( u -- )
-  ; Exchange the fp value at the N-th location on the fp stack with the value at the top of the
-  ; fp stack.  1 FNSwap is equivalent to FSwap
-;FNSwap:	jsr PopA		; pop u
-;FNSwapA:	???
+ .if 0
+ WordHeader "FNSwap",NN ; ( F: rN+1  rN  rN-1... r0 --  rN+1  r0  rN-1 ... r1 rN ) ( u -- )
+  ; Exchange the fp value at the N-th location on the FP stack with the value at the top of the
+  ; FP stack.  1 FNSwap is equivalent to FSwap
+FNSwap:		jsr PopA		; pop u
+FNSwapA:	clc
+		adc FIndex
+		tay
+
+		lda FSExp+0,x		; do FSExp
+		pha
+		lda FSExp+1,y
+		sta FSExp+1,x
+		pla
+		sta FSExp+0,y
+
+		lda FSMant0+0,x		; do FSMant0
+		pha
+		lda FSMant0+1,y
+		sta FSMant0+1,x
+		pla
+		sta FSMant0+0,y
+
+		lda FSMant1+0,x		; do FSMant1
+		pha
+		lda FSMant1+1,y
+		sta FSMant1+1,x
+		pla
+		sta FSMant1+0,y
+
+		lda FSMant2+0,x		; do FSMant2
+		pha
+		lda FSMant2+1,y
+		sta FSMant2+1,x
+		pla
+		sta FSMant2+0,y
+
+		lda FSMant3+0,x		; do FSMant3
+		pha
+		lda FSMant3+1,y
+		sta FSMant3+1,x
+		pla
+		sta FSMant3+0,y
+
+		ldx tmp1+0		; restore data stack index
+	WordEnd
+		rts
+  .endif
 
  WordHeader "FTuck",NN ; ( F: r1 r2 -- r2 r1 r2 )
   ; like https://forth-standard.org/standard/core/TUCK
@@ -1203,61 +1281,58 @@ FRot:		stx tmp1		; save data stack index
 		lda FIndex		; for FSMant3, FSMant2, FSMant1, FSMant0, FSExp
 		clc
 		adc #4*FDim
-		bne _3
+		sec
+_2:		tax
 
-_2:		txa			;    next byte
-	;	sec
+		ldy FSExp+2,x		;   do a byte
+		lda FSExp+1,x
+		sta FSExp+2,x
+		lda FSExp+0,x
+		sta FSExp+1,x
+		styta FSExp+0,x
+
+		txa			;   next byte
 		sbc #FDim
-_3:		tax
-
-		lda FSExp+2,x		;   do a byte
-		ldy FSExp+1,x
-		sty FSExp+2,x
-		ldy FSExp+0,x
-		sty FSExp+1,x
-		sta FSExp+0,x
-
-		cpx FIndex		; done?
-		bne _2
+		bcs _2			; until done
 
 ;--- or ---
 ;		stx tmp1		; save data stack index
 ;		ldx FIndex		; load FP stack index
 ;
-;		lda FSExp+2,x		; do FSExp
-;		ldy FSExp+1,x
-;		sty FSExp+2,x
-;		ldy FSExp+0,x
-;		sty FSExp+1,x
-;		sta FSExp+0,x
+;		ldy FSExp+2,x		; do FSExp
+;		lda FSExp+1,x
+;		sta FSExp+2,x
+;		lda FSExp+0,x
+;		sta FSExp+1,x
+;		styta FSExp+0,x
 ;
-;		lda FSMant0+2,x		; do FSMant0
-;		ldy FSMant0+1,x
-;		sty FSMant0+2,x
-;		ldy FSMant0+0,x
-;		sty FSMant0+1,x
-;		sta FSMant0+0,x
+;		ldy FSMant0+2,x		; do FSMant0
+;		lda FSMant0+1,x
+;		sta FSMant0+2,x
+;		lda FSMant0+0,x
+;		sta FSMant0+1,x
+;		styta FSMant0+0,x
 ;
-;		lda FSMant1+2,x		; do FSMant1
-;		ldy FSMant1+1,x
-;		sty FSMant1+2,x
-;		ldy FSMant1+0,x
-;		sty FSMant1+1,x
-;		sta FSMant1+0,x
+;		ldy FSMant1+2,x		; do FSMant1
+;		lda FSMant1+1,x
+;		sta FSMant1+2,x
+;		lda FSMant1+0,x
+;		sta FSMant1+1,x
+;		styta FSMant1+0,x
 ;
-;		lda FSMant2+2,x		; do FSMant2
-;		ldy FSMant2+1,x
-;		sty FSMant2+2,x
-;		ldy FSMant2+0,x
-;		sty FSMant2+1,x
-;		sta FSMant2+0,x
+;		ldy FSMant2+2,x		; do FSMant2
+;		lda FSMant2+1,x
+;		sta FSMant2+2,x
+;		lda FSMant2+0,x
+;		sta FSMant2+1,x
+;		styta FSMant2+0,x
 ;
-;		lda FSMant3+2,x		; do FSMant3
-;		ldy FSMant3+1,x
-;		sty FSMant3+2,x
-;		ldy FSMant3+0,x
-;		sty FSMant3+1,x
-;		sta FSMant3+0,x
+;		ldy FSMant3+2,x		; do FSMant3
+;		lda FSMant3+1,x
+;		sta FSMant3+2,x
+;		lda FSMant3+0,x
+;		sta FSMant3+1,x
+;		styta FSMant3+0,x
 ;---
 		ldx tmp1		; restore param stack index
 	WordEnd
@@ -1270,7 +1345,7 @@ FMRot:		jsr FRot
 
 
  .if "fpaux" in TALI_OPTIONAL_WORDS ;------------------------------------------------------
-; the FP stack can also be used as an auxilliary data stack.
+; The FP stack can also be used as an auxilliary data stack, with wide cells.
 ; Note that this data on the FP stack is not a valid FP number.
 ; http://forum.6502.org/viewtopic.php?f=9&t=493&hilit=aux
 
@@ -1282,9 +1357,9 @@ ToA:		jsr DupToA	; Copy
 		rts
 
  WordHeader "Dup>A",0 ; ( n -- n ) ( F: -- n )  Copy data stack entry to 1 FP stack entry
-DupToA:		dec FIndex	; alloc fp stack entry
+DupToA:		dec FIndex	; alloc FP stack entry (FAllocX)
 		ldy FIndex	; Y= FP stack index
-		lda DStack+0,x	; copy data
+		lda DStack+0,x	; copy a cell
 		sta FSMant1,y
 		lda DStack+1,x
 		sta FSMant0,y
@@ -1297,9 +1372,9 @@ DToA:		jsr DDupToA
 	WordEnd
 
  WordHeader "2Dup>A",0 ; ( d -- d ) ( F: -- d )  Copy double data stack entry to 1 FP stack entry
-DDupToA:	dec FIndex	; alloc fp stack entry
+DDupToA:	dec FIndex	; alloc FP stack entry (FAllocX)
 		ldy FIndex	; Y= FP stack index
-		lda DStack+0,x	; copy data
+		lda DStack+0,x	; copy 2 cells
 		sta FSMant1,y
 		lda DStack+1,x
 		sta FSMant0,y
@@ -1310,31 +1385,31 @@ DDupToA:	dec FIndex	; alloc fp stack entry
 	WordEnd
 		rts
 
- WordHeader "A>",0 ; ( -- n ) ( F: n -- )  move aux data entry on FP to data stack
-AFrom:		ldy FIndex	; Y= FP stack index
-		inc FIndex	; FDrop (doesn't affect Y)
-AFrom3:		dex		; alloc data stack space
+ WordHeader "A@",0 ; ( F: n -- n ) ( -- n )  copy aux data entry on FP stack to data stack
+AFetch:		ldy FIndex	; Y= FP stack index
+AFetch3:	dex		; alloc data stack space
 		dex
-		lda FSMant1,y	; copy data
+		lda FSMant1,y	; copy a cell
 		sta DStack+0,x
 		lda FSMant0,y
 		sta DStack+1,x
 	WordEnd
 		rts
 
- WordHeader "A@",NN ; ( -- n ) ( F: n -- n )  copy aux data entry on FP stack to data stack
-AFetch:		ldy FIndex	; Y= FP stack index
-		jmp AFrom3
+ WordHeader "A>",NN ; ( F: n -- ) ( -- n )  move aux data entry on FP to data stack
+AFrom:		ldy FIndex
+		inc FIndex	; FDrop (doesn't change Y)
+		bne AFetch3
 	WordEnd
 
  WordHeader "2A>",0 ; ( -- d ) ( F: d -- )  move double aux data entry on FP to data stack
 DAFrom:		ldy FIndex	; Y= FP stack index
-		inc FIndex	; FDrop (doesn't affect Y)
+		inc FIndex	; FDrop (doesn't change Y)
 DAFrom3:	dex		; alloc data stack space
 		dex
 		dex
 		dex
-		lda FSMant1,y	; copy data
+		lda FSMant1,y	; copy 2 cells
 		sta DStack+0,x
 		lda FSMant0,y
 		sta DStack+1,x
@@ -1360,7 +1435,7 @@ FToR:		pla		; save RTS addr
 		pla
 		sta tmp1+1
 
-		ldy FIndex
+		ldy FIndex	; copy r
 		lda FSExp,y
 		pha
 		lda FSMant0,y
@@ -1387,7 +1462,7 @@ FRTo:		pla		; save rts addr
 		sta tmp2+1
 
 		jsr FAllocX	; alloc FP stack entry & set X
-		pla
+		pla		; copy r
 		sta FSMant3,x
 		pla
 		sta FSMant2,x
@@ -1470,9 +1545,8 @@ FStore_YA:	sta tmp1+0		; save addr
 FComma:		lda cp+0		; store f at Here
 		ldy cp+1
 		jsr FStore_YA
-		lda #5			; Float
-		jsr PushZA
-		jmp Allot
+		lda #Float_Size
+		jmp Allot_ZA
 	WordEnd
 
 
@@ -1642,7 +1716,7 @@ FLiteral:	jsr FLitTest
 		lda #<FLitI		; compile JSR FLitI
 		ldy #>FLitI
 		jsr Jsr_Comma_YA
-		jmp FComma		; inline operand, return
+		jmp FComma		; compile inline operand, return
 
 _Short:		jsr FLitShort
 		jmp Jsr_Comma_YA	; compile jsr FLitYA, & return
@@ -1673,7 +1747,7 @@ FLitI: ; ( -- ) ( F: -- r )  push inline fvalue
 		pla			; tmp2= RTS addr
 		sta tmp2+0
 		clc			; bump RTS addr over inline float data
-		adc #5
+		adc #Float_Size
 		tay
 		pla
 		sta tmp2+1
@@ -1685,9 +1759,9 @@ FLitI: ; ( -- ) ( F: -- r )  push inline fvalue
 		ldy #1			; correct for RTS addr
 		jmp FAt_Tmp2Y		; fetch inline data, & return
 
-FloatLit .macro mantissa,exponent ; float constant in native format
+FloatLit .macro mantissa,exponent ; float constant in internal format
 		.dword \mantissa	; 32 bit signed binary mantissa.  $40000000 = +0.5
-		.char \exponent		; 8 bit signed exponent.  $00 = 2**0
+		.char \exponent		; 8 bit signed binary exponent.  $00 = 2**0
 	.endmacro
 FloatLitI .macro mantissa,exp ; float literal
 		jsr FLitI
@@ -1695,18 +1769,18 @@ FloatLitI .macro mantissa,exp ; float literal
 	.endmacro
 
 
- WordHeader "FConstant",NN ; ( F: r "name" -- )  Create FP constant word
+ WordHeader "FConstant",NN ; ( F: r "name" -- )  Compile FP constant word
   ; https://forth-standard.org/standard/float/FCONSTANT
 FConstant:	jsr Header_Comma	; compile word header
 
 		jsr FLitTest		; will short work?
 		beq _Short
-					; full precisision
-		lda #<FConstantRun	; compile call
+					; full precision
+		lda #<FConstantRun	; compile JSR
 		ldy #>FConstantRun
 		jsr Jsr_Comma_YA
 		jsr adjust_z
-		jmp FComma		; inline operand, & return
+		jmp FComma		; compile inline operand, & return
 
 _Short:
 		jsr FLitShort		; compile load value
@@ -1724,9 +1798,9 @@ FConstantRun: ; ( F: -- r )  runtime for long FConstant
 
 
 FLitYA: ; ( YA -- ) ( F: -- r )  push short fvalue, Y=Exp A=Mant0
-		jsr FAllocX		; alloc FP stack entry, X=fp stack index
-		sty FSExp,x		; exp= Y
+		jsr FAllocX		; alloc FP stack entry, X=FP stack index
 		sta FSMant0,x		; Mant= A,0,0,0
+		styta FSExp,x		; Exp= Y
 		lda #0
 		sta FSMant1,x
 		sta FSMant2,x
@@ -1735,8 +1809,8 @@ FLitYA: ; ( YA -- ) ( F: -- r )  push short fvalue, Y=Exp A=Mant0
 		rts
 
  WordHeader "0.e",NN ; ( F: -- r )  FConstant 0  aka "F0.0"
-F0:		lda #0
-		ldy #$80
+F0:		lda #0			; FSMant0
+		ldy #$80		; FSExp
 		bne FLitYA
 	WordEnd
 
@@ -1813,7 +1887,7 @@ FValue:		jsr Header_Comma	; compile word header
 		jmp FComma		; alloc & init value
 	WordEnd
 
-FValue_runtime: ; unique, so  TO & optimizer can recognize as FValue
+FValue_runtime: ; unique, so  TO & optimizer  & disassembly can recognize as FValue
 		jmp FConstantRun
 
 
@@ -1844,6 +1918,13 @@ F2Star:		lda #1
 F2Slash:	lda #$ff
 		bne FScaleA
 	WordEnd
+
+ WordHeader "F10*",NN ; ( F: r1 -- r2 )  multiply by 10
+F10Star:	jsr F2Star
+		jsr FDup
+		lda #2
+		jsr FScaleA
+		jmp FPlus
 
 
 ; WordHeader "FM1+",0 ; ( F: q1 -- q2 )  increment mantissa
@@ -1877,6 +1958,50 @@ F2Slash:	lda #$ff
 ;		rts
 
 
+; WordHeader "FShift",NN ; ( F: r1 n -- r2 )  align r1 to desired exponent
+  ; n=designed exponent
+  ; Returns exponent in Y, lo bit in carry
+;FShift:	jsr PopA
+FShiftA:	stx tmp1+0		; save data stack index
+		ldx FIndex		; X= FP stack index
+FShiftAX:	sta tmp1+1		; save desired alignment
+		sec			; calc bit shift count
+		sbc FSExp,x
+		beq _leave
+		bvs _overflow
+		bmi _leave
+		cmp #32
+		bcs _zero
+
+		tay
+		lda tmp1+1
+		sta FSExp,x
+		lda FSMant0,x
+_12:		cmp #$80		; mantissa >>=1
+		ror a
+		ror FSMant1,x
+		ror FSMant2,x
+		ror FSMant3,x
+		dey
+		bne _12
+		sta FSMant0,x
+_30:		ldy FSExp,x
+		ldx FIndex		; restore fp stack index (FShiftAX could have had a funny one)
+		rts
+
+_overflow:	bpl _leave
+_zero:		lda tmp1+1
+		sta FSExp,x		; return zero
+		lda #0
+		sta FSMant0,x
+		sta FSMant1,x
+		sta FSMant2,x
+		sta FSMant3,x
+_leave:		clc
+		bcc _30
+;	WordEnd
+
+
  WordHeader "Floor",NN ; ( F: r1 -- r2 )  Round toward negative infinity 
   ; https://forth-standard.org/standard/float/FLOOR
 Floor:		ldy FIndex
@@ -1898,48 +2023,6 @@ _a:		lda #31
 		jsr FShiftA
 		jmp FNormX
 	WordEnd
-
-; WordHeader "FShift",NN ; ( F: r1 n -- r2 )  align r1 to desired exponent
-  ; n=designed exponent
-  ; Returns exponent in Y, lo bit in carry
-;FShift:	jsr PopA
-FShiftA:	stx tmp1+0		; save data stack index
-		ldx FIndex		; X= FP stack index
-FShiftAX:	tay			; save desired alignment
-		sec			; calc bit shift count
-		sbc FSExp,x
-		beq _leave
-		bvs _overflow
-		bmi _leave
-		cmp #32
-		bcs _zero
-
-		sty FSExp,x
-		tay
-		lda FSMant0,x
-_12:		cmp #$80		; mantissa >>=1
-		ror a
-		ror FSMant1,x
-		ror FSMant2,x
-		ror FSMant3,x
-		dey
-		bne _12
-		sta FSMant0,x
-_30:		ldy FSExp,x
-		ldx FIndex		; restore fp stack index (FShiftAX could have had a funny one)
-		rts
-
-_overflow:	bpl _leave
-_zero:		sty FSExp,x		; return zero
-		lda #0
-		sta FSMant0,x
-		sta FSMant1,x
-		sta FSMant2,x
-		sta FSMant3,x
-_leave:		clc
-		bcc _30
-;	WordEnd
-
 
  WordHeader "FTrunc",NN ; ( F: r1 -- r2 ) Round towards zero
   ; https://forth-standard.org/standard/float/FTRUNC
@@ -2041,7 +2124,7 @@ _RShft:  ; right shift 1 bit
 		ror FSMant3,x
 _28:	; finish
 		sta FSMant0,x
-		sty FSExp,x
+		styta FSExp,x
 		ldx tmp1+0	; restore data stack index
 		rts
 
@@ -2098,7 +2181,7 @@ _ShiftB: ; shift left 1 byte
 
  WordHeader "F+",NN ; ( F: r1 r2 -- r3 )  Add r1 & r2, giving r3.
   ;  https://forth-standard.org/standard/float/FPlus
-FPlus:		jsr FMAlignX	; align mantissas, X= fp stack index
+FPlus:		jsr FMAlignX	; align mantissas, X= FP stack index
 		clc		; add mantissas
 		lda FSMant3+1,x
 		adc FSMant3+0,x
@@ -2148,7 +2231,7 @@ FMinus:		jsr FMAlignX	; align mantissas
 		sta FSMant1+1,x
 		lda FSMant0+1,x
 		sbc FSMant0+0,x
-		jmp FPlusFin
+		jmp FPlusFin	; finish
 	WordEnd
 
  WordHeader "F1-",NN ; ( F: r1 -- r2 )  Subtract 1
@@ -2206,99 +2289,10 @@ FPos:		ldy FIndex		; load FP stack index
 
 		stx tmp1+0		; save data stack index
 		ldx FIndex		; load FP stack index
-		plp			; restore sign flag
+		plp			; return sign flag
 		rts
   ;	WordEnd
 
-
- .if 0
- WordHeader "F*1",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3.
-  ; https://forth-standard.org/standard/float/FTimes
-FStar1:
-		jsr FPos		; make r1 & r2 positive,
-		php			;   save r3 sign
-
-		lda FSExp+0,x		; add exponents
-		sec
-		adc FSExp+1,x
-		sta FSExp+1,x
-		bvc _49			; IfVs, 
-		bcs _zero		;   underflow?
-		ldx tmp1+0		;   restore data stack index
-		plp			; RDrop sign flag
-		jsr Throw_FpOutOfRange
-
-_zero:		inx			; F2Drop
-		inx
-		stx FIndex
-		plp			; rdrop saved result sign
-		ldx tmp1+0		; restore data stack index
-		jmp F0			; return zero
-
-_49:
-
-		lda FSMant0+1,x		; save r1 mantissa
-		pha
-		lda FSMant1+1,x
-		pha
-		lda FSMant2+1,x
-		pha
-		lda FSMant3+1,x
-
-		ldy #0			; init r3 mantissa
-		sty FSMant0+1,x
-		sty FSMant1+1,x
-		sty FSMant2+1,x
-		sty FSMant3+1,x
-
-		jsr _Byte		; do bytes of r1 mantissa
-		pla
-		jsr _Byte
-		pla
-		jsr _Byte
-		pla
-		jsr _Byte
-
-		inc FIndex		; FDrop
-		ldx tmp1+0		; restore data stack index
-
-		plp			; fix result sign
-		bpl +
-		jmp FNegate
-+
-		jmp FNorm
-
-_Byte: ; do a byte of r1 (in A)
-		sta tmp1+1
-		ldy #8			; for each bit in byte
-_b1:		lsr tmp1+1		;   if bit set
-		bcc _b3
-
-		clc			;     r3 += r2
-		lda FSMant3+1,x
-		adc FSMant3+0,x
-		sta FSMant3+1,x
-		lda FSMant2+1,x
-		adc FSMant2+0,x
-		sta FSMant2+1,x
-		lda FSMant1+1,x
-		adc FSMant1+0,x
-		sta FSMant1+1,x
-		lda FSMant0+1,x
-		adc FSMant0+0,x
-		sta FSMant0+1,x
-
-_b3:		lsr FSMant0+1,x		;   r3 >>= 1
-		ror FSMant1+1,x
-		ror FSMant2+1,x
-		ror FSMant3+1,x
-
-		dey			;  next bit
-		bne _b1
-		rts
-	WordEnd
-
-  .else
 
  WordHeader "F*",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3.
   ; https://forth-standard.org/standard/float/FTimes
@@ -2387,26 +2381,11 @@ _b3:		lsr tmp3+1		;   tmp32 >>= 1
 		bne _b1
 		rts
 	WordEnd
-  .endif
 
 
  WordHeader "FSqr",NN ; ( F: r1 -- r2 )  square
 FSqr:		jsr FDup
 		jmp FStar
-	WordEnd
-
-
- WordHeader "F10*",NN ; ( F: r1 -- r2 )  multiply by 10
-F10Star:	jsr FDup
-		ldy FIndex
-		lda FSExp+0,y
-		clc
-		adc #1
-		sta FSExp+0,y
-		clc
-		adc #2
-		sta FSExp+1,y
-		jmp FPlus
 	WordEnd
 
 
@@ -2656,11 +2635,11 @@ ESqr:		jsr FDup
 	WordEnd
 
 
- WordHeader "E/",NN ; ( F: r1 r2 -- r3 )  Divide r1 by r2, giving r3, 16bit precision
-ESlash:		jsr FPos	; make r1 & r2 positive
+ WordHeader "E/",NN ; ( F: e1 e2 -- e3 )  Divide e1 by e2, giving e3, 16bit precision
+ESlash:		jsr EPos	; make e1 & e2 positive
 		php		; remember result sign
 
-		lda FSExp+1,x		; calc r3 exponent
+		lda FSExp+1,x		; calc e3 exponent
 		sec
 		sbc FSExp+0,x
 		bvs _ExpOvfl
@@ -2680,10 +2659,15 @@ ESlash:		jsr FPos	; make r1 & r2 positive
 		jmp EFix3
 
 _ExpOvfl:
-	;	bcs _8			; underflow?
-		plp			; rdrop saved result sign
 		ldx tmp1+0		; restore data stack index
+		bcs _zero		; underflow?
+		plp			; rdrop saved result sign
 		jsr Throw_FpOutOfRange	; overflow
+
+_zero:		plp			; rdrop saved result sign
+		inc FIndex		; FDrop e2
+		inc FIndex		; FDrop e1
+		jmp E0			; return zero
 
 _Byte: ; returns quotient byte in A
 		ldy #8			; for 8 bits
@@ -2721,8 +2705,8 @@ E1Slash:	jsr F1
   ; https://forth-standard.org/standard/float/StoF
 SToF:		jsr PopYA		; pop n
 SToFYA:		jsr FAllocX		; alloc FP stack entry
-		sty FSMant0,x		; copy n to mantissa
-		sta FSMant1,x
+		sta FSMant1,x		; copy n to mantissa
+		styta FSMant0,x
 		lda #0			; pad mantissa
 		sta FSMant2,x
 		sta FSMant3,x
@@ -2838,7 +2822,7 @@ FRnd:		jsr Rand		; generate next RndState
 					; mantissa = RndState
 		lsr a			;   make positive
 		sta FSMant0,x
-		sty FSMant1,x
+		styta FSMant1,x
 		lda RndState+0
 		sta FSMant2,x
 		lda RndState+1
@@ -2984,9 +2968,9 @@ Precision:	lda PrecisionV
  WordHeader "(F.)",NN ; ( F: r -- ) ( -- adr )  Convert FP to string, fixed-point
   ; Display, with a trailing space, using fixed-point notation: 
   ;	[-] <digits>.<digits0>
-PFDot:		jsr pfcst		;start collecting chars, make r positive
+PFDot:		jsr pfcstart		;start collecting chars, make r positive
 		jsr PFDotSub
-		jmp pfcen
+		jmp pfcend
 
 
 PFDotSub:
@@ -3002,27 +2986,27 @@ _c:					;do
 		lda _decimalPos,x	;  insert decimal point here?
 		bne _c2
 		lda #'.'
-		jsr pfch
+		jsr pfchar
 _c2:		dec _decimalPos,x
-
 		jsr FDup		;  do a digit
-		jsr FToS		; ( work n )
+		jsr FToS		;  ( work n )
 		lda DStack+0,x
 		ora _mantNzFound+2,x	;  doing significant digits?
 		sta _mantNzFound+2,x
 		beq _c7
 		dec _NumSigDigits+2,x
-		bpl +
+		bpl _c7
 		inx			;    drop integer
 		inx
 		bne _d
-+
+
 _c7:		lda DStack+0,x		;  store the char
 		ora #'0'
-		jsr pfch
-		jsr SToF		; ( work )
+		jsr pfchar
+		jsr SToF		;  ( work )
 		jsr FMinus
 		jsr F10Star
+
 		ldy FIndex		;  until mantissa==0
 		lda FSMant0,y
 		bne _c
@@ -3030,7 +3014,7 @@ _c7:		lda DStack+0,x		;  store the char
 _d:		dec _decimalPos,x	;do trailing zeros
 		bmi _d9
 		lda #'0'
-		jsr pfch
+		jsr pfchar
 		jmp _d
 _d9:
 
@@ -3043,14 +3027,14 @@ _d9:
 	WordEnd
 
 
-FLt10:	; scale down to <10, counting exponent
+FLt10:	; ( F: r1 -- r2 ) ( n1 -- n2 ) scale down to <10, counting exponent
 _1:		ldy FIndex		; while r >= 10
 		lda FSExp,y
 		bmi _9			;   exponent negative?
 		cmp #4
 		bcc _9			;   < 4 ?
 		bne _2			;   > 4 ?
-		lda FSMant0,y
+		lda FSMant0,y		;   r > 10 ?
 		cmp #$50
 		bcc _9
 _2:		inc DStack+0,x		;   exp ++
@@ -3063,7 +3047,7 @@ _9:		rts
 ; ------------
 ; character storage in Pad
 
-pfcst: ; ( -- ) ( F: r1 -- r2 )  Start
+pfcstart: ; ( -- ) ( F: r1 -- r2 )  Start
 		lda #1
 		sta ToHold
 
@@ -3071,18 +3055,18 @@ pfcst: ; ( -- ) ( F: r1 -- r2 )  Start
 		lda FSMant0,y
 		bpl _19
 		lda #'-'		;   append sign
-		jsr pfch
+		jsr pfchar
 		jmp FNegate		;   make positive, return
 
 _19:		rts
 
-pfch: ; ( A -- )  Append a char
+pfchar: ; ( A -- )  Append a char
 		ldy ToHold
 		sta (cp),y
 		inc ToHold
 		rts
 
-pfcen: ; ( -- adr )  End, returns counted string
+pfcend: ; ( -- adr )  End, returns counted string
 		lda ToHold
 		sec
 		sbc #1
@@ -3093,16 +3077,16 @@ pfcen: ; ( -- adr )  End, returns counted string
 pfciA: ; ( A -- )  Append an integer
 		tay
 		bpl _15			; IfMi,
+		iny			;   negate
+		tya
 		eor #$ff
-		clc
-		adc #1
 		pha
 		lda #'-'
 		bne _19
 _15:		pha
 		lda #'+'
 _19:
-		jsr pfch
+		jsr pfchar
 		pla
 		ldy #'0'-1
 _20:		iny
@@ -3112,10 +3096,10 @@ _20:		iny
 		adc #10
 		pha
 		tya
-		jsr pfch
+		jsr pfchar
 		pla
 		ora #'0'
-		bne pfch
+		bne pfchar
 
 
  WordHeader "F.",NN ; ( F: r -- )  Print r in fixed-point notation
@@ -3148,7 +3132,7 @@ _8:		cmp FIndex
 PFSDot:		jsr Zero		; alloc work area
 _exp    = DStack+0
 
-		jsr pfcst		; start collecting chars, make r positive
+		jsr pfcstart		; start collecting chars, make r positive
 
 		jsr FLt10		; scale down to <10
 
@@ -3166,13 +3150,13 @@ _c9:
 PFSDotM:	jsr PFDotSub		; do mantissa
 
 		lda #'E'
-		jsr pfch		; do exponent
+		jsr pfchar		; do exponent
 		lda DStack+0,x		;   _exp
 		jsr pfciA
 
 		inx			; Drop work area
 		inx
-		jmp pfcen		; finish string
+		jmp pfcend		; finish string
 	WordEnd
 
 
@@ -3187,7 +3171,7 @@ FSDot:		jsr PFSDot
 PFEDot:		jsr Zero		; alloc work area
 _exp    = DStack+0
 
-		jsr pfcst		; start collecting chars, make r positive
+		jsr pfcstart		; start collecting chars, make r positive
 
 _30:		ldy FIndex		; while r < 1
 		lda FSMant0,y
@@ -3236,7 +3220,7 @@ FEDot:		jsr PFEDot
 	WordEnd
 
 
- WordHeader 'F"',IM+NN ; ( "string" -- ) ( F: -- r )  get inline string as float
+ WordHeader "F'",IM+NN ; ( "string" -- ) ( F: -- r )  get inline string as float
 FQuote:		jsr Parse_Name		; get string
 		jsr ToFloat		; convert
 		lda DStack+0,x		; error?
@@ -3465,7 +3449,7 @@ _err:		jsr SLiteral_runtime
 DoFData: .fill 5*2*FDim ; index & limit, should be in RAM
  .endsection bss
 
- WordHeader "FI'",NN ; ( r: r1 r2 -- r1 ) ( F: -- r1 )  get float loop limit
+ WordHeader "FI'",NN ; ( r: r1 r2 -- r1 r2 ) ( F: -- r1 )  get float loop limit
 FIQuote:	lda #1
 		bne FIA
 	WordEnd
@@ -3939,9 +3923,9 @@ DFloats:	lda #3
 ; http://www.research.scea.com/gdc2003/fast-math-functions.html
 
 
- WordHeader "FMPoly",NN ; ( YA=^tbl -- ) ( F: rx -- rx rpoly )  shared polynomial evaluation
+ WordHeader "FMPoly",NN ; ( ^table -- ) ( F: rx -- rx rpoly )  shared polynomial evaluation
 FMPoly:		jsr PopYA
-FMPolyYA:	jsr PushYA		; push coefficent addr
+FMPolyYA:	jsr PushYA		; push coefficent table addr
 		jsr FAt_YA		; fetch 1st coefficent
 		jmp _4
 
@@ -3951,7 +3935,7 @@ _2:		jsr FOver
 		ldy DStack+1,x
 		jsr FAt_YA
 		jsr FPlus
-_4:		lda #5			; bump coefficent ptr
+_4:		lda #Float_Size		; bump coefficent ptr
 		jsr Plus_A
 		lda (DStack+0,x)	; end of coefficent list?
 		bne _2
@@ -3978,7 +3962,7 @@ _c: ; #define GTE_C_LOG2_DEG7_MAX_ERROR 3.2546531700261561e-7
 		FloatLit $792BC61A,-1 ;C3 +4.7332419162501083e-01
 		FloatLit $A3C4E107,0  ;C2 -7.2055423726162360e-01
 		FloatLit $5C54A591,1  ;C1 +1.4426664401536078
-		.word 0
+		.byte 0
 
  WordHeader "FLog2",NN ; ( F: r1 -- r2 )  base 2 log
 FLog2:		ldy FIndex
@@ -4102,8 +4086,8 @@ Rad2Deg:	FloatLitI $72977068,6	; 180/PI
 	WordEnd
 
 
- WordHeader "FAReduce",NN ; ( F: r1 -- r2 )  C=mirrored around pi/2
-  ; Trig: reduce angle to -pi/2..pi/2
+ WordHeader "FAReduce",NN ; ( F: r1 -- r2 )  Trig: reduce angle to -pi/2..pi/2
+  ; C=mirrored around pi/2
 FAReduce:	ldy FIndex
 		lda FSMant0,y		; zero?
 		beq _ok
@@ -4207,8 +4191,8 @@ _fix4:		jsr F2Pi
   ; https://forth-standard.org/standard/float/FSIN
   ; Range reduction for x outside [-pi/2,pi/2] is obtained using periodicity and trigonometric identities.
 FSin:		jsr FAReduce
-		jmp FSinM
-	WordEnd
+;		jmp FSinM
+;	WordEnd
 
 ; WordHeader "FSinM",NN ; ( F: r1 -- r2 )   sin(x) for x in [-pi/2,pi/2].
   ; Minimax polynomial approximation
@@ -4220,7 +4204,7 @@ FSinM:		jsr FDup
 		jsr FStar
 		jsr F1Plus	; C0 +1.0
 		jmp FStar
-;	WordEnd
+	WordEnd
 
 _c: ; GTE_C_SIN_DEG9_MAX_ERROR 5.2010746265374053e-9
 		FloatLit $5721a7ba,-18	;C4 +2.5967200279475300e-06
@@ -4474,7 +4458,7 @@ _zero:		rts
 FM1:		lda #$80
 		ldy #0
 		jmp FLitYA
-;	WordEnd
+	WordEnd
 
 
  .if "fphyperbolic" in TALI_OPTIONAL_WORDS ;--------------------------------------------
@@ -4603,6 +4587,2657 @@ FACotH: 	jsr F1Slash
  .endif ; fptransendentals
 
  .endsection code
+
+ .if "fpe2" in TALI_OPTIONAL_WORDS ;--------------------------------------------
+; Half-precision (16bit mantissa) floating point many words.
+
+ .section code
+
+EFloat_Size = 3	; # of in memory byte for an E Float
+ .if 1
+ WordHeader "EFloat",NN ; ( -- u )  Constant: size of a float
+  ; gforth
+EFloat:		lda #EFloat_Size
+		jmp PushZA
+	WordEnd
+  .endif
+
+ WordHeader "EFloat+",NN ; ( e-addr1 -- e-addr2 )  Add the size in address units of a floating-point number.
+  ; https://forth-standard.org/standard/float/FLOATPlus
+EFloatPlus:	lda #EFloat_Size
+		jmp Plus_A
+	WordEnd
+
+ WordHeader "EFloats",NN ; ( n1 -- n2 )  return size of n1 floats
+  ; https://forth-standard.org/standard/float/FLOATS
+EFloats:	jsr EFloat
+		jmp Star
+	WordEnd
+
+
+ WordHeader "EAlign",0 ; ( -- )  reserve enough space to align the compiler pointer
+  ; If the data-space pointer is not float aligned, reserve enough data space to make it so. 
+  ; https://forth-standard.org/standard/float/FALIGN
+EAlign: 		; 6502 doesn't need any alignment.
+	WordEnd
+		rts
+
+ WordHeader "EAligned",0 ; ( addr -- r-addr )  FP align the address
+  ; https://forth-standard.org/standard/float/FALIGNED
+  ; r-addr is the first float-aligned address greater than or equal to addr. 
+EAligned:		; 6502 doesn't need any alignment
+	WordEnd
+		rts
+
+
+ WordHeader "Hex>E",NN ; ( n_mant n_exp -- ) ( F: -- e )  create e from parts
+PartsToE:	jsr FAllocX		; alloc FP stack entry, X= FP stack index
+		ldx tmp1+0		; restore data stack index
+		ldy FIndex		; Y= FP stack index
+		jsr PopA		; pop n_exp
+		sta FSExp,y
+		lda DStack+1,x
+		sta FSMant0,y
+		lda DStack+0,x
+		sta FSMant1,y
+		inx			; Drop
+		inx
+	WordEnd
+		rts
+
+ WordHeader "E>Hex",NN ; ( F: e -- ) ( -- n_mantissa n_exponent )  get parts of e
+EToParts:	ldy FIndex	; Y= FP stack index
+		dex		; alloc n_mantissa
+		dex
+		dex		; alloc n_exponent
+		dex
+		lda FSMant0,y	; copy mantissa
+		sta DStack+3,x
+		lda FSMant1,y
+		sta DStack+2,x
+		lda FSExp,y	; copy exponent
+		sta DStack+0,x
+		and #$80	;   sign extend
+		beq +
+		lda #$ff
++		sta DStack+1,x
+		inc FIndex	; FDrop r
+	WordEnd
+		rts
+
+ WordHeader "E.Hex",NN ; ( F: e -- )	display e in hex
+EDotHex:	jsr EToParts	; get parts of r
+		jsr Swap
+		jsr Dot_Hex	; do mantissa
+		lda #':'
+		jsr Emit_A
+		jmp C_Dot_Hex	; do exponent
+	WordEnd
+
+
+ .if 0
+ WordHeader "ECmp",NN ; ( F: e1 e2 -- e1 e2 ) ( -- n )  wrapper for ECmpA
+		jsr ECmpA		; compare #s
+		tay			; return >0, 0, <0
+		jmp PushYA
+	WordEnd
+  .endif
+
+ WordHeader "ECmpA",NN ; ( F: e1 e2 -- e1 e2 CPU_regs ) \ floating point compare
+  ; assumes normalized values
+  ; returns: flags N & Z, A=0 for e1==e2, A<0 for e1<e2, A>0 for e1>e2
+ECmpA:		stx tmp1		; save data stack index
+		ldx FIndex		; X= FP stack index
+
+		lda FSMant0+0,x		; r2 mantissa == 0 ?
+		beq _r2Zero
+		ldy FSMant0+1,x		; r1 mantissa == 0 ?
+		beq _r1Zero
+		eor FSMant0+1,x		; compare mantissa sign
+		bmi _MantissaSignDifferent
+
+		sec			; compare exponent
+		lda FSExp+1,x
+		sbc FSExp+0,x
+		bne _ExponentDifferent
+
+		tya			; compare mantissa MSB
+		sbc FSMant0+0,x		;   always same sign so can't overflow
+		bne _13
+		lda FSMant1+1,x		; compare mantissa 1
+		sbc FSMant1+0,x
+		beq _13
+_12:		ror a
+_14:		eor #$80
+		ora #1
+_13:		ldx tmp1		; restore data stack index
+		tay			; set CPU flags
+		rts
+
+_r1Zero:	lda FSMant0+0,x		; return 0-r2
+		bne _14
+		beq _13
+
+_r2Zero:	lda FSMant0+1,x		; return r1
+		jmp _13
+
+_ExponentDifferent:
+		bvc +
+		eor #$80
++
+		eor FSMant0+0,x
+		ldx tmp1		; restore data stack index
+		ora #1			; set CPU flags
+		rts
+
+_MantissaSignDifferent:
+		tya
+		ldx tmp1		; restore data stack index
+		ora #1
+		rts
+	WordEnd
+
+
+ WordHeader "EMax",NN ; ( F: e1 e2 -- e3 )  e3 is the greater of e1 and e2. 
+  ; https://forth-standard.org/standard/float/FMAX
+EMax:		jsr ECmpA
+		bpl EDrop
+		bmi ENip
+	WordEnd
+
+ WordHeader "EMin",NN ; ( F: e1 e2 -- e3 )  e3 is the lesser of e1 and e2.
+  ; https://forth-standard.org/standard/float/FMIN
+EMin:		jsr ECmpA
+		bmi EDrop
+		bpl ENip
+	WordEnd
+
+
+ WordHeader "EDepth",NN ; ( -- n )  # of entries on the FP stack
+  ; https://forth-standard.org/standard/float/FDEPTH
+EDepth:		lda #FDim
+		sec
+		sbc FIndex
+		jmp PushZA
+	WordEnd
+
+ WordHeader "EDrop",0 ; ( F: e -- )  Drop 1 FP stack entry
+  ; https://forth-standard.org/standard/float/FDROP
+EDrop:		inc FIndex
+	WordEnd
+		rts
+
+ WordHeader "E2Drop",0 ; ( F: e1 e2 -- )  Drop 2 FP stack entries
+E2Drop:		inc FIndex
+		inc FIndex
+	WordEnd
+		rts
+
+ WordHeader "ENip",0 ; ( F: e1 e2 -- e2 )   Drop NOS on FP stack
+  ; like https://forth-standard.org/standard/core/NIP
+ENip:		stx tmp1		; save data stack index
+		ldx FIndex		; X= FP stack index
+		lda FSExp+0,x		; copy exponent
+		sta FSExp+1,x
+		lda FSMant0+0,x		; copy mantissa
+		sta FSMant0+1,x
+		lda FSMant1+0,x
+		sta FSMant1+1,x
+		inc FIndex		; EDrop
+		ldx tmp1		; restore data stack index
+	WordEnd
+		rts
+
+ WordHeader "EDup",0 ; ( F: e -- e e )  Push a copy of FP TOS
+  ; https://forth-standard.org/standard/float/FDUP
+EDup:		jsr FAllocX		; alloc FP stack entry, X=fp stack index
+		lda FSExp+1,x		; copy exponent
+		sta FSExp+0,x
+		lda FSMant0+1,x		; copy mantissa
+		sta FSMant0+0,x
+		lda FSMant1+1,x
+		sta FSMant1+0,x
+		ldx tmp1+0		; restore data stack index
+	WordEnd
+		rts
+
+ WordHeader "EOver",0 ; ( F: e1 e2 -- e1 e2 e1 )  Push a copy of FP NOS
+  ; https://forth-standard.org/standard/float/FOVER
+EOver:		jsr FAllocX		; alloc FP stack entry, X=fp stack index
+		lda FSExp+2,x		; copy exponent
+		sta FSExp+0,x
+		lda FSMant0+2,x		; copy mantissa
+		sta FSMant0+0,x
+		lda FSMant1+2,x
+		sta FSMant1+0,x
+		ldx tmp1+0		; restore data stack index
+	WordEnd
+		rts
+
+ WordHeader "EPick",0 ; ( e(u) ... e(1) e(0) u -- e(u) ... e(1) e(0) e(u) )
+  ; Push ith data stack number.  1 EPICK is equivalent to EOVER.
+  ; like https://forth-standard.org/standard/core/PICK
+EPick:		jsr PopA		; pop u (desired entry #)
+EPickA:		clc			; Y= fp stack index of [u]
+		adc FIndex
+EPick3:		tay
+
+		jsr FAllocX		; alloc FP stack entry, X=fp stack index
+		lda FSExp,y		; copy exponent
+		sta FSExp,x
+		lda FSMant0,y		; copy mantissa
+		sta FSMant0,x
+		lda FSMant1,y
+		sta FSMant1,x
+		ldx tmp1+0		; restore data stack index
+	WordEnd
+		rts
+
+ WordHeader "E2Dup",NN ; ( F: e1 e2 -- e1 e2 e1 e2 )  push copy of top 2 on FP stack
+E2Dup:		jsr EOver
+		jmp EOver
+	WordEnd
+
+; WordHeader "E2Dup<",NN ; ( F: e1 e2 -- e1 e2 ) ( -- )
+;E2DupLt:	jsr ECmpA
+;		bmi E2Dup
+;	WordEnd
+;		rts
+
+ WordHeader "ESwap",0 ; ( F: e1 e2 -- e2 e1 )  Swap FP TOS & NOS
+  ; https://forth-standard.org/standard/float/FSWAP
+ESwap:		stx tmp1+0		; save data stack index
+		ldx FIndex		; X=FP stack index
+
+		lda FSExp+0,x		; do FSExp
+		ldy FSExp+1,x
+		sta FSExp+1,x
+		styta FSExp+0,x
+
+		lda FSMant0+0,x		; do FSMant0
+		ldy FSMant0+1,x
+		sta FSMant0+1,x
+		styta FSMant0+0,x
+
+		lda FSMant1+0,x		; do FSMant1
+		ldy FSMant1+1,x
+		sta FSMant1+1,x
+		styta FSMant1+0,x
+
+		ldx tmp1+0		; restore data stack index
+	WordEnd
+		rts
+
+ .if 0
+ WordHeader "ENSwap",NN ; ( F: eN+1  eN  eN-1... e0 --  eN+1  e0  eN-1 ... e1 eN ) ( u -- )
+  ; Exchange the fp value at the N-th location on the fp stack with the value at the top of the
+  ; fp stack.  1 ENSwap is equivalent to ESwap
+ENSwap:		jsr PopA		; pop u
+ENSwapA:	clc
+		adc FIndex
+		tay
+
+		lda FSExp+0,x		; do FSExp
+		pha
+		lda FSExp+1,y
+		sta FSExp+1,x
+		pla
+		sta FSExp+0,y
+
+		lda FSMant0+0,x		; do FSMant0
+		pha
+		lda FSMant0+1,y
+		sta FSMant0+1,x
+		pla
+		sta FSMant0+0,y
+
+		lda FSMant1+0,x		; do FSMant1
+		pha
+		lda FSMant1+1,y
+		sta FSMant1+1,x
+		pla
+		sta FSMant1+0,y
+
+		ldx tmp1+0		; restore data stack index
+	WordEnd
+		rts
+  .endif
+
+ WordHeader "ETuck",NN ; ( F: e1 e2 -- e2 e1 e2 )
+  ; like https://forth-standard.org/standard/core/TUCK
+ETuck:		jsr ESwap
+		jmp EOver
+	WordEnd
+
+ WordHeader "ERot",0 ; ( F: e1 e2 e3 -- e2 e3 e1 ) \ Rotate the top three FP stack entries.
+  ; https://forth-standard.org/standard/float/FROT
+ERot:		stx tmp1		; save data stack index
+
+	.cerror FSMant0-FSExp!=FDim	; make sure our assumptions hold
+	.cerror FSMant1-FSMant0!=FDim
+
+		lda FIndex		; for FSMant3, FSMant2, FSMant1, FSMant0, FSExp
+		clc
+		adc #2*FDim
+		bne _3
+
+_2:		txa			;    next byte
+	;	sec
+		sbc #FDim
+_3:		tax
+
+		ldy FSExp+2,x		;   do a byte
+		lda FSExp+1,x
+		sta FSExp+2,x
+		lda FSExp+0,x
+		sta FSExp+1,x
+		styta FSExp+0,x
+
+		cpx FIndex		; done?
+		bne _2
+
+;--- or ---
+;		stx tmp1		; save data stack index
+;		ldx FIndex		; load FP stack index
+;
+;		ldy FSExp+2,x		; do FSExp
+;		lda FSExp+1,x
+;		sta FSExp+2,x
+;		lda FSExp+0,x
+;		sta FSExp+1,x
+;		styta FSExp+0,x
+;
+;		ldy FSMant0+2,x		; do FSMant0
+;		lda FSMant0+1,x
+;		sta FSMant0+2,x
+;		lda FSMant0+0,x
+;		sta FSMant0+1,x
+;		styta FSMant0+0,x
+;
+;		ldy FSMant1+2,x		; do FSMant1
+;		lda FSMant1+1,x
+;		sta FSMant1+2,x
+;		lda FSMant1+0,x
+;		sta FSMant1+1,x
+;		styta FSMant1+0,x
+;---
+		ldx tmp1		; restore param stack index
+	WordEnd
+		rts
+
+ WordHeader "E-Rot",NN ; ( F: e1 e2 e3 -- e3 e1 e2 )
+EMRot:		jsr ERot
+		jmp ERot
+	WordEnd
+
+
+ .if 0 ; these don't seem very useful
+
+ WordHeader "E>R",ST ; ( F: e -- ) ( r: -- e )  Move from FP stack to return stack
+EToR:		pla		; save RTS addr
+		sta tmp1+0
+		pla
+		sta tmp1+1
+
+		ldy FIndex	; copy r
+		lda FSExp,y
+		pha
+		lda FSMant0,y
+		pha
+		lda FSMant1,y
+		pha
+		inc FIndex	; FDrop
+
+		lda tmp1+1	; restore RTS addr
+		pha
+		lda tmp1+0
+		pha
+	WordEnd
+		rts
+
+ WordHeader "ER>",ST ; ( r: e -- ) ( F: -- e )  Move from return stack to FP stack
+ERTo:		pla		; save rts addr
+		sta tmp2+0
+		pla
+		sta tmp2+1
+
+		jsr FAllocX	; alloc FP stack entry & set X
+		pla		; copy r
+		sta FSMant1,x
+		pla
+		sta FSMant0,x
+		pla
+		sta FSExp,x
+		ldx tmp1	; restore data stack index
+
+		lda tmp2+1	; restore RTS addr
+		pha
+		lda tmp2+0
+		pha
+	WordEnd
+		rts
+
+ .endif ; 0
+
+
+ WordHeader "E@",0 ; ( addr -- ) ( F: -- e )  Fetch a FP number, internal format
+  ; https://forth-standard.org/standard/float/FFetch
+  ; Also see: SF@ DF@ for IEEE formats
+EAt:		jsr PopYA		; pop addr
+EAt_YA:		sta tmp2+0		; save addr
+		sty tmp2+1
+
+		ldy #0			; starting offset from tmp2
+EAt_Tmp2Y:	jsr FAllocX		; alloc FP stack entry, X= fp stack index
+		lda (tmp2),y		; copy mantissa
+		sta FSMant1,x
+		iny
+		lda (tmp2),y
+		sta FSMant0,x
+		iny			; copy exponent
+		lda (tmp2),y
+		sta FSExp,x
+		ldx tmp1		; restore data stack index
+	WordEnd
+		rts
+
+ WordHeader "E!",0 ; ( addr -- ) ( F: e -- )  Store a FP number, internal format
+  ; https://forth-standard.org/standard/float/FStore
+  ; Also see: SF! DF! for IEEE formats
+EStore:		jsr PopYA		; pop addr
+EStore_YA:	sta tmp1+0		; save addr
+		sty tmp1+1
+
+		ldy #0
+		stx tmp2		; save data stack index
+		ldx FIndex		; X= FP stack index
+		lda FSMant1,x		; copy mantissa
+		sta (tmp1),y
+		lda FSMant0,x
+		iny
+		sta (tmp1),y
+		lda FSExp,x		; copy exponent
+		iny
+		sta (tmp1),y
+		inc FIndex		; FDrop
+		ldx tmp2		; restore data stack index
+	WordEnd
+		rts
+
+
+ WordHeader "E,",NN ; ( F: e -- )  compile a float
+EComma:		lda cp+0		; store f at Here
+		ldy cp+1
+		jsr EStore_YA
+		lda #EFloat_Size
+		jmp Allot_ZA
+	WordEnd
+
+
+ WordHeader "E0!",NN ; ( addr -- )  Store a zero in a FP internal format variable
+EZStore:	jsr E0
+		jmp EStore
+	WordEnd
+
+
+ WordHeader "E0=",NN ; ( F: e -- ) ( -- flag )  return e == 0
+  ; https://forth-standard.org/standard/float/FZeroEqual
+EZEq:		ldy FIndex
+		lda FSMant0,y
+		bne EFalse1
+
+ETrue1: ; ( F: e -- ) ( -- true )
+		inc FIndex	; EDrop
+		jmp True	; return true
+	WordEnd
+
+ WordHeader "E0<>",NN ; ( F: e -- ) ( -- flag )  return e <> 0
+EZNe:		ldy FIndex
+		lda FSMant0,y
+		bne ETrue1
+		beq EFalse1
+	WordEnd
+
+ WordHeader "E0<",NN ; ( F: e -- ) ( -- flag )  return e < 0
+  ; https://forth-standard.org/standard/float/FZeroless
+EZLt:		ldy FIndex
+		lda FSMant0,y
+		bmi ETrue1
+
+EFalse1: ; ( F: e -- ) ( -- false )
+		inc FIndex	; EDrop
+		jmp False	; return false
+	WordEnd
+
+ WordHeader "E0>=",NN ; ( F: e -- ) ( -- flag )  return e >= 0
+EZGe:		ldy FIndex
+		lda FSMant0,y
+		bpl ETrue1
+		bmi EFalse1
+	WordEnd
+
+ WordHeader "E0>",NN ; ( F: e -- ) ( -- flag )  return e > 0
+EZGt:		ldy FIndex
+		lda FSMant0,y
+		bmi EFalse1
+		bne ETrue1
+		beq EFalse1
+	WordEnd
+
+ WordHeader "E0<=",NN ; ( F: e -- ) ( -- flag )  return e <= 0
+EZLe:		ldy FIndex
+		lda FSMant0,y
+		bmi ETrue1
+		bne EFalse1
+		beq ETrue1
+	WordEnd
+
+
+ WordHeader "E<",NN ; ( F: e1 e2 -- ) ( -- flag )  return e1 < e2
+  ; https://forth-standard.org/standard/float/Fless
+ELt:		jsr ECmpA
+		bmi ETrue2
+
+EFalse2: ; ( F: e1 re -- ) ( -- false )
+		inc FIndex	; EDrop
+		inc FIndex	; EDrop
+		jmp False	; return False
+	WordEnd
+
+ WordHeader "E>=",NN ; ( F: e1 e2 -- ) ( -- flag )  return e1 >= e2
+EGe:		jsr ECmpA
+		bpl ETrue2
+		bmi EFalse2
+	WordEnd
+
+ WordHeader "E>",NN ; ( F: e1 e2 -- ) ( -- flag )  return e1 > e2
+EGt:		jsr ECmpA
+		bmi EFalse2
+		bne ETrue2
+		beq EFalse2
+	WordEnd
+
+ WordHeader "E<=",NN ; ( F: e1 e2 -- ) ( -- flag )  return e1 <= e2
+ELe:		jsr ECmpA
+		bmi ETrue2
+		bne EFalse2
+
+ETrue2: ; ( F: e1 e2 -- ) ( -- true )
+		inc FIndex	; EDrop
+		inc FIndex	; EDrop
+		jmp True	; return True
+	WordEnd
+
+ WordHeader "E<>",NN ; ( F: e1 e2 -- ) ( -- flag )  return e1 <> e2
+ENe:		jsr ECmpA
+		bne ETrue2
+		beq EFalse2
+	WordEnd
+
+ WordHeader "E=",NN ; ( F: e1 e2 -- ) ( -- flag )  return e1 = e2
+EEq:		jsr ECmpA
+		bne EFalse2
+		beq ETrue2
+	WordEnd
+
+
+ WordHeader "E~Abs",NN ; ( F: e1 e2 e3 -- flag )  approximate equality with absolute error |e1-e2|<e3
+ETAbs:		jsr EMRot
+		jsr EMinus
+		jsr EAbs
+		jmp EGt
+	WordEnd
+
+ WordHeader "E~Rel",NN ; ( F: e1 e2 e3 -- flag )  approximate equality with relative error |e1-e2|<e3*|e1+e2|
+ETRel:		jsr EOver
+		lda #3
+		jsr EPickA
+		jsr EPlus
+		jsr EAbs
+		jsr EStar		; r1 r2 r3*|r1+r2|
+		jsr EMRot		; r3*|r1+r2| r1 r2
+		jsr EMinus
+		jsr EAbs
+		jmp EGt
+	WordEnd
+
+ WordHeader "E~",NN ; ( F: e1 e2 e3 -- flag )  Approximate equality
+  ; https://forth-standard.org/standard/float/Ftilde
+ETilde:		ldy FIndex
+		lda FSMant0,y
+		bmi _10			; e3<0
+		bne ETAbs		; e3>0
+		inc FIndex		; e3=0
+		bne EEq
+
+_10:		jsr ENegate
+		jmp ETRel
+	WordEnd
+
+
+ WordHeader "EVariable",IM+NN ; ( "name" -- )  Create FP variable (internal format)
+  ; https://forth-standard.org/standard/float/FVARIABLE
+  ; FVARIABLE <name>   compile time: ( -- )
+  ; <name>            run time:  ( -- adr)
+  ; A defining word executed in the form:
+  ;	FVARIABLE <name>     
+  ; to create a dictionary entry for <name> and allot a floating point storage
+  ; in the parameter field.  The application must initialize the stored
+  ; value.  When <name> is later executed, it will place the storage
+  ; address on the stack. 
+EVariable:	jsr Create		; compile word header & push PFA adr
+		jsr adjust_z		; fix word code length
+		jsr E0			; alloc & init data
+		jmp EComma
+	WordEnd
+
+  
+ WordHeader "ELiteral",IM+NN ; ( F: e -- )  Compile FP literal
+  ; https://forth-standard.org/standard/float/FLITERAL
+ELiteral:	jsr ELitTest
+		beq _Short
+					; full precision literal
+		lda #<ELitI		; compile JSR FLitI
+		ldy #>ELitI
+		jsr Jsr_Comma_YA
+		jmp EComma		; compile inline operand, return
+
+_Short:		jsr ELitShort
+		jmp Jsr_Comma_YA	; compile jsr ELitYA, & return
+	WordEnd
+
+ELitTest: ; Will short work?
+		ldy FIndex
+		lda FSMant1,y		; will short work?
+		rts
+
+ELitShort: ; compile LDA #; LDY #
+		lda #$a9		; compile LDA #mant0
+		jsr C_Comma_A
+		lda FSMant0,y
+		jsr C_Comma_A
+		lda #$a0		; compile LDY #exp
+		jsr C_Comma_A
+		lda FSExp,y
+		jsr C_Comma_A
+		inc FIndex		; FDrop
+		lda #<ELitYA		; point at FLitYA
+		ldy #>ELitYA
+		rts
+
+ELitI: ; ( -- ) ( F: -- e )  push inline fvalue
+		pla			; tmp2= RTS addr
+		sta tmp2+0
+		clc			; bump RTS addr over inline float data
+		adc #EFloat_Size
+		tay
+		pla
+		sta tmp2+1
+		adc #0
+		pha
+		tya
+		pha
+
+		ldy #1			; correct for RTS addr
+		jmp EAt_Tmp2Y		; fetch inline data, & return
+
+FloatLitE .macro mantissa,exponent ; float constant in native format
+		.word \mantissa		; 16 bit signed binary mantissa.  $4000 = +0.5
+		.char \exponent		; 8 bit signed exponent.  $00 = 2**0
+	.endmacro
+FloatLitIE .macro mantissa,exp ; float literal
+		jsr ELitI
+		FloatLitE \mantissa,\exp
+	.endmacro
+
+
+ WordHeader "EConstant",NN ; ( F: r "name" -- )  Create FP constant word
+  ; https://forth-standard.org/standard/float/FCONSTANT
+EConstant:	jsr Header_Comma	; compile word header
+
+		jsr ELitTest		; will short work?
+		beq _Short
+					; full precision
+		lda #<EConstantRun	; compile call
+		ldy #>EConstantRun
+		jsr Jsr_Comma_YA
+		jsr adjust_z
+		jmp EComma		; inline operand, & return
+
+_Short:
+		jsr ELitShort		; compile load value
+		jsr Jmp_Comma_YA	; compile JMP
+		jmp adjust_z
+	WordEnd
+
+EConstantRun: ; ( F: -- e )  runtime for long FConstant
+		pla			; tmp2= pop RTS addr
+		sta tmp2+0
+		pla
+		sta tmp2+1
+		ldy #1			; correct for RTS addr
+		jmp EAt_Tmp2Y		; fetch inline data, & return
+
+
+ELitYA: ; ( YA -- ) ( F: -- e )  push short fvalue, Y=Exp A=Mant0
+		jsr FAllocX		; alloc FP stack entry, X=FP stack index
+		sta FSMant0,x		; Mant= A,0
+		styta FSExp,x		; Exp= Y
+		lda #0
+		sta FSMant1,x
+		ldx tmp1+0		; restore data stack index
+		rts
+
+ WordHeader "E0.e",NN ; ( F: -- e )  EConstant 0
+E0:		lda #0			; FSMant0
+		ldy #$80		; FSExp
+		bne ELitYA
+	WordEnd
+
+ WordHeader "E1000.e",NN ; ( F: -- e )  EConstant 1000
+E1000:		lda #$7d
+		ldy #10
+		bne ELitYA
+	WordEnd
+
+ WordHeader "E10.e",NN ; ( F: -- e )  EConstant 10 
+E10:		lda #$50
+		ldy #4
+		bne ELitYA
+	WordEnd
+
+ WordHeader "E2.e",NN ; ( F: -- e )  EConstant 2
+E2:		lda #$40
+		ldy #2
+		bne ELitYA
+	WordEnd
+
+ WordHeader "E1.e",NN ; ( F: -- e )  EConstant 1
+E1:		lda #$40
+		ldy #1
+		bne ELitYA
+	WordEnd
+
+ WordHeader "E.1e",NN ; ( F: -- e )  EConstant .1
+E10th:		jsr eConstantRun
+		FloatLitE $6667,-3
+	WordEnd
+
+ WordHeader "EPi",NN ; ( F: -- e )  EConstant PI
+EPi:		jsr EConstantRun
+		FloatLitE $6488,2
+	WordEnd
+
+ WordHeader "EPi/2",NN ; ( F: -- e )  EConstant Pi/2
+EPiH:		jsr EConstantRun
+		FloatLitE $6488,1
+	WordEnd
+
+ WordHeader "EPi/4",NN ; ( F: -- e )  EConstant Pi/4
+EPiQ:		jsr EConstantRun
+		FloatLitE $6488,0
+	WordEnd
+
+ WordHeader "E2Pi",NN ; ( F: -- e )  EConstant 2*Pi
+E2Pi:		jsr EConstantRun
+		FloatLitE $6488,3
+	WordEnd
+
+ WordHeader "E.E",NN ; ( F: -- e )  EConstant e
+EE:		jsr EConstantRun
+		FloatLitE $56fc,2
+	WordEnd
+
+
+ WordHeader "EValue",IM+NN ; ( F: e “(spaces)name” -- )  Create FP Value word
+  ; https://forth-standard.org/standard/float/FVALUE
+  ; Skip leading space delimiters. Parse name delimited by a space. Create a definition for
+  ; name with the execution semantics defined below, with an initial value equal to r.
+  ; name is referred to as a “F-Value”.
+  ; name Execution: ( f: -- r )
+  ;	Place r on the stack. The value of r is that given when name was created, until the phrase
+  ;	x TO name is executed, causing a new value of r to be assigned to name.
+  ; TO name Run-time: ( F: r -- )
+  ;	Assign the value r to name.
+EValue:		jsr Header_Comma	; compile word header
+		lda #<EValue_runtime	; compile JSR EValue_runtime
+		ldy #>EValue_runtime
+		jsr Jsr_Comma_YA
+		jsr adjust_z		; fix word length
+		jmp EComma		; alloc & init value
+	WordEnd
+
+EValue_runtime: ; unique, so  TO & optimizer & disassembly can recognize as EValue
+		jmp EConstantRun
+
+
+ WordHeader "EScale",NN ; ( n -- ) ( F: e1 -- e2 )  Add n to the exponent of an fp number.  aka ELShift
+EScale:		jsr PopA		; pop n
+EScaleA:	stx tmp1		; save data stack index
+		ldx FIndex		; X= FP stack index
+		ldy FSMant0,x		; mantissa zero?
+		beq _8
+		clc
+		adc FSExp,x
+		sta FSExp,x
+		bvs _overflow		; overflow or underflow?
+_8:		ldx tmp1		; restore data stack index
+		rts
+
+_overflow: ;	bpl _zero		; underflow could just return zero
+		ldx tmp1		; restore data stack index
+		jsr Throw_FpOutOfRange
+	WordEnd
+
+ WordHeader "E2*",NN ; ( F: e1 -- e2 )  Double a fp number
+E2Star:		lda #1
+		bne EScaleA
+	WordEnd
+
+ WordHeader "E2/",NN ; ( F: e1 -- e2 )  Halve a fp number
+E2Slash:	lda #$ff
+		bne EScaleA
+	WordEnd
+
+ WordHeader "E10*",NN ; ( F: e1 -- e2 )  multiply by 10
+E10Star:	jsr E2Star
+		jsr EDup
+		lda #2
+		jsr EScaleA
+		jmp EPlus
+	WordEnd
+
+
+ WordHeader "EFloor",NN ; ( F: e1 -- e2 )  Round toward negative infinity 
+  ; https://forth-standard.org/standard/float/FLOOR
+EFloor:		ldy FIndex
+		lda FSMant0,y		; negative?
+		bpl _a
+		lda FSExp,y		; > -1 ?
+		bpl _a
+
+		lda #$80		; return -1
+		sta FSMant0,y
+		lda #0
+		sta FSExp,y
+		sta FSMant1,y
+		rts
+		
+_a:		lda #16-1
+		jsr EShiftA
+		jmp ENormX
+	WordEnd
+
+; WordHeader "EShift",NN ; ( F: e1 n -- e2 )  align e1 to desired exponent
+  ; n=designed exponent
+  ; Returns exponent in Y, lo bit in carry
+;EShift:	jsr PopA
+EShiftA:	stx tmp1+0		; save data stack index
+		ldx FIndex		; X= FP stack index
+EShiftAX:	sta tmp1+1		; save desired alignment
+		sec			; calc bit shift count
+		sbc FSExp,x
+		beq _leave
+		bvs _overflow
+		bmi _leave
+		cmp #16
+		bcs _zero
+
+		tay
+		lda tmp1+1
+		sta FSExp,x
+		lda FSMant0,x
+_12:		cmp #$80		; mantissa >>=1
+		ror a
+		ror FSMant1,x
+		dey
+		bne _12
+		sta FSMant0,x
+_30:		ldy FSExp,x
+		ldx FIndex		; restore fp stack index (EShiftAX could have had a funny one)
+		rts
+
+_overflow:	bpl _leave
+_zero:		lda tmp1+1		; return zero
+		sta FSExp,x
+		lda #0
+		sta FSMant0,x
+		sta FSMant1,x
+_leave:		clc
+		bcc _30
+;	WordEnd
+
+
+ WordHeader "ETrunc",NN ; ( F: e1 -- e2 ) Round towards zero
+  ; https://forth-standard.org/standard/float/FTRUNC
+ETrunc:		ldy FIndex
+		lda FSMant0,y
+		bpl EFloor
+		jsr ENegate
+		jsr EFloor
+		jmp ENegate
+
+
+ WordHeader "ERound",NN ; ( F: e1 -- e2 )  Round to nearest
+  ; https://forth-standard.org/standard/float/FROUND
+ERound:		lda #15
+		jsr EShiftA
+		bcc _15
+		ldx tmp1+0		; restore data stack index
+		jmp E1Plus
+
+_15:		jmp ENormX
+	WordEnd
+
+
+ WordHeader "EIntFrc",NN ; ( F: e1 -- e_frac e_int )  Separate out integer part
+EIntFrc:	jsr EDup	; ( e1 e1 )
+		jsr EFloor	; ( e1 eint )
+		jsr ETuck	; ( eint e1 eint )
+		jsr EMinus	; ( eint efrac )
+		jmp ESwap	; ( efrac eint )
+	WordEnd
+
+
+
+; WordHeader "EMAlign",NN ; ( F: e2 e1 -- e2 e1 )  wrapper for EMAlignX
+;		jsr EMAlignX
+;		ldx tmp1		; restore data stack index
+;	WordEnd
+;		rts
+
+ WordHeader "EMAlignX",NN ; ( F: e2 e1 -- e2 e1 )  Denormalize to make exponents =
+  ; X is data stack index as usual on input.
+  ; returns X= FP stack index
+EMAlignX:	stx tmp1+0	; save data stack index
+		ldx FIndex	; load FP stack index
+		cpx #FDim-1	; check FP stack for >=2 entries
+		bcs Throw_FPStack_e3
+
+		; Note: sometimes we get denormalized mantissas
+
+		lda FSExp+0,x	; compare exponents
+		sec
+		sbc FSExp+1,x
+		bmi _1		; r1 smaller?
+		bne _2		; r2 smaller?
+		rts
+
+_1: ; r1 looks smaller
+		bvs _2b		; was this a big positive #?
+_1b:		lda FSExp+1,x	; make r1 like r2
+		jmp EShiftAX
+
+_2: ; r2 looks smaller
+		bvs _1		; was this a big negative #?
+_2b:		lda FSExp+0,x	; make r2 like r1
+		inx
+		jmp EShiftAX
+	WordEnd
+
+Throw_FPStack_e3: jsr Throw_FPStack
+
+ WordHeader "ENorm",NN ; ( F: e1 -- e2 )  Normalize r.
+ENorm:		stx tmp1+0		; save data stack index
+ENormX:		ldx FIndex		; switch to FP stack
+		ldy FSExp,x
+		lda FSMant0,x		; mantissa negative?
+		bmi _Neg
+					; mantissa is positive
+		bne _Pos2		; do byte shift
+		jsr _ShiftB
+		beq _zero		; no significant bits left?
+_Pos2:		clc
+		bmi _RShft
+_Pos3:		dey			; do bit shift
+		asl FSMant1,x
+		rol a
+		bpl _Pos3
+
+_RShft:  ; right shift 1 bit
+		iny
+		ror a
+		ror FSMant1,x
+_28:	; finish
+		sta FSMant0,x
+		styta FSExp,x
+		ldx tmp1+0	; restore data stack index
+		rts
+
+_Neg:	; mantissa is negative
+		cmp #$ff
+		bne _Neg2	; do byte shift
+		jsr _ShiftB
+;		cmp #$ff
+;		beq _zero	; no significant bits left?
+_Neg2:		cmp #0
+;		sec
+		bpl _RShft
+_Neg3:		dey
+		asl FSMant1,x
+		rol a
+		bmi _Neg3
+		bpl _RShft
+
+_Zerop:		pla
+		pla		; pop rts addr from _ShiftB
+_zero:		lda #0
+		sta FSMant1,x
+		ldy #$80
+		bne _28
+
+_ShiftB: ; shift left 1 byte
+		tya		; exponent -= 8
+		sec
+		sbc #8
+		tay
+		bvs _zerop	;is this useful? do we need more of them?
+		lda FSMant1,x
+		pha
+		lda #0
+		sta FSMant1,x
+		pla
+		rts
+	WordEnd
+
+
+ WordHeader "E+",NN ; ( F: e1 e2 -- e3 )  Add e1 & e2, giving e3.
+  ;  https://forth-standard.org/standard/float/FPlus
+EPlus:		jsr FMAlignX	; align mantissas, X= FP stack index
+		clc		; add mantissas
+		lda FSMant1+1,x
+		adc FSMant1+0,x
+		sta FSMant1+1,x
+		lda FSMant0+1,x
+		adc FSMant0+0,x
+
+EPlusFin: ; finish E+ & E-
+		inx		; FDrop r2
+		stx FIndex
+EPlusFin3:	bvc _19		; if overflow
+		ror a		;   shift mantissa right 1 bit
+		ror FSMant1,x
+		inc FSExp,x	;   adjust exponent
+			; rounding???
+			; overflow???
+_19:
+		sta FSMant0,x
+		jmp ENormX	; normalize, return
+	WordEnd
+
+ WordHeader "E1+",NN ; ( F: e1 -- e2 )  Add 1
+E1Plus:		jsr E1
+		jmp EPlus
+	WordEnd
+
+ WordHeader "E-",NN ; ( F: e1 e2 -- e3 )  Subtract e2 from e1, giving e3.
+  ; https://forth-standard.org/standard/float/FMinus
+EMinus:		jsr FMAlignX	; align mantissas
+		sec		; subtract mantissas
+		lda FSMant1+1,x
+		sbc FSMant1+0,x
+		sta FSMant1+1,x
+		lda FSMant0+1,x
+		sbc FSMant0+0,x
+		jmp EPlusFin	; finish
+	WordEnd
+
+ WordHeader "E1-",NN ; ( F: e1 -- e2 )  Subtract 1
+E1Minus:	jsr E1
+		jmp EMinus
+	WordEnd
+
+
+ WordHeader "ENegate",NN ; ( F: e1 -- e2 )  Negate e1.
+  ; https://forth-standard.org/standard/float/FNEGATE
+ENegate:	stx tmp1	; save data stack index
+		ldx FIndex	; X= FP stack index
+
+		sec		; mantissa = 0 - mantissa
+		lda #0
+		sbc FSMant1,x
+		sta FSMant1,x
+		lda #0
+		sbc FSMant0,x
+		jmp EPlusFin3	; finish up, return
+	WordEnd
+
+ WordHeader "EAbs",NN ; ( F: e1 -- e2 )  Absolute value of e.
+  ; https://forth-standard.org/standard/float/FABS
+EAbs:		ldy FIndex
+		lda FSMant0,y		; mantissa negative?
+		bmi ENegate
+		rts
+	WordEnd
+
+Throw_FPStack_e4: jmp Throw_FPStack
+
+; WordHeader "EPos",NN ; ( F: e1 e2 -- e1 e2 CPU.flags )  make e1 & e2 positive & return result sign
+EPos:		ldy FIndex		; load FP stack index
+		cpy #FDim-1		; check FP stack for 2
+		bcs Throw_FPStack_e4
+
+		lda FSMant0+0,y		; calc result sign
+		eor FSMant0+1,y
+		php
+
+		lda FSMant0+1,y		; if NOS negative
+		bpl +
+		inc FIndex		;   point at NOS
+		jsr ENegate		;   negate NOS
+		dec FIndex		;   restore fp
++
+		jsr EAbs		; abs TOS
+
+		stx tmp1+0		; save data stack index
+		ldx FIndex		; load FP stack index
+		plp			; restore sign flag
+		rts
+  ;	WordEnd
+
+
+
+ WordHeader "F>E",0 ; ( F: r -- e )  convert single-precision FP to half-precision FP
+FToE:					; exponent & hi 16 bits of mantissa are reused
+	WordEnd
+		rts
+
+ WordHeader "E>F",0 ; ( F: e -- r )  convert half-precision FP to single-precision FP
+EToF:		ldy FIndex
+					; exponent & hi 16 bits of mantissa are reused
+		lda #0			; zero 2nd 16 bits of mantissa
+		sta FSMant2,y
+		sta FSMant3,y
+	WordEnd
+		rts
+
+
+ WordHeader "S>E",NN ; ( n -- ) ( F: -- e )  convert n to e.
+  ; https://forth-standard.org/standard/float/StoF
+SToE:		jsr PopYA		; pop n
+SToEYA:		jsr FAllocX		; alloc FP stack entry
+		sta FSMant1,x		; copy n to mantissa
+		styta FSMant0,x
+		lda #15			; set exponent
+		sta FSExp,x
+		jmp ENormX		; normalize, return
+	WordEnd
+
+
+; WordHeader "D>E",NN ; ( d -- ) ( F: -- e )  convert d to e
+;  ; https://forth-standard.org/standard/float/DtoF
+;FDToE:		jsr FAllocX		; alloc FP stack entry
+;		ldx tmp1+0		; restore data stack index
+;		ldy FIndex		; Y= fp stack index
+;		lda DStack+2,x		; mantissa= d
+;		sta FSMant3,y
+;		lda DStack+3,x
+;		sta FSMant2?,y
+;		lda DStack+0,x
+;		sta FSMant1,y
+;		lda DStack+1,x
+;		sta FSMant0,y
+;		lda #31			; set exponent
+;		sta FSExp,y
+;		jsr Two_Drop
+;		jmp FNorm		; normalize, return
+;	WordEnd
+
+
+ WordHeader "E>S",NN ; ( F: e -- ) ( -- n )  Convert e to n.
+  ; https://forth-standard.org/standard/float/FtoS
+EToS:		ldy FIndex
+		lda FSMant0,y		; save sign
+		php
+		bpl +
+		jsr ENegate
++
+		lda #15
+		jsr EShiftA
+		ldx tmp1+0		; restore data stack index
+		cpy #15+1		; always positive, so unsigned compare works
+		bcs _overflow
+
+		ldy FIndex
+		dex
+		dex
+		lda FSMant0,y
+		sta DStack+1,x
+		lda FSMant1,y
+		sta DStack+0,x
+
+		inc FIndex		; EDrop
+
+		plp			; apply saved sign
+		bmi +
+		rts
+
++		jmp Negate
+
+_overflow:	plp			; RDrop saved sign
+		lda #$100+err_OutOfRange
+		jsr ThrowA
+	WordEnd
+
+
+; WordHeader "E>D",NN ; ( F: e -- ) ( -- d )  convert e to d
+;  ; https://forth-standard.org/standard/float/FtoD
+;  ; d is the double-cell signed-integer equivalent of the integer portion of e.
+;  ; The fractional portion of e is discarded.
+;EToD:		ldy FIndex
+;		lda FSMant0,y		; save sign
+;		php
+;		bpl +
+;		jsr ENegate
+;+
+;		lda #31
+;		jsr EShiftA
+;		ldx tmp1+0		; restore data stack index
+;		cpy #31+1		; always positive, so unsigned compare works
+;		bcs _overflow
+;
+;		ldy FIndex
+;		dex			; d= mantissa
+;		dex
+;		dex
+;		dex
+;		lda FSMant0,y
+;		sta DStack+1,x
+;		lda FSMant1,y
+;		sta DStack+0,x
+;		lda FSMant2?,y
+;		sta DStack+3,x
+;		lda FSMant3,y
+;		sta DStack+2,x
+;
+;		inc FIndex		; FDrop
+;
+;		plp			; apply saved sign
+;		bmi +
+;		rts
+;
+;+		jmp DNegate
+;
+;_overflow:	plp			; RDrop sign
+;		lda #$100+err_OutOfRange
+;		jsr ThrowA
+;	WordEnd
+
+
+ WordHeader "ERnd",NN ; ( F:  -- e )  get random # between 0 & 1
+ERnd:		jsr Rand		; generate next RndState
+		jsr FAllocX		; alloc FP stack entry
+					; mantissa = RndState
+		lsr a			;   make positive
+		sta FSMant0,x
+		styta FSMant1,x
+		lda #0			; exponent=0
+		sta FSExp,x
+		jmp ENormX		; normalize, return
+	WordEnd
+
+
+ WordHeader "ESqrt",NN ; ( F: e1 -- e2 )  Square root.  Newton's method. Short but slowish
+  ; https://forth-standard.org/standard/float/FSQRT
+ESqrt:		ldy FIndex
+		lda FSMant0,y		; zero?
+		bne +
+		rts			;   just return the zero
++
+		jsr EDup		; get trial value
+		ldy FIndex
+		lda FSExp,y		; halve the exponent of trial value
+		cmp #$80
+		ror a
+		sta FSExp,y
+
+		lda #9			; for 9 iterations
+_3:		pha
+		jsr E2Dup		;   calc new trial value
+		jsr ESlash
+		jsr EPlus
+		jsr E2Slash
+		pla			;  next
+		sec
+		sbc #1
+		bne _3
+		jmp ENip		; return trial value
+	WordEnd
+
+
+; : ESqrt ( F: e1 -- e2 )  square root, Using pseudo-division
+  ; https://forth-standard.org/standard/float/FSQRT
+;	phx		;save integer param index
+;	ldx FIndex	;load FP param index
+;
+;	lda FSMant6?,x	; get r1 mantissa
+;	ldy FSMant7,x
+;	beq @Zero	; Is r1 zero?
+;	bmi @Negative	; is r1 negative?
+;	sta tmp+0	; X.lo=r1
+;	sty tmp+2
+;	stz tmp+4	; X.hi=0
+;	stz tmp+6
+;
+;	inc FSExp,x	; fix exponent for algorithm
+;
+;	lda FSExp,x	; halve exponent
+;	asl a
+;	ror FSExp,x
+;	bcc @39		; was odd?
+;	inc FSExp,x
+;	lsr tmp+2
+;	ror tmp+0
+;@39:
+;
+;	stz FSMant7,x	; sqrt=0
+;	stz FSMant6,x
+;
+;	ldy #31		; for 31 bits of sqrt
+;	sty tmp+8
+;@41:
+;
+;	lda tmp+2	;   x>=sqrt?
+;	cmp #$4000
+;	lda tmp+4
+;	sbc FSMant6,x
+;	tay
+;	lda tmp+6
+;	sbc FSMant7,x
+;	bcc @69
+;	sta tmp+6	;     X-=sqrt
+;	sty tmp+4
+;	lda tmp+2
+;	sbc #$4000
+;	sta tmp+2
+;	sec
+; @69:
+;
+;	rol FSMant6,x	;   shift carry into sqrt
+;	rol FSMant7,x
+;	asl tmp+0	;   x<<=2
+;	rol tmp+2
+;	rol tmp+4
+;	rol tmp+6
+;	asl tmp+0
+;	rol tmp+2
+;	rol tmp+4
+;	rol tmp+6
+;	dec tmp+8	;  UntilEq
+;	bne @41
+;
+;	jmp FNorm+1	; normalize & return
+;
+; @Zero: ; r1 is zero
+;	plx		;   just return it
+;	rts
+;
+; @Negative: ; r1 is negative
+;	plx
+;	jsr Throw_FpOutOfRange
+
+
+ ;WordHeader "Precision",NN ; ( -- u )  Get number of significant digits currently used by F., FE., or FS.
+  ; https://forth-standard.org/standard/float/PRECISION
+;Precision:	lda PrecisionV
+;		jmp PushZA
+;	WordEnd
+;		rts
+
+; WordHeader "Set-Precision",NN ; ( u -- )  Set the number of significant digits currently used by F., FE., or FS. to u. 
+  ; https://forth-standard.org/standard/float/SET-PRECISION
+;		jsr PopA
+;		sta PrecisionV
+;	WordEnd
+;		rts
+
+; WordHeader "ERepresent",NN ; ( F: e -- ) ( c-addr u -- n flag1 flag2 )
+  ; https://forth-standard.org/standard/float/REPRESENT
+  ; At c-addr, place the character-string external representation of the significand of the floating-point number e.
+  ; Return the decimal-Base exponent as n, the sign as flag1 and valid result as flag2. The character string
+  ; shall consist of the u most significant digits of the significand represented as a decimal fraction with
+  ; the implied decimal point to the left of the first digit, and the first digit zero only if all digits are
+  ; zero. The significand is rounded to u digits following the round to nearest rule; n is adjusted, if necessary,
+  ; to correspond to the rounded magnitude of the significand. If flag2 is true then r was in the
+  ; implementation-defined range of floating-point numbers. If flag1 is true then r is negative. 
+  ;
+  ; An ambiguous condition exists if the value of Base is not decimal ten. 
+  ;
+  ; When flag2 is false, n and flag1 are implementation defined, as are the contents of c-addr. Under these
+  ; circumstances, the string at c-addr shall consist of graphic characters. 
+  ; ???
+
+
+
+ WordHeader "(E.)",NN ; ( F: e -- ) ( -- adr )  Convert FP to string, fixed-point
+  ; Display, with a trailing space, using fixed-point notation: 
+  ;	[-] <digits>.<digits0>
+PEDot:		jsr pecstart		;start collecting chars, make r positive
+		jsr PEDotSub
+		jmp pfcend
+
+
+PEDotSub:
+		jsr Precision	;alloc & init work area
+		jsr One
+_mantNzFound  = DStack+3	; nonzero mantissa digit processed
+_NumSigDigits = DStack+2	; # of significant digits
+_decimalPos   = DStack+0	; decimal point position
+
+		jsr ELt10		; scale down to <10, counting exponent
+
+_c:					;do
+		lda _decimalPos,x	;  insert decimal point here?
+		bne _c2
+		lda #'.'
+		jsr pfchar
+_c2:		dec _decimalPos,x
+		jsr EDup		;  do a digit
+		jsr EToS		; ( work n )
+		lda DStack+0,x
+		ora _mantNzFound+2,x	;  doing significant digits?
+		sta _mantNzFound+2,x
+		beq _c7
+		dec _NumSigDigits+2,x
+		bpl _c7
+		inx			;    drop integer
+		inx
+		bne _d
+
+_c7:		lda DStack+0,x		;  store the char
+		ora #'0'
+		jsr pfchar
+		jsr SToE		; ( work )
+		jsr EMinus
+		jsr E10Star
+
+		ldy FIndex		;  until mantissa==0
+		lda FSMant0,y
+		bne _c
+
+_d:		dec _decimalPos,x	;do trailing zeros
+		bmi _d9
+		lda #'0'
+		jsr pfchar
+		jmp _d
+
+_d9:		inx			; drop work area
+		inx
+		inx
+		inx
+		inc FIndex		; FDrop
+		rts
+	WordEnd
+
+
+ELt10:	; ( F: e1 -- e2 ) ( n1 -- n2 ) scale down to <10, counting exponent
+_1:		ldy FIndex		; while e1 >= 10
+		lda FSExp,y
+		bmi _9			;   exponent negative?
+		cmp #4
+		bcc _9			;   < 4 ?
+		bne _2			;   > 4 ?
+		lda FSMant0,y		;   mantissa >= 10 ?
+		cmp #$50
+		bcc _9
+_2:		inc DStack+0,x		;   exp ++
+		jsr E10			;   e /= 10
+		jsr ESlash
+		jmp _1
+_9:		rts
+
+
+; ------------
+; character storage in Pad
+
+pecstart: ; ( -- ) ( F: e1 -- e2 )  Start
+		lda #1
+		sta ToHold
+
+		ldy FIndex		; if e1 negative
+		lda FSMant0,y
+		bpl _19
+		lda #'-'		;   append sign
+		jsr pfchar
+		jmp ENegate		;   make positive, return
+
+_19:		rts
+
+;pechar: ; ( A -- )  Append a char
+;		ldy ToHold
+;		sta (cp),y
+;		inc ToHold
+;		rts
+
+;pecend: ; ( -- adr )  End, returns counted string
+;		lda ToHold
+;		sec
+;		sbc #1
+;		ldy #0
+;		sta (cp),y		; fill in length
+;		jmp Here		; push start addr
+
+;peciA: ; ( A -- )  Append an integer
+;		tay
+;		bpl _15			; IfMi,
+;		eor #$ff
+;		clc
+;		adc #1
+;		pha
+;		lda #'-'
+;		bne _19
+;_15:		pha
+;		lda #'+'
+;_19:
+;		jsr pech
+;		pla
+;		ldy #'0'-1
+;_20:		iny
+;		sec
+;		sbc #10
+;		bcs _20
+;		adc #10
+;		pha
+;		tya
+;		jsr pech
+;		pla
+;		ora #'0'
+;		bne pech
+
+
+ WordHeader "E.",NN ; ( F: e -- )  Print e in fixed-point notation
+  ; https://forth-standard.org/standard/float/Fd
+EDot:		jsr PEDot
+EDot2:		jsr Count
+		jsr Type
+		jmp Space
+	WordEnd
+
+
+ WordHeader "E.S",NN ; ( -- )  Non-destructive print of the float stack contents.
+EDotS:		lda #FDim-1	; for each FP stack entry
+		bne _8
+_2:		pha
+
+		jsr EPick3	;   print it
+		jsr EDot
+
+		pla		;  next
+		sec
+		sbc #1
+_8:		cmp FIndex
+		bcs _2
+	WordEnd
+		rts
+
+
+ WordHeader "(ES.)",NN ; ( F: e -- adr )  Convert e to scientific notation string
+PESDot:		jsr Zero		; alloc work area
+_exp    = DStack+0
+
+		jsr pecstart		; start collecting chars, make r positive
+
+		jsr ELt10		; scale down to <10
+
+_c1:		ldy FIndex		; while r < 1
+		lda FSMant0,y		;   mantissa == 0 ?
+		beq _c9
+		lda FSExp,y		;   exp < 1 ?
+		beq _c2
+		bpl _c9
+_c2:		dec DStack+0,x		;  exp -= 1
+		jsr E10Star		;  r *= 10
+		jmp _c1
+_c9:
+
+PESDotM:	jsr PEDotSub		; do mantissa
+
+		lda #'E'
+		jsr pfchar		; do exponent
+		lda DStack+0,x		;   _exp
+		jsr pfciA
+
+		inx			; Drop work area
+		inx
+		jmp pfcend		; finish string
+	WordEnd
+
+
+ WordHeader "ES.",NN ; ( F: e -- )  Print e in scientific notation.
+  ; https://forth-standard.org/standard/float/FSd
+ESDot:		jsr PESDot
+		jmp EDot2
+	WordEnd
+
+
+ WordHeader "(EE.)",NN ; ( F: e -- adr )  Convert e to engineering notation string
+PEEDot:		jsr Zero		; alloc work area
+_exp    = DStack+0
+
+		jsr pecstart		; start collecting chars, make r positive
+
+_30:		ldy FIndex		; while r < 1
+		lda FSMant0,y
+		beq _39
+		lda FSExp,y
+		beq _31
+		bpl _39
+_31:		dec _exp,x		;  exp -= 3
+		dec _exp,x
+		dec _exp,x
+		jsr E1000		;  r *= 1000
+		jsr EStar
+		jmp _30
+_39:
+
+_a:		ldy FIndex		; while r >= 1000
+		lda FSExp,y
+		bmi _a9			; exponent negative?
+		cmp #10
+		bcc _a9			;   < 10 ?
+		bne _a2			;   > 10 ?
+		lda FSMant0,y
+		cmp #$7d
+		bcc _a9
+_a2:		inc _exp,x		;   exp += 3
+		inc _exp,x
+		inc _exp,x
+		jsr E1000		;   r /= 1000
+		jsr ESlash
+		jmp _a
+_a9:
+
+		jmp PESDotM
+	WordEnd
+
+ WordHeader "EE.",NN ; ( F: e -- )  Print e in engineering format
+  ; https://forth-standard.org/standard/float/FEd
+  ; Display, with a trailing space, the top number on the floating-point stack using engineering notation, where
+  ; the significand is greater than or equal to 1.0 and less than 1000.0 and the decimal exponent is a multiple
+  ; of three. 
+  ;
+  ; An ambiguous condition exists if the value of Base is not (decimal) ten or if the character string
+  ; representation exceeds the size of the pictured numeric output string buffer. 
+EEDot:		jsr PEEDot
+		jmp EDot2
+	WordEnd
+
+
+ WordHeader "E'",IM+NN ; ( "string" -- ) ( F: -- e )  get inline string as float
+EQuote:		jsr Parse_Name		; get string
+		jsr ToEFloat		; convert
+		lda DStack+0,x		; error?
+		beq _Err
+		inx
+		inx
+
+		lda State		; compiling?
+		bne _compile
+		rts
+
+_compile:	jmp ELiteral		; compile a FP literal
+
+_Err:		lda #100+err_FPInvalidArg
+		jsr ThrowA
+	WordEnd
+
+
+ WordHeader ">EFloat",NN ; ( F: -- e ) ( c-addr u -- true | false)  Convert string to FP
+  ; https://forth-standard.org/standard/float/toFLOAT
+  ; An attempt is made to convert the string specified by c-addr and u to internal floating-point representation.
+  ; If the string represents a valid floating-point number in the syntax below, its value r and true are returned.
+  ; If the string does not represent a valid floating-point number only false is returned. 
+  ;
+  ; A string of blanks should be treated as a special case representing zero.
+  ;
+  ; The syntax of a convertible string := <significand>[<exponent>] 
+  ;
+  ; <significand> := [<sign>]{<digits>[.<digits0>] | .<digits> }
+  ; <exponent>    := <marker><digits0>
+  ; <marker>      := {<e-form> | <sign-form>}
+  ; <e-form>      := <e-char>[<sign-form>]
+  ; <sign-form>   := { + | - }
+  ; <e-char>      := { D | d | E | e }
+  ;
+ToEFloat:
+		jsr Zero	; alloc & init workspace
+		jsr Zero
+		jsr Zero
+_addr		= DStack+8
+_len		= DStack+6
+_mantfound 	= DStack+5		;mantissa digits found
+_exponent 	= DStack+4		;exponent
+_decimalPos 	= DStack+3		;decimal point position
+_DecPointFound1 = DStack+2
+_MantissaNegative1 = DStack+1
+_ExponentNegative1 = DStack+0
+
+		jsr E0			; init result
+
+_11:		jsr _GetChar		; get mantissa prefix
+		bcs _trueb ;_finishb
+		cmp #' '
+		beq _11
+		cmp #'+'
+		beq _20
+		cmp #'-'
+		bne _21
+		sta _MantissaNegative1,x ; remember mantissa is negative
+
+_20:		jsr _GetChar		; do next mantissa digits
+		bcs _finishb
+_21:		cmp #'.'
+		beq _27
+		cmp #'E'
+		beq _30
+		cmp #'e'
+		beq _30
+		cmp #'D'
+		beq _30
+		cmp #'d'
+		beq _30
+		sec			;   a digit?
+		sbc #'0'
+		bcc _fail
+		cmp #9+1
+		bcs _fail
+		pha			; append digit to mantissa
+		jsr E10Star
+		pla
+		ldy #0
+		jsr SToEYA
+		jsr EPlus
+		inc _mantfound,x	; remember we found a mantissa digit
+		lda _DecPointFound1,x	; if mantissa decimal point found
+		beq +
+		dec _decimalPos,x	;   increment decimal point position
++
+		jmp _20
+
+_27:	; found a decimal point
+		ldy _DecPointFound1,x	; already have one?
+		bne _fail
+		sta _DecPointFound1,x	; we have one now!
+		beq _20
+
+_fail: ; conversion failed
+		inc FIndex		; EDrop
+		lda #0			;return false
+		beq _return
+
+_trueb:		jmp _true
+_finishb:	jmp _finish
+
+_30:	; 'E' or 'D' found, get exponent prefix
+		jsr _GetChar
+		bcs _finish
+		cmp #'+'
+		beq _40
+		cmp #'-'
+		bne _41
+		sta _ExponentNegative1,x ; remember exponent is negative
+
+_40:		jsr _GetChar		;get exponent digits
+		bcs _finish
+_41:		sec			;  digit?
+		sbc #'0'
+		bcc _fail
+		cmp #9+1
+		bcs _fail
+		sta tmp1
+		asl _exponent,x		;  exponent *= 10
+		lda _exponent,x
+		asl a
+		asl a
+		adc _exponent,x
+		adc tmp1		;  + digit
+		sta _exponent,x
+		jmp _40
+
+_finish: ; all chars processed
+		lda _mantfound,x	;some mantissa digits found?
+		beq _fail
+
+		lda _ExponentNegative1,x ;apply exponent sign
+		beq +
+		lda #0
+		sec
+		sbc _exponent,x
+		sta _exponent,x
++
+		lda _exponent,x		;apply decimal position to exponent
+		clc
+		adc _decimalPos,x
+		sta _exponent,x
+		jmp _93
+
+_93b:		jsr E10Star		;apply exponent to mantissa
+		dec _exponent,x
+_93:		beq _94
+		bpl _93b
+
+_94b:		jsr E10
+		jsr ESlash
+		inc _exponent,x
+_94:		bmi _94b
+
+_95:
+		lda _MantissaNegative1,x ;apply mantissa sign
+		beq +
+		jsr ENegate
++
+	;	jsr ENorm
+_true:		lda #$ff		;return true
+
+_return:
+		sta _addr+0,x		; replace _addr with flag
+		sta _addr+1,x
+		inx			; Drop work
+		inx
+		inx			; 2Drop work
+		inx
+		inx
+		inx
+		inx			; Drop len
+		inx
+		rts
+
+
+_GetChar:
+		sec
+		lda _len,x
+		beq _gc_rts		; if end, return C=1
+		dec _len,x
+		lda (_addr,x)
+		inc _addr+0,x
+		bne +
+		inc _addr+1,x
++
+		clc			; get char, return C=0
+_gc_rts:	rts
+
+
+
+ WordHeader "EKey",NN ; ( F: -- e )  get float from console
+  ; Like BASIC's INPUT for 1 float.
+  ; Not standard, but useful for application programs.
+EKey:	;	lda base		; save base
+	;	pha
+	;	jsr Decimal
+		jsr Here		; ( addr )
+		jsr Here		; ( addr addr )
+		lda #40			; ( addr addr 40 )
+		jsr PushZA
+		jsr Accept		; ( addr len )
+		jsr ToEFloat		; ( true | false)
+	;	pla			; restore base
+	;	sta base
+		inx			; err?
+		inx
+		lda DStack-2,x
+		beq _err
+		rts
+
+_err:		jsr SLiteral_runtime
+		  jmp +
+		  .text " ? "
++		jsr Type
+		jmp EKey
+
+
+ .if "fpdo" in TALI_OPTIONAL_WORDS ;------------------------------------------------------
+; Floating-point half-precision Do +Loop
+
+ WordHeader "EI'",NN ; ( r: e1 e2 -- e1 e2 ) ( F: -- e1 )  get float loop limit
+EIQuote:	lda #1
+		bne EIA
+	WordEnd
+
+ WordHeader "EJ",NN ; ( r: e1 e2 e3 -- e1 e2 e3 ) ( F: -- e1 )  get 2nd float loop index
+EJ:		lda #2
+		bne EIA
+	WordEnd
+
+ WordHeader "EI",NN ; ( r: e -- e ) ( F: -- e )  get 1st float loop index
+EI:		lda #0
+EIA:		jsr DoFGetPtr
+		jmp EAt_YA
+	WordEnd
+
+
+ WordHeader "EDo",IM+NN ; ( F: elimit estart -- )  start float DO loop
+EDo:
+		dec DoStkIndex		; alloc DO stack entry
+		ldy DoStkIndex
+		bmi _TooDeep
+
+		jsr Do_Leave_Init
+
+		lda #<_Runtime
+		ldy #>_Runtime
+		jsr Jsr_Comma_YA	; compile jsr _Runtime
+
+		jsr Here		; remember loop body start addr
+
+		lda #<EDo		; identifier
+		jmp PushZA
+					; ( saved_DoLeave loopback_Addr id )
+
+_TooDeep:	lda #$100+err_DoLoop_TooDeep
+		jsr ThrowA
+
+_Runtime:
+		lda #0		; store index
+		jsr DoFGetPTr
+		jsr EStore_YA
+		lda #1		; store limit
+		jsr DoFGetPtr
+		jmp EStore_YA
+
+
+ WordHeader "E+Loop",IM+NN ; ( F: e -- )  end FDO loop
+EPlusLoop:
+		lda #<_Runtime		; compile JSR _Runtime
+		ldy #>_Runtime
+		jsr Jsr_Comma_YA
+
+		lda #<EDo		; check id
+		jsr Loop_End_3
+
+		lda #>EUnloop
+		ldy #<EUnloop
+		jmp Jsr_Comma_A		; compile jsr FUnloop
+	WordEnd
+
+_Runtime:
+		jsr EI		; add step
+		jsr EPlus
+		jsr EIQuote	; compare
+		jsr ECmpA
+		bpl _RunDone
+		inc FIndex	; FDrop limit
+		lda #0		; store new index
+		jsr DoFGetPtr
+		jsr EStore_YA
+		clv		; signal loop back
+		rts
+
+_RunDone:	inc FIndex	; FDrop limit
+		inc FIndex	; FDrop index
+		sev		; signal loop exit
+		rts
+
+ WordHeader "EUnloop",0 ( F: -- )  discard
+EUnloop:	inc DoStkIndex
+	WordEnd
+		rts
+
+ .endif ; fpdo
+
+
+ .if "fptrancendentals" in TALI_OPTIONAL_WORDS ;------------------------------------------
+; Float transendental functions
+
+; -------------------------------------------------------------
+; minimax
+; http://www.geometrictools.com/Source/Functions.html
+; http://www.research.scea.com/gdc2003/fast-math-functions.html
+
+
+ WordHeader "EMPoly",NN ; ( tbl_addr -- ) ( F: ex -- ex epoly )  shared polynomial evaluation
+EMPoly:		jsr PopYA
+EMPolyYA:	jsr PushYA		; push coefficent addr
+		jsr EAt_YA		; fetch 1st coefficent
+		jmp _4
+
+_2:		jsr EOver
+		jsr EStar
+		lda DStack+0,x		; fetch next coefficent
+		ldy DStack+1,x
+		jsr EAt_YA
+		jsr EPlus
+_4:		lda #EFloat_Size	; bump coefficent ptr
+		jsr Plus_A
+		lda (DStack+0,x)	; end of coefficent list?
+		bne _2
+		inx			; Drop coefficent ptr
+		inx
+	WordEnd
+		rts
+
+
+ WordHeader "ELog2M1M",NN ; ( e -- e )  Minimax polynomial approximations for log2(x)
+  ; the logarithm base 2 of x, for x in [1,2].
+  ; Range reduction is used for x outside [1,2] to obtain approximations to log2(x) for any x > 0.
+ELog2M1M:	lda #<_c
+		ldy #>_c
+		jsr EMPolyYA
+		jmp EStar
+	WordEnd
+
+_c: ; GTE_C_LOG2_DEG4_C1 +1.4387257478171547
+	FloatLitE $abe6,-3	; GTE_C_LOG2_DEG4_C4 -8.2130717995088531e-02
+	FloatLitE $5239,-1	; GTE_C_LOG2_DEG4_C3 +3.2118898377713379e-01
+	FloatLitE $a93e,0	; GTE_C_LOG2_DEG4_C2 -6.7778401359918661e-01
+	FloatLitE $5c14,1	; GTE_C_LOG2_DEG4_C1 +1.4387257478171547
+	.byte 0
+
+ WordHeader "ELog2",NN ; ( F: e1 -- e2 )  base 2 log
+ELog2:		ldy FIndex
+		lda FSMant0,y	; bad param?
+		bmi _OutOfRange
+		beq _OutOfRange
+		lda FSExp,y
+		pha		; remember orig exponent
+		lda #1
+		sta FSExp,y	; set to 1
+
+		jsr E1Minus
+		jsr ELog2M1M
+
+		ldy #0		; add orig exponent to float
+		pla
+		sec
+		sbc #1
+		bpl +
+		dey
++
+		jsr SToEYA
+		jmp EPlus
+
+_OutOfRange:	jmp Throw_FpOutOfRange
+	WordEnd
+
+ WordHeader "ELn",NN ; ( F: r1 -- r2 )  (base e) natural log
+  ; https://forth-standard.org/standard/float/FLN
+ELn:		jsr ELog2
+		FloatLitIE $58b9,0	;1/ln(2)
+		jmp EStar
+	WordEnd
+
+ WordHeader "ELnP1",NN ; ( F: r1 -- r2 ) (base e) natural log
+  ; https://forth-standard.org/standard/float/FLNPOne
+ElnP1:		jsr E1Plus
+		jmp ELn
+	WordEnd
+
+ WordHeader "ELog",NN ; ( F: r1 -- r2 )  (base 10) common log
+  ;  https://forth-standard.org/standard/float/FLOG
+  ; r2 is the Base-ten logarithm of r1. An ambiguous condition exists if r1 <=0.
+ELog:		jsr ELog2
+		FloatLitIE $4d10,-1	; 1/Log(2)
+		jmp EStar
+	WordEnd
+
+
+ WordHeader "EExp2M1M",NN ; ( F: r1 -- r2 )  2^r1-1 for r1 in [0,1]
+  ; Minimax polynomial approximations for exp2(x)-1
+  ; Use range reduction for x outside [0,1] to obtain approximations to exp2(x) for any x >= 0.
+EExp2M1M:	lda #<_c
+		ldy #>_c
+		jsr EMPolyYA
+		jmp EStar
+	WordEnd
+
+_c: ; GTE_C_EXP2_DEG3_MAX_ERROR 1.4694877755186408e-4
+	FloatLitE $5126,-3	; GTE_C_EXP2_DEG3_C3 7.9244930154334980e-02
+	FloatLitE $7321,-2	; GTE_C_EXP2_DEG3_C2 2.2486494900110188e-01
+	FloatLitE $5913,0	; GTE_C_EXP2_DEG3_C1 6.9589012084456225e-01
+				; GTE_C_EXP2_DEG3_C0 1.0
+	.byte 0
+
+ WordHeader "EExp2",NN ; ( F: e1 -- e2 )  base 2 exponential
+EExp2:		jsr EIntFrc	; ( f: r_rem r_int )
+		jsr EToS
+		jsr EExp2M1M
+		jsr E1Plus
+		jsr PopA
+		ldy FIndex
+		clc
+		adc FSExp,y
+		sta FSExp,y
+	WordEnd
+		rts
+
+ WordHeader "EExp",NN ; ( F: e1 -- e2 )  base e (natural) exponential
+  ; Raise e to the power e1, giving e2. 
+  ; https://forth-standard.org/standard/float/FEXP
+EExp:		FloatLitIE $5c55,1	;1/ln(2)
+		jsr EStar
+		jmp EExp2
+	WordEnd
+
+ WordHeader "EExpM1",NN ; ( F: e1 -- e2 ) base e (natural) exponential
+  ; No better accuracy in this implementation, but here for standard completeness.
+  ; https://forth-standard.org/standard/float/FEXPMOne
+EExpM1:		jsr EExp
+		jmp E1Minus
+	WordEnd
+
+ WordHeader "EALog",NN ; ( F: e1 -- e2 )  base 10 (common) exponential
+  ; Raise ten to the power e1, giving e2. 
+  ; https://forth-standard.org/standard/float/FALOG
+EALog:		FloatLitIE $6a4d,2	;1/log(2)
+		jsr EStar
+		jmp EExp2
+	WordEnd
+
+
+ WordHeader "E**",NN ; ( F: e1 e2 -- e3 )  Raise e1 to the power e2
+  ; https://forth-standard.org/standard/float/FTimesTimes
+EPower:		jsr ESwap
+		jsr ELog2
+		jsr EStar
+		jmp EExp2
+	WordEnd
+
+
+ WordHeader "EDeg2Rad",NN ; ( F: e1 -- e2 )  Convert degrees to radians.
+EDeg2Rad:	FloatLitIE $477d,-5	; PI/180
+		jmp EStar
+	WordEnd
+
+ WordHeader "ERad2Deg",NN ; ( F: e1 -- e2 )  Convert radians to degrees.
+ERad2Deg:	FloatLitIE $7297,6	; 180/PI
+		jmp EStar
+	WordEnd
+
+
+ WordHeader "EAReduce",NN ; ( F: e1 -- e2 )  C=mirrored around pi/2
+  ; Trig: reduce angle to -pi/2..pi/2
+EAReduce:	ldy FIndex
+		lda FSMant0,y		; zero?
+		beq _ok
+		lda FSExp,y		; get exponent
+		bmi _ok			; small?
+		cmp #1			; maybe need mirror?
+		bmi _ok			;if exponent <=0
+		beq _ok
+		cmp #2			; maybe need rotation?
+		bcs _exp2
+		lda FSMant0,y
+		cmp #$65		;in -pi/2..pi/2 ?
+		bcc _ok
+		cmp #$100-$65
+		bcs _ok
+_mir:					; mirror angle around +-pi/2
+		jsr EPi
+		ldy FIndex
+		lda FSMant0+1,y
+		bpl _3
+		jsr ENegate
+_3:		jsr ESwap
+		jsr EMinus
+		sec		; mirrored
+		rts
+
+_ok:		clc		; not mirrored
+		rts
+
+_exp2:		bne _rot	;if exp>2 then fix
+		lda FSMant0,y
+		cmp #$65	;if mant>pi or mant<-pi then fix
+		bcc _mir
+		cmp #$100-$65
+		bcs _mir
+_rot:		jsr E2Pi
+		jsr ESlash
+		jsr EIntFrc
+		inc FIndex	; FDrop integer part
+		ldy FIndex	;if >=.5
+		lda FSExp,y
+		tay
+		bmi _rot4
+		jsr E1Minus	;  subtract 1
+_rot4:		jsr E2Pi
+		jsr EStar
+		jmp EAReduce	; rotate done, look again
+	WordEnd
+
+
+ .if 0
+_1:
+		stx tmp1		; switch to FP stack
+		ldx FIndex
+		lda FSMant0,x		; get hi mantissa
+		ldy FSExp,x		; get exponent
+		bmi _ok1		;if exponent <=0
+		beq _ok1
+		ldx tmp1
+		cpy #2
+		bcs _exp2
+		cmp #$65	;in -pi/2..pi/2 ?
+		bcc _ok2
+		cmp #$100-$65
+		bcs _ok2
+_mir:		pha		; mirror angle around +-pi/2
+		jsr EPi
+		pla
+		bpl _3
+		jsr ENegate
+_3:		jsr ESwap
+		jsr EMinus
+		sec
+		rts
+
+_ok1:		ldx tmp1
+_ok2:		clc
+		rts
+
+_exp2:		bne _fix	;if exp>2 then fix
+		cmp #$65	;if mant>pi or mant<-pi then fix
+		bcc _mir
+		cmp #$100-$65
+		bcs _mir
+_fix:		jsr E2Pi
+		jsr ESlash
+		jsr EIntFrc
+		jsr ENip
+		ldy FIndex	;if >=.5
+		lda FSExp,y
+		tay
+		bmi _fix4
+		jsr E1Minus		;  subtract 1
+_fix4:		jsr E2Pi
+		jsr EStar
+		jmp _1
+	WordEnd
+ .endif
+
+ WordHeader "ESin",NN ; ( F: e1 -- e2 )  sine
+  ; https://forth-standard.org/standard/float/FSIN
+  ; Range reduction for x outside [-pi/2,pi/2] is obtained using periodicity and trigonometric identities.
+ESin:		jsr EAReduce
+;		jmp ESinM
+;	WordEnd
+
+; WordHeader "ESinM",NN ; ( F: e1 -- e2 )   sin(x) for x in [-pi/2,pi/2].
+  ; Minimax polynomial approximation
+ESinM:		jsr EDup
+		jsr ESqr	; x x^2
+		lda #<_c
+		ldy #>_c
+		jsr EMPolyYA
+		jsr EStar
+		jsr E1Plus	; C0 +1.0
+		jmp EStar
+	WordEnd
+
+_c: ; GTE_C_SIN_DEG5_MAX_ERROR 1.4001209384639779e-4
+	FloatLitE $7c65,-7	; GTE_C_SIN_DEG5_C2 +7.5924178409012000e-03
+	FloatLitE $ab01,-2	; GTE_C_SIN_DEG5_C1 -1.6600599923812209e-01
+				; GTE_C_SIN_DEG5_C0 +1.0
+	.byte 0			; end
+
+ WordHeader "ECsc",NN ; ( F: e1 -- e2 )  CoSecant
+ECsc:		jsr ESin
+		jmp E1Slash		; 1/SIN(r1)
+	WordEnd
+
+ WordHeader "ECos",NN ; ( F: e1 -- e2 )  cosine
+  ; https://forth-standard.org/standard/float/FCOS
+ECos:		jsr EPiH
+		jsr EPlus
+		jmp ESin
+	WordEnd
+
+ WordHeader "ESec",NN ; ( F: e1 -- e2 )  Secant
+ESec:		jsr ECos
+		jmp E1Slash		; 1/COS(r1)
+	WordEnd
+
+ WordHeader "ESinCos",NN ; ( F: e1 -- e2 e3 )
+  ; e2 is the sine of the radian angle e1. e3 is the cosine of the radian angle e1. 
+  ; https://forth-standard.org/standard/float/FSINCOS
+ESinCos:	jsr FDup
+		jsr FSin
+		jsr FSwap
+		jmp FCos
+	WordEnd
+
+
+ WordHeader "ETan",NN ; ( F: e1 -- e2 )  tangent
+  ; https://forth-standard.org/standard/float/FTAN
+  ; this reduces to abs(e)<=pi/4
+ETan:		jsr EAReduce
+		bcc _30
+		jsr _30
+		jmp ENegate
+
+_30:
+		jsr EDup
+		jsr EAbs
+		jsr EPiQ
+		jsr ELe
+		inx			; pop f
+		inx
+		lda DStack+0,x
+		bne ETanM
+		jsr EPiH
+		ldy FIndex		; get sign
+		lda FSMant0,y
+		bpl +
+		jsr ENegate
++
+		jsr ESwap
+		jsr EMinus
+		jsr ETanM
+		jmp E1Slash
+	WordEnd
+
+; WordHeader "ETanM",NN ; ( F: e1 -- e2 )  tan(x) for x in [-pi/4,pi/4].
+  ; Minimax polynomial approximation
+ETanM:		jsr EDup
+		jsr ESqr		; x x^2
+		lda #<_c
+		ldy #>_c
+		jsr EMPolyYA
+		jsr EStar
+		jsr E1Plus		; c0 1.0
+		jmp EStar
+	WordEnd
+
+_c: ; GTE_C_TAN_DEG7_MAX_ERROR 3.5418688397723108e-5
+	FloatLitE $64b6,-3	; GTE_C_TAN_DEG7_C3 9.8352099470524479e-02
+	FloatLitE $7350,-3	; GTE_C_TAN_DEG7_C2 1.1261037305184907e-01
+	FloatLitE $5609,-1	; GTE_C_TAN_DEG7_C1 3.3607213284422555e-01
+				; GTE_C_TAN_DEG7_C0 1.0
+	.byte 0			; end
+
+ WordHeader "ECot",NN ; ( F: e1 -- e2 )  CoTangent
+ECot:		jsr ETan
+		jmp E1Slash	; =1/TAN(r1)
+	WordEnd
+
+
+ WordHeader "EACos",NN ; ( F: e1 -- e2 )  Inverse cosine
+  ; https://forth-standard.org/standard/float/FACOS
+EACos:		ldy FIndex
+		lda FSMant0,y
+		php			; save sign
+		jsr EAbs
+  ; Minimax approximations for acos(x) of the form f(x) = sqrt(1-x)*p(x) for x in [0,1].
+		lda #<_c
+		ldy #>_c
+		jsr EMPolyYA
+		jsr ESwap
+		jsr ENegate
+		jsr E1Plus
+		jsr ESqrt
+		jsr EStar
+		plp			; was r1 negative?
+		bpl +
+		jsr EPi
+		jsr ESwap
+		jsr EMinus
++
+	WordEnd
+		rts
+
+_c: ; GTE_C_ACOS_DEG3_MAX_ERROR 9.3066396954288172e-5
+	FloatLitE $b2e6,-5	; GTE_C_ACOS_DEG3_C3 -1.8823635069382449e-02
+	FloatLitE $4c92,-3	; GTE_C_ACOS_DEG3_C2 +7.4773789639484223e-02
+	FloatLitE $932f,-2	; GTE_C_ACOS_DEG3_C1 -2.1253291899190285e-01
+	FloatLitE $6488,1	; GTE_C_ACOS_DEG3_C0 +1.5707963267948966
+	.byte 0			; end
+
+ WordHeader "EASec",NN ; ( F: e1 -- e2 )  Inverse Secant
+  ; =ATN(SQR(e1*e1-1))+(SGN(e1)-1)*PI/2
+EASec:		jsr E1Slash
+		jmp EACos
+	WordEnd
+
+ WordHeader "EASin",NN ; ( F: e1 -- e2 )  Inverse sine
+  ; https://forth-standard.org/standard/float/FASIN
+  ; An ambiguous condition exists if |e1| is greater than one. 
+  ; ARCSIN(X)=ATN(X/SQR(X*X+1));
+EASin:		jsr EACos
+		jsr ENegate
+		jsr EPiH
+		jmp EPlus
+	WordEnd
+
+ WordHeader "EACsc",NN ; ( F: e1 -- e2 )  Inverse CoSecant
+  ; =ATN(1/SQR(e1*e1-1))+(SGN(e1)-1)*PI/2;
+EACsc:		jsr E1Slash
+		jmp EASin
+	WordEnd
+
+
+ WordHeader "EATan",NN ; ( F: e1 -- e2 )  Inverse tangent
+  ; https://forth-standard.org/standard/float/FATAN
+  ; Range reduction for x outside [-1,1] is obtained by atan(x) = pi/2 - atan(1/x) for x > 0 and
+  ; atan(x) = -pi/2 - atan(1/x) for x < 0.
+EATan:
+		ldy FIndex
+		lda FSExp,y		; Abs(r1)<1 ?
+		bmi EATanM
+		beq EATanM
+
+		lda FSMant0,y		; save sign
+		php
+		jsr E1Slash
+		jsr EATanM
+		jsr ENegate
+		jsr EPiH
+		plp
+		bpl _18
+		jsr ENegate
+_18:		jmp EPlus
+
+; WordHeader "EATanM",NN ; ( F: e1 -- e2 )  atan(x) for x in [-1,1].
+  ; Minimax polynomial approximation
+EATanM:		jsr EDup		; x x
+		jsr ESqr		; x xsqr
+		lda #<_c
+		ldy #>_c
+		jsr EMPolyYA
+		jsr EStar		; x poly
+		jsr E1Plus		; x poly
+		jmp EStar
+;	WordEnd
+
+_c: ; GTE_C_ATAN_DEG7_MAX_ERROR 1.5051227215514412e-4
+	FloatLitE $a94f,-4	; GTE_C_ATAN_DEG7_C3 -4.2330209451053591e-02
+	FloatLitE $4e8e,-2	; GTE_C_ATAN_DEG7_C2 +1.5342994884206673e-01
+	FloatLitE $ac9f,-1	; GTE_C_ATAN_DEG7_C1 -3.2570157599356531e-01
+				; GTE_C_ATAN_DEG7_C0 +1.0
+	.byte 0			; end
+
+ WordHeader "EACot",NN ; ( F: e1 -- e2 )  Inverse CoTangent
+  ;  =-ATN(e1)+PI/2
+EACot:		jsr E1Slash
+		jmp EATan
+
+;		jsr EPiH
+;		jsr ESwap
+;		jsr EATan
+;		jmp EMinus
+	WordEnd
+
+
+ WordHeader "EATan2",NN ; ( F: ey ex -- e3 )  2 parameter inverse tangent
+  ; r3 is the radian angle whose tangent is ey/ex.
+  ; An ambiguous condition exists if ey and ex are zero. 
+  ; https://forth-standard.org/standard/float/FATANTwo
+EATan2:		ldy FIndex
+		lda FSMant0+0,y	; get rx sign
+		beq _rxzero
+		asl a		;   C=rx sign
+		lda FSMant0+1,y	;   N=ry sign
+		php		; save signs
+		jsr ESlash
+		jsr EATan
+		plp		; pop signs
+		bcs _rxneg
+_rts:		rts
+
+_rxneg:		php
+		jsr FPi
+		plp
+		bpl +
+		jsr ENegate
++		jmp EPlus
+
+_rxzero:	inc FIndex	; FDrop rx
+		lda FSMant0,y
+	;	beq Throw_Stack
+		php
+		inc FIndex	; FDrop ry
+		jsr EPiH
+		plp
+		bpl _rts
+		jmp ENegate
+	WordEnd
+
+
+ WordHeader "ESgn",NN ; ( F: e1 -- e2 )  signum, returns 1,0,-1
+ESgn:		ldy FIndex
+		lda FSMant0,y
+		beq _zero
+		inc FIndex
+		lda FSMant0,y
+		bmi EM1
+		jmp E1
+
+_zero:		rts
+	WordEnd
+
+; WordHeader "-1.e",NN ; ( F: -- e )  return -1
+EM1:		lda #$80
+		ldy #0
+		jmp ELitYA
+;	WordEnd
+
+
+ .if "fphyperbolic" in TALI_OPTIONAL_WORDS ;--------------------------------------------
+
+ WordHeader "ESinH",NN ; ( F: e1 -- e2 )  Hyperbolic sine
+  ; =(EXP(e1)-EXP(-e1))/2
+  ; https://forth-standard.org/standard/float/FSINH
+ESinH:		jsr EDup
+		jsr EExp
+		jsr ESwap
+		jsr ENegate
+		jsr EExp
+		jsr EMinus
+		jmp E2Slash
+	WordEnd
+
+ WordHeader "ECscH",NN ; ( F: e1 -- e2 )  Hyperbolic cosecant
+  ; =2/(EXP(e1)-EXP(-e1))
+ECscH:		jsr ESinH
+		jmp E1Slash
+	WordEnd
+
+ WordHeader "ECosH",NN ; ( F: e1 -- e2 )  Hyperbolic cosine
+  ;  e2 is the hyperbolic cosine of e1. 
+  ; =(EXP(X)+EXP(-X))/2
+  ; https://forth-standard.org/standard/float/FCOSH
+ECosH:		jsr EDup
+		jsr EExp
+		jsr ESwap
+		jsr ENegate
+		jsr EExp
+		jsr EPlus
+		jmp E2Slash
+	WordEnd
+
+ WordHeader "ESecH",NN ; ( F: e1 -- e2 )  Hyperbolic secant
+  ; =2/(EXP(e1)+EXP(-e1))
+ESecH:		jsr ECosH
+		jmp E1Slash
+	WordEnd
+
+ WordHeader "ETanH",NN ; ( F: e1 -- e2 )  Hyperbolic tangent
+  ; =-EXP(-e1)/(EXP(e1)+EXP(-e1))*2+1
+  ; https://forth-standard.org/standard/float/FTANH
+ETanH:		jsr EDup
+		jsr ENegate	; X -X
+		jsr EExp	; X Exp(-X)
+		jsr ESwap	; Exp(-X) X
+		jsr EExp	; Exp(-X) Exp(X)
+		jsr EOver	; Exp(-X) Exp(X) Exp(-X)
+		jsr EPlus	; Exp(-X) Exp(X)+Exp(-X)
+		jsr ESlash	; Exp(-X)/(Exp(X)+Exp(-X))
+		jsr E2Star	; Exp(-X)/(Exp(X)+Exp(-X))*2
+		jsr ENegate
+		jmp E1Plus
+	WordEnd
+
+ WordHeader "ECotH",NN ; ( F: e1 -- e2 )  Hyperbolic cotangent
+  ; = EXP(-e1)/(EXP(e1)-EXP(-e1))*2+1
+ECotH:		jsr ETanH
+		jmp E1Slash
+	WordEnd
+
+
+ WordHeader "EASinH",NN ; ( F: e1 -- e2 )  Inverse hyperbolic sine
+  ; e2 is the floating-point value whose hyperbolic sine is e1.
+  ; An ambiguous condition exists if e1 is less than zero. 
+  ; =LOG(X+SQR(X*X+1))
+  ; https://forth-standard.org/standard/float/FASINH
+EASinH:		jsr EDup	; X X
+		jsr ESqr	; X X*X
+		jsr E1Plus	; X X*X+1
+		jsr ESqrt	; X sqrt(X*X+1)
+		jsr EPlus	; 
+		jmp ELn
+	WordEnd
+
+ WordHeader "EACscH",NN ; ( F: e1 -- e2 )  Inverse hyperbolic cosecant
+  ; =LOG((SGN(e1)*SQR(e1*e1+1)+1)/e1)
+EACscH:		jsr E1Slash
+		jmp EASinH
+	WordEnd
+
+ WordHeader "EACosH",NN ; ( F: e1 -- e2 )  inverse hyperbolic cosine
+  ; An ambiguous condition exists if e1 is less than one. 
+  ; =LOG(X+SQR(X*X-1))
+  ; https://forth-standard.org/standard/float/FACOSH
+EACosH:		jsr EDup
+		jsr ESqr
+		jsr E1Minus
+		jsr ESqrt
+		jsr EPlus
+		jmp ELn
+	WordEnd
+
+ WordHeader "EASecH",NN ; ( F: e1 -- e2 )  Inverse hyperbolic secant
+  ; =LOG((SQR(X*X+1)+1)/X)
+EASecH:		jsr E1Slash
+		jmp EACosH
+	WordEnd
+
+ WordHeader "EATanH",NN ; ( F: e1 -- e2 )  Inverse hyperbolic tangent
+  ;  e2 is the floating-point value whose hyperbolic tangent is e1.
+  ; An ambiguous condition exists if r1 is outside the range of -1E0 to 1E0. 
+  ; =LOG((1+X)/(1-X))/2
+  ; https://forth-standard.org/standard/float/FATANH
+EAtanH:		jsr EDup	; x x
+		jsr E1Plus	; x x+1
+		jsr ESwap	; 1+x x
+		jsr E1
+		jsr ESwap
+		jsr EMinus	; 1+x 1-x
+		jsr ESlash	; (1+x)/(1-x)
+		jsr ELn
+		jmp E2Slash
+	WordEnd
+
+ WordHeader "EACotH",NN ; ( F: e1 -- e2 )  Inverse hyperbolic cotangent
+  ; =LOG((e1+1)/(e1-1))/2
+EACotH: 	jsr E1Slash
+		jmp EATanH
+	WordEnd
+
+ .endif ; fphyperbolic
+
+ .endif ; fptransendentals
+
+ .endsection code
+
+ .endif ; fpe2 ;?????????????????????????????????????????????????????????????????????????????????
 
  .endif ; fp
 
@@ -5416,8 +8051,7 @@ _add_line:
 		; Reserve two cells (four bytes on the 6502) for the ( addr u )
 		; of the new string
 		lda #4
-		jsr PushZA
-		jsr Allot
+		jsr Allot_ZA
 
 		; HERE now points to after the new header. Since we're really
 		; going to add something, we can increase the current line
@@ -5462,7 +8096,7 @@ _add_line:
 		jsr Over		; ( addr-t u-t here here2 here3 here2 )
 		jsr Store		; ( addr-t u-t here here2 )
 
-		jsr Cell_Plus_NoUf	; ( addr-t u-t here here2+2 )
+		jsr Cell_Plus		; ( addr-t u-t here here2+2 )
 		jsr Dup			; ( addr-t u-t here here2+2 here2+2 )
 
 		lda ciblen
@@ -5908,11 +8542,11 @@ _cmd_w_loop:
 
 		; Get the address and length of the string from the header
 		; of this node
-		jsr Cell_Plus_NoUf	; ( addr-t addr1+2 ) (R: ... )
+		jsr Cell_Plus		; ( addr-t addr1+2 ) (R: ... )
 		jsr Dup			; ( addr-t addr1+2 addr1+2 ) ( R: ... )
 		jsr Fetch		; ( addr-t addr1+2 addr-s ) ( R: ... )
 		jsr Swap		; ( addr-t addr-s addr1+2 ) ( R: ... )
-		jsr Cell_Plus_NoUf	; ( addr-t addr-s addr1+2 ) (R: ... )
+		jsr Cell_Plus		; ( addr-t addr-s addr1+2 ) (R: ... )
 		jsr Fetch		; ( addr-t addr-s u-s ) ( R: ... )
 		jsr Not_Rot		; ( u-s addr-t addr-s ) ( R: ... )
 		jsr Swap		; ( u-s addr-s addr-t ) ( R: ... )
@@ -6220,18 +8854,23 @@ ed6502_end:	; Used to calculate size of editor code
 .endif ; ed
 
 
+ WordHeader "SeeLatest",NN ; ( -- )  See latest Forth word
+SeeLatest:	jsr current_to_dp
+		lda dp+0
+		ldy dp+1
+		jsr PushYA
+		jmp See3
+	WordEnd
 
  WordHeader "See",NN ; ( "name" -- ) "Print information about a Forth word"
-; ## "see" tested  ANS tools
-	; """https://forth-standard.org/standard/tools/SEE
-	; SEE takes the name of a word and prints its name token (nt),
-	; execution token (xt), size in bytes, flags used, and then dumps the
-	; code and disassembles it.
-	; """
+  ; ## tested  https://forth-standard.org/standard/tools/SEE
+  ; SEE takes the name of a word and prints its name token (nt),
+  ; execution token (xt), size in bytes, flags used, and then dumps the
+  ; code and disassembles it.
 See:
 		jsr Tick_Nt		; ( nt )
 
-		jsr CR
+See3:		jsr CR
 
 		lda base		; Save the current number base
 		pha
@@ -6326,114 +8965,87 @@ _FlagLabels:	.text "FPDBCOIMNNANUF__"
 .if "wordlist" in TALI_OPTIONAL_WORDS ;------------------------------------------------
 
  WordHeader "Forth-WordList",NN ; ( -- u ) "WID for the Forth Wordlist"
-  ; ## "forth-wordlist"  auto  ANS search
-  ; https://forth-standard.org/standard/search/FORTH-WORDLIST
+  ; ## auto  https://forth-standard.org/standard/search/FORTH-WORDLIST
 Forth_WordList:	jmp Zero
 		.cerror wid_Forth!=0
 	WordEnd
 
  WordHeader "Editor-WordList",NN ; ( -- u ) "WID for the Editor wordlist"
-  ; ## "editor-wordlist"	tested	Tali Editor
+  ; ## tested	Tali Editor
   ; Commonly used like `editor-wordlist >order` to add the editor
   ; words to the search order so they can be used.  This will need
   ; to be done before any of the words marked "Tali Editor" can be
   ; used.  See the tutorial on Wordlists and the Search Order for
   ; more information.
-Editor_WordList:
-		jmp One
+Editor_WordList: jmp One
 		.cerror wid_Editor!=1
 	WordEnd
 
  WordHeader "Assembler-WordList",NN ; ( -- u ) "WID for the Assembler wordlist"
-  ; ## "assembler-wordlist"  tested  Tali Assembler
+  ; ## tested  Tali Assembler
   ; Commonly used like `assembler-wordlist >order` to add the
   ; assembler words to the search order so they can be used.
   ; See the tutorial on Wordlists and the Search Order for
   ; more information.
-Assembler_WordList:
-		jmp Two
+Assembler_WordList: jmp Two
 		.cerror wid_Assembler!=2
 	WordEnd
 
  WordHeader "Root-Wordlist",NN ; ( -- u ) "WID for the Root (minimal) wordlist"
-  ; ## "root-wordlist"  tested  Tali Editor
+  ; ## tested  Tali Editor
 Root_WordList:	lda #wid_Root
 		jmp PushZA
 	WordEnd
 
+ WordHeader "WordList",NN ; ( -- wid )  Create new wordlist
+  ; ## auto  https://forth-standard.org/standard/search/WORDLIST
+  ; From pool of 8.
+  ; See the tutorial on Wordlists and the Search Order for
+  ; more information.
+WordList:	lda Num_wordlistsV	; Get the current number of wordlists
+		cmp #max_wordlists	; already full?
+		bcs _err
+		inc Num_WordlistsV	; increment wordlist count
+		jmp PushZA		; put it on the stack as wid.
 
- WordHeader "Only",NN ; ( -- )  Set search order to minimum wordlist
-  ; ## "only"  auto  ANS search ext
-  ; https://forth-standard.org/standard/search/ONLY
-Only:		jsr True	; Push -1
-		jmp Set_Order	; set the minimum search order.
+_err:		lda #$100+err_TooManyWordlists	;   throw an error
+		jmp ThrowA
 	WordEnd
 
 
- WordHeader "Also",NN ; ( -- )  Make room in the search order for another wordlist
-  ; ## "also"  auto  ANS search ext
-  ; http://forth-standard.org/standard/search/ALSO
-Also:		jsr Get_Order
-		jsr Over
-		jsr Swap
-		jsr One_plus
-		jmp Set_Order
+ WordHeader "Definitions",NN ; ( -- )  Make first wordlist in search order the current wordlist
+  ; ## auto  https://forth-standard.org/standard/search/DEFINITIONS
+Definitions:	lda Search_OrderV+0	; Transfer SEARCH_ORDER[0] to
+		sta CurrentV		;   byte variable CURRENT.
 	WordEnd
+		rts
 
-
- WordHeader "Previous",NN ; ( -- )  Remove the first wordlist in the search order
-  ; ## "previous"	 auto  ANS search ext
-  ; http://forth-standard.org/standard/search/PREVIOUS
-Previous:	jsr Get_Order
-		jsr Nip
-		jsr One_minus
-		jmp Set_Order
+ WordHeader "Set-Current",NN ; ( wid -- )  Set the compilation wordlist
+  ; ## auto  https://forth-standard.org/standard/search/SET-CURRENT
+Set_Current:	jsr PopA	; pop wid
+		sta CurrentV	; only the LSB is used.
 	WordEnd
+		rts
 
-
- WordHeader ">Order",NN ; ( wid -- )  Add wordlist at beginning of search order
-  ; ## ">order"  tested  Gforth search
-  ; https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Word-Lists.html
-To_Order:
-		jsr To_R		; Put the wid on the return stack for now.
-
-		jsr Get_Order		; Get the current search order.
-
-		jsr R_From		; Get back the wid and add it to the list.
-		jsr Swap
-		jsr One_plus
-
-		jmp Set_Order		; Set the search order with the new list.
+ WordHeader "Get-Current",NN ; ( -- wid )  Get the wid of the compilation wordlist 
+  ; ## auto  https://forth-standard.org/standard/search/GET-CURRENT
+Get_Current:	; This isn't a variable, where we would return the address.
+		lda CurrentV
+		jmp PushZA	; CURRENT is a byte variable
 	WordEnd
 
 
  WordHeader "Order",NN ; ( -- )  Print current word order list and current WID
-  ; ## "order"  auto  ANS core
-  ; https://forth-standard.org/standard/search/ORDER
+  ; ## auto  https://forth-standard.org/standard/search/ORDER
   ; Note the search order is displayed from first search to last
   ; searched and is therefore exactly the reverse of the order in which
   ; Forth stacks are displayed.
-  ;
-  ; A Forth implementation of this word is:
-  ;
-  ;	: .wid ( wid -- )
-  ;	dup 0=	if ." Forth "  drop    else
-  ;	dup 1 = if ." Editor " drop    else
-  ;	dup 2 = if ." Assembler " drop else
-  ;	dup 3 = if ." Root " drop      else
-  ;		   . ( just print the number )
-  ;	then then then then ;
-  ;
-  ; : ORDER ( -- )
-  ;	cr get-order 0 ?do .wid loop
-  ;	space space get-current .wid ;
-  ;
   ; This is an interactive program, so speed
   ; is not as important as size.
 Order:
 		jsr CR
 
-		ldy #0			; for each search_orderV[]
+		ldy #0			; for each search_orderV entry
 		beq _test
 _loop:		tya
 		pha
@@ -6494,80 +9106,55 @@ _wid_Table: ; nt of wordlist names, indexed by the WID if < 4 .
 
 
  WordHeader "Forth",NN ; ( -- )  Replace first WID in search order with Forth-Wordlist
-  ; ## "forth"  auto  ANS search ext
-  ; https://forth-standard.org/standard/search/FORTH
+  ; ## auto  https://forth-standard.org/standard/search/FORTH
 Forth:		lda #wid_Forth
 		sta Search_OrderV+0
 	WordEnd
 		rts
 
+ WordHeader "Previous",NN ; ( -- )  Remove the first wordlist in the search order
+  ; ## auto  http://forth-standard.org/standard/search/PREVIOUS
+Previous:	jsr Get_Order
+		jsr Nip
+		jsr One_minus
+		jmp Set_Order
+	WordEnd
 
- WordHeader "Definitions",NN ; ( -- )  Make first wordlist in search order the current wordlist
-  ; ## "definitions" auto ANS search
-Definitions:	lda Search_OrderV	; Transfer SEARCH_ORDER[0] to
-		sta CurrentV		;   byte variable CURRENT.
+ WordHeader "Also",NN ; ( -- )  Make room in the search order for another wordlist
+  ; ## auto  http://forth-standard.org/standard/search/ALSO
+Also:		jsr Get_Order
+		jsr Over
+		jsr Swap
+		jsr One_plus
+		jmp Set_Order
+	WordEnd
+
+ WordHeader ">Order",NN ; ( wid -- )  Add wordlist at beginning of search order
+  ; ## tested  https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Word-Lists.html
+To_Order:	jsr Also		; make room in search list
+
+		jsr PopA
+		sta Search_OrderV+0	; set 1st search entry
 	WordEnd
 		rts
 
+ WordHeader "Only",NN ; ( -- )  Set search order to minimum wordlist
+  ; ## auto  https://forth-standard.org/standard/search/ONLY
+Only:		lda #1
+		sta Num_orderV	; set count
 
- WordHeader "WordList",NN ; ( -- wid )  Create new wordlist
-  ; ## "wordlist" auto ANS search
-  ; From pool of 8.
-  ; https://forth-standard.org/standard/search/WORDLIST
-  ; See the tutorial on Wordlists and the Search Order for
-  ; more information.
-WordList:
-		lda Num_wordlistsV	; Get the current number of wordlists
-
-		cmp #max_wordlists	; already at the max?
-		bcc +
-		lda #$100+err_TooManyWordlists	;   Print an error message
-		jmp ThrowA
-+
-		inc Num_WordlistsV	; increment wordlist count
-		jmp PushZA		; and put it on the stack.
-	WordEnd
-
-
- WordHeader "Set-Current",0 ; ( wid -- )  Set the compilation wordlist
-  ; ## "set-current" auto ANS search
-  ; https://forth-standard.org/standard/search/SET-CURRENT
-Set_Current:	jsr PopA	; pop wid
-		sta CurrentV	; only the LSB is used.
+		lda #wid_Root
+		sta Search_OrderV+0 ; set 1st search entry
 	WordEnd
 		rts
-
- WordHeader "Get-Current",NN ; ( -- wid )  Get the id of the compilation wordlist 
-  ; ## "get-current" auto ANS search
-  ; https://forth-standard.org/standard/search/GET-CURRENT
-Get_Current:
-		; This is a little different than some of the variables
-		; in the user area as we want the value rather than
-		; the address.
-		lda CurrentV
-		jmp PushZA	; CURRENT is a byte variable
-	WordEnd
-
 
  WordHeader "Set-Order",NN ; ( wid_n .. wid_1 n -- )  Set the current search order
-  ; ## "set-order" auto ANS search
-  ; https://forth-standard.org/standard/search/SET-ORDER
+  ; ## auto  https://forth-standard.org/standard/search/SET-ORDER
 Set_Order:
-		lda DStack+1,x		; Test for -1 TOS
-		bpl _start
-
-		; Replace it with the default search order.
-		inx			; Drop
-		inx
-		jsr Root_Wordlist	; wid
-		jsr One			; Count is 1.
-
-_start:		; Continue processing with ( forth-wordlist 1 -- )
-
-		; Set #ORDER - the number of wordlists in the search order.
 		jsr PopA	; pop count
-		sta Num_orderV	; #ORDER is a byte variable.
-
+		tay		; was it -1 ?
+		bmi Only
+		sta Num_orderV	; Set #ORDER - the number of wordlists in the search order.
 
 		; Move the wordlist ids from the data stack to the search order.
 		ldy #0
@@ -6585,8 +9172,7 @@ _test:		; See if that was the last one to process (first in the list).
 		rts
 
  WordHeader "Get-Order",NN ; ( -- wid_n .. wid_1 n)  Get the current search order
-  ; ## "get-order" auto ANS search
-  ; https://forth-standard.org/standard/search/GET-ORDER
+  ; ## auto  https://forth-standard.org/standard/search/GET-ORDER
 Get_Order:
 		ldy Num_OrderV	; Get #ORDER - the number of wordlists in the search order.
 		beq _done	; If zero, there are no wordlists.
@@ -6605,22 +9191,19 @@ _done:
 
 
  WordHeader "Search-Wordlist",NN ; ( caddr u wid -- 0 | xt 1 | xt -1)  Search for a word in a wordlist
-  ; ## "search-wordlist" auto ANS search
+  ; ## auto  https://forth-standard.org/standard/search/SEARCH_WORDLIST
   ; caddr u = name string
   ; wid = wordlist id
   ; Also returns tmp1= nt
-  ; https://forth-standard.org/standard/search/SEARCH_WORDLIST
 Search_WordList:
 		jsr PopA		; Pop wid
-		pha
-					; ( addr u )
+		pha			; ( addr u )
 		jsr swl_prepare 	; ( )
 
 		pla			; get wid
 		jsr swl_search_wordlist ; tmp1= nt of matching word
 		beq _NotFound
-
-	; The strings match.
+					; word found
 		jsr Name_To_Int_T	; ( xt )
 
 		ldy #Wh_Flags		; get flags
@@ -6628,12 +9211,11 @@ Search_WordList:
 		and #IM
 		bne _immediate		; bit set, we're immediate
 
-		jmp True		; We're not immediate, return -1
+		jmp True		; Word is not immediate, return -1
 
-_immediate:	jmp One			; We're immediate, return 1
+_immediate:	jmp One			; Word is immediate, return 1
 
-
-_NotFound:	jmp Zero		; ( 0 )
+_NotFound:	jmp Zero		; Word not found, return 0
 	WordEnd
 
 .endif ; "wordlist"
@@ -6665,6 +9247,7 @@ BlockInit: ; initialize block variables
 		ldy #>Platform_Block_Read
 		sta BlockReadV+0
 		sty BlockReadV+1
+
 		lda #<Platform_Block_Write
 		ldy #>Platform_Block_Write
 		sta BlockWriteV+0
@@ -6694,7 +9277,7 @@ io_blk_buffer = 0
  .if io_blk_status!=0 ; c65 simulator set up?
 
  WordHeader "Block_C65_Init",NN ; ( -- f )  Initialize c65 simulator block storage
-  ; ## "block-c65-init"  auto  Tali block
+  ; ## auto  Tali block
   ; Set up block IO to read/write to/from c65 block file.
   ; Run simulator with a writable block file option
   ; e.g. `touch blocks.dat; c65/c65 -b blocks.dat -r taliforth-py65mon.bin`
@@ -6740,15 +9323,14 @@ c65_blk_rw:     lda 0,x                 ; ( addr blk# )
 
 
  WordHeader "Block-RamDrive-Init",UF+NN ; ( u -- )  Create a ramdrive for blocks
-  ; ## "block-ramdrive-init"  auto  Tali block
+  ; ## auto  Tali block
   ; Create a RAM drive, with the given number of
   ; blocks, in the dictionary along with setting up the block words to
   ; use it.  The read/write routines do not provide bounds checking.
   ; Expected use: `4 block-ramdrive-init` ( to create blocks 0-3 )
 Block_RamDrive_Init:
 		lda #10			; Calculate how many bytes are needed for numblocks blocks
-		jsr PushZA
-		jsr LShift
+		jsr LShift_A
 
 		jsr Here		; ( size addr )
 		sta RamDriveV+0
@@ -6790,8 +9372,7 @@ _write: ; : block-write-ramdrive" ; ( addr u -- )
 
 _addr: ; ( n -- addr )  point at ramdrive block
 		lda #10
-		jsr PushZA
-		jsr LShift
+		jsr LShift_A
 		jsr RamDrive
 		jmp Plus
 
@@ -6808,7 +9389,7 @@ RamDrive:	lda RamDriveV+0
  .section code
 
  WordHeader "BuffStatus",NN ; ( -- addr )  Push address of variable holding buffer status
-  ; ## "buffstatus"  auto	 Tali block
+  ; ## auto	 Tali block
 BuffStatus:	ldy #>BuffStatusV
 		lda #<BuffStatusV
 		jmp PushYA
@@ -6816,7 +9397,7 @@ BuffStatus:	ldy #>BuffStatusV
 
 
  WordHeader "BuffBlockNum",NN ; ( -- addr )  Push address of variable holding block in buffer
-  ; ## "buffblocknum"  auto  Tali block
+  ; ## auto  Tali block
 BuffBlockNum:	ldy #>BuffBlockNumV
 		lda #<BuffBlockNumV
 		jmp PushYA
@@ -6824,7 +9405,7 @@ BuffBlockNum:	ldy #>BuffBlockNumV
 
 
  WordHeader "BlkBuffer",NN ; ( -- addr )  Push address of block buffer
-  ; ## "blkbuffer"  auto	Tali block
+  ; ## auto	Tali block
 BlkBuffer:	ldy #>BlockBuffer
 		lda #<BlockBuffer
 		jmp PushYA
@@ -6832,16 +9413,14 @@ BlkBuffer:	ldy #>BlockBuffer
 
 
  WordHeader "Scr",NN ; ( -- addr )  Push address of variable holding last screen listed
-  ; ## "scr"  auto  ANS block ext
-  ; https://forth-standard.org/standard/block/SCR
+  ; ## auto  https://forth-standard.org/standard/block/SCR
 Scr:		ldy #>ScrV
 		lda #<ScrV
 		jmp PushYA
 	WordEnd
 
  WordHeader "Blk",NN ; ( -- addr )  Push address of block # being interpreted
-  ; ## "blk"  auto  ANS block
-  ; https://forth-standard.org/standard/block/BLK
+  ; ## auto  https://forth-standard.org/standard/block/BLK
 Blk:		ldy #>BlkV
 		lda #<BlkV
 		jmp PushYA
@@ -6849,41 +9428,36 @@ Blk:		ldy #>BlkV
 
 
  WordHeader "Block-Write",NN ; ( addr u -- )  Write a block to storage (deferred word)
-  ; ## "block-write"  auto  Tali block
+  ; ## auto  Tali block
   ; BLOCK-WRITE is a vectored word that the user needs to override
   ; with their own version to write a block to storage.
   ; The stack parameters are ( buffer_address block# -- ).
 Block_Write:	jmp (BlockWriteV)	; Execute the BLOCK-READ-VECTOR
+		.cerror (BlockWriteV&$ff)==$ff ; jmp () bug
+	WordEnd
+
+ WordHeader "Block-Read",NN ; ( addr u -- )  Read a block from storage (deferred word)
+  ; ## auto	 Tali block
+  ; BLOCK-READ is a vectored word that the user needs to override
+  ; with their own version to read a block from storage.
+  ; The stack parameters are ( buffer_address block# -- ).
+Block_Read:	jmp (BlockReadV)	; Execute the BLOCK-READ-VECTOR
+		.cerror (BlockReadV&$ff)==$ff ; jmp () bug
 	WordEnd
 
 
  WordHeader "Block-Write-Vector",NN ; ( -- addr )  Address of the block-write vector
-  ; ## "block-write-vector"  auto	 Tali block
+  ; ## auto	 Tali block
   ; Deferred words need the HC (Code Field) flag.
-  ; """BLOCK-WRITE is a vectored word that the user needs to override
-  ; with their own version to write a block to storage.
   ; This word gives the address of the vector so it can be replaced.
-  ; """
 Block_Write_Vector:
 		ldy #>BlockWriteV
 		lda #<BlockWriteV	; Get the BLOCK-WRITE-VECTOR address
 		jmp PushYA
 	WordEnd
 
-
- WordHeader "Block-Read",NN ; ( addr u -- )  Read a block from storage (deferred word)
-  ; ## "block-read"  auto	 Tali block
-  ; BLOCK-READ is a vectored word that the user needs to override
-  ; with their own version to read a block from storage.
-  ; The stack parameters are ( buffer_address block# -- ).
-Block_Read:	jmp (BlockReadV)	; Execute the BLOCK-READ-VECTOR
-	WordEnd
-
-
  WordHeader "Block-Read-Vector",NN ; ( -- addr )  Address of the block-read vector
-  ; ## "block-read-vector"  auto	Tali block
-  ; BLOCK-READ is a vectored word that the user needs to override
-  ; with their own version to read a block from storage.
+  ; ## auto  Tali block
   ; This word gives the address of the vector so it can be replaced.
 Block_Read_Vector:
 		ldy #>BlockReadV
@@ -6893,8 +9467,7 @@ Block_Read_Vector:
 
 
  WordHeader "Save-Buffers",0 ; ( -- )  Save all dirty buffers to storage
-  ; ## "save-buffers"  tested  ANS block
-  ; https://forth-standard.org/standard/block/SAVE-BUFFERS
+  ; ## tested  https://forth-standard.org/standard/block/SAVE-BUFFERS
 Save_Buffers:
 		; Check the buffer status
 		lda BuffStatusV+0 ; Only bits 0 and 1 are used, so only
@@ -6916,8 +9489,7 @@ _done:
 
 
  WordHeader "Block",0 ; ( u -- a-addr )  Fetch a block into a buffer
-  ; ## "block"  auto  ANS block
-  ; https://forth-standard.org/standard/block/BLOCK
+  ; ## auto  https://forth-standard.org/standard/block/BLOCK
 Block:
 		; See if the block requested is the same as the one we
 		; currently have in the buffer.
@@ -6977,8 +9549,7 @@ _done:
 
 
  WordHeader "Update",0 ; ( -- )  Mark current block as dirty
-  ; ## "update"  auto  ANS block
-  ; https://forth-standard.org/standard/block/UPDATE
+  ; ## auto  https://forth-standard.org/standard/block/UPDATE
 Update:
 		; Turn on the dirty bit.
 		lda BuffStatusV+0
@@ -6989,8 +9560,7 @@ Update:
 
 
  WordHeader "Buffer",NN ; ( u -- a-addr )  Get a buffer for a block
-  ; ## "buffer"  auto  ANS block
-  ; https://forth-standard.org/standard/block/BUFFER
+  ; ## auto  https://forth-standard.org/standard/block/BUFFER
 Buffer:
 		; Check the buffer status
 		lda BuffStatusV+0 ; Only bits 0 and 1 are used, so only
@@ -7025,8 +9595,7 @@ _done:
 
 
  WordHeader "Empty-Buffers",NN ; ( -- )  Empty all block buffers without saving
-  ; ## "empty-buffers"  tested  ANS block ext
-  ; https://forth-standard.org/standard/block/EMPTY-BUFFERS
+  ; ## tested  https://forth-standard.org/standard/block/EMPTY-BUFFERS
 Empty_Buffers:	lda #0		; Set the buffer status to empty.
 		sta BuffStatusV+0 ; Only LSB is used.
 	WordEnd
@@ -7034,16 +9603,14 @@ Empty_Buffers:	lda #0		; Set the buffer status to empty.
 
 
  WordHeader "Flush",NN ; ( -- )  Save dirty block buffers and empty buffers
-  ; ## "flush"  auto  ANS block
-  ; https://forth-standard.org/standard/block/FLUSH
+  ; ## auto  https://forth-standard.org/standard/block/FLUSH
 Flush:		jsr Save_Buffers
 		jmp Empty_Buffers
 	WordEnd
 
 
- WordHeader "Load",UF ; ( scr# -- )  Load the Forth code in a screen/block
-  ; ## "load"  auto  ANS block
-  ; https://forth-standard.org/standard/block/LOAD
+ WordHeader "Load",NN ; ( scr# -- )  Load the Forth code in a screen/block
+  ; ## auto  https://forth-standard.org/standard/block/LOAD
 Load:
 		jsr underflow_1
 
@@ -7093,11 +9660,9 @@ _done:
 		rts
 
 
- WordHeader "Thru",UF+NN ; ( scr# scr# -- )  Load screens in the given range
-  ; ## "thru"  tested  ANS block ext
-  ; https://forth-standard.org/standard/block/THRU
-Thru:
-		jsr underflow_2
+ WordHeader "Thru",NN ; ( scr# scr# -- )  Load screens in the given range
+  ; ## tested  https://forth-standard.org/standard/block/THRU
+Thru:		jsr underflow_2
 
 		; We need to loop here, and can't use the data stack
 		; because the LOADed screens might use it.
@@ -7138,8 +9703,7 @@ _loop:
 
 
  WordHeader "List",NN ; ( scr# -- )  List the given screen
-  ; ## "list"  tested  ANS block ext
-  ; https://forth-standard.org/standard/block/LIST
+  ; ## tested  https://forth-standard.org/standard/block/LIST
 List:		jsr PopYA	; Save the screen number
 		sta ScrV+0
 		sty ScrV+1
@@ -7204,8 +9768,7 @@ _line_loop:
  .section code
 
  WordHeader "Defer",NN ; ( "name" -- )  Create a placeholder for words by name
-  ; ## "defer"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/DEFER
+  ; ## auto  https://forth-standard.org/standard/core/DEFER
   ; Compile a name that can point to various xt by Defer! or Is .
 Defer:
 		jsr Header_Comma	; compile word header
@@ -7222,9 +9785,8 @@ _undefined:  ; Error routine for unset DEFER
 		jmp ThrowA
 
  WordHeader "Defer!",NN ; ( xt2 xt1 -- )  Set defer word xt1 to execute xt2 
-  ; ## "defer!"  auto  ANS core ext
-  ; http://forth-standard.org/standard/core/DEFERStore
-Defer_Store:	jsr PopYA
+  ; ## auto  http://forth-standard.org/standard/core/DEFERStore
+Defer_Store:	jsr PopYA		; pop DEFERs xt
 Defer_Store_YA:	sta tmp1+0
 		sty tmp1+1
 
@@ -7240,10 +9802,9 @@ Defer_Store_YA:	sta tmp1+0
 		jmp Drop		; Drop xt2
 	WordEnd
 
- WordHeader "Defer@",NN ; ( xt1 -- xt2 )  Get the current XT in a defer word
-  ; ## "defer@"  auto  ANS core ext
-  ; http://forth-standard.org/standard/core/DEFERFetch
-Defer_Fetch:	jsr PopYA	; pop xt1, check underflow
+ WordHeader "Defer@",0 ; ( xt1 -- xt2 )  Get the current XT in a defer word
+  ; ## auto  http://forth-standard.org/standard/core/DEFERFetch
+Defer_Fetch:	jsr PopYA	; pop DEFERs xt
 Defer_Fetch_YA:	sta tmp1+0
 		sty tmp1+1
 
@@ -7257,14 +9818,12 @@ Defer_Fetch_YA:	sta tmp1+0
 		iny
 		lda (tmp1),y
 		sta DStack+1,x
-		rts
 	WordEnd
+		rts
 
  WordHeader "Is",IM+NN ; ( xt "name" -- )  Set named DEFER word to execute xt
-  ; ## "is"  auto	 ANS core ext
-  ; http://forth-standard.org/standard/core/IS
-Is:
-		jsr Tick		; get xt of "name"
+  ; ## auto  http://forth-standard.org/standard/core/IS
+Is:		jsr Tick		; get xt of "name"
 
 		; This is a state aware word with different behavior
 		; when used while compiling vs interpreting.
@@ -7278,10 +9837,13 @@ _compiling:
 		lda #<Defer_Store_YA
 		jmp Jsr_Comma_YA
 	WordEnd
+		; could be compiled as:
+		;	jsr PopYA
+		;	sta addr+1
+		;	sty addr+2
 
  WordHeader "Action-Of",IM+NN ; ( "name" -- xt )  Get named deferred word's xt
-  ; ## "action-of"  auto	ANS core ext
-  ; http://forth-standard.org/standard/core/ACTION-OF
+  ; ## auto  http://forth-standard.org/standard/core/ACTION-OF
 Action_Of:
 		jsr Tick		; get xt of "name"
 
@@ -7300,7 +9862,7 @@ _compiling:
 
 
  WordHeader "UserAddr",NN ; ( -- addr )  Push address of base address of user variables
-  ; ## "useraddr"	 tested	 Tali Forth
+  ; ## tested	 Tali Forth
 UserAddr:	ldy #>User0
 		lda #<User0
 		jmp PushYA
@@ -7308,8 +9870,7 @@ UserAddr:	ldy #>User0
 
 
  WordHeader "Buffer:",NN ; ( u "<name>" -- ; -- addr )  Create an uninitialized buffer
-  ; ## "buffer:"	auto  ANS core ext
-  ; https://forth-standard.org/standard/core/BUFFERColon
+  ; ## auto  https://forth-standard.org/standard/core/BUFFERColon
   ; Create a buffer of size u that puts its address on the stack
   ; when its name is used.
 Buffer_Colon:	jsr Create
@@ -7318,15 +9879,12 @@ Buffer_Colon:	jsr Create
 
 
  WordHeader "Case",IM+CO+NN ; (C: -- 0) ( -- )  Case flow control
-  ; ## "case"  auto  ANS core ext
-  ; http://forth-standard.org/standard/core/CASE
-Case:
-		jmp Zero	; init jmp fixup chain
+  ; ## auto  http://forth-standard.org/standard/core/CASE
+Case:		jmp Zero	; init jmp fixup chain
 	WordEnd
 
  WordHeader "EndCase",IM+CO+NN ; (C: case-sys -- ) ( x -- )  Case flow control
-  ; ## "endcase"	auto  ANS core ext
-  ; http://forth-standard.org/standard/core/ENDCASE
+  ; ## auto  http://forth-standard.org/standard/core/ENDCASE
 EndCase:
 		; Postpone DROP to remove the item being checked.
 		jsr Drop_Comma
@@ -7349,20 +9907,13 @@ _done:
 		rts
 
  WordHeader "Of",IM+CO+NN ; (C: -- of-sys) (x1 x2 -- |x1)  Case flow control
-  ; ## "of"  auto	 ANS core ext
-  ; http://forth-standard.org/standard/core/OF
+  ; ## auto  http://forth-standard.org/standard/core/OF
 Of:
 		ldy #>_runtime		; Check if value is equal to this case.
 		lda #<_runtime
 		jsr Jsr_Comma_YA
 
-		lda #$4c		; compile jmp abs
-		jsr C_Comma_A
-		jsr Here		; Put the origination address on the stack for else/then
-					; Stuff zero in for the branch address right now.
-					; THEN or ELSE will fix it later.
-		jsr Zero
-		jmp Comma
+		jmp zbranch_jmp0_comma	; save addr ptr; compile jmp abs
 	WordEnd
 
 _runtime: ; ( x1 x2 -- x1 )
@@ -7378,25 +9929,22 @@ _NotEq:		rts		; return to the jmp abs to next test
 
 
  WordHeader "EndOf",IM+CO+NN ; (C: case-sys1 of-sys1-- case-sys2) ( -- )  Case flow control
-  ; ## "endof"  auto  ANS core ext
-  ; http://forth-standard.org/standard/core/ENDOF
+  ; ## auto  http://forth-standard.org/standard/core/ENDOF
 EndOf:		jmp Else
 	WordEnd
 
 
  WordHeader "If",IM+CO+NN ; (C: -- orig) (flag -- )  IF flow control
-  ; ## "if"  auto	 ANS core
-  ; http://forth-standard.org/standard/core/IF
+  ; ## auto  http://forth-standard.org/standard/core/IF
 If:
 If3:		jsr zbranch_jsr_comma	; Compile a 0BRANCH
 
 zbranch_jmp0_comma:
-		lda #$4c		; compile jmp abs
-		jsr C_Comma_A
 		jsr Here		; save ptr to address for else/then
-		lda #0			; Stuff zero in for the branch address right now.
-		tay			; THEN or ELSE will fix it later.
-		jmp Comma_YA
+		jsr One_Plus
+		ldy #>Abort		; compile jmp abs
+		lda #<Abort		; THEN or ELSE will fix address later.
+		jmp Jmp_Comma_YA
 	WordEnd
 
 
@@ -7436,8 +9984,7 @@ zbranch_run_done:
 
 
  WordHeader "Then",IM+CO+NN ; (C: orig -- ) ( -- )  IF flow control
-  ; ## "then"  auto  ANS core
-  ; http://forth-standard.org/standard/core/THEN
+  ; ## auto  http://forth-standard.org/standard/core/THEN
 Then:
 		; Get the address to jump to.
 		jsr Here
@@ -7450,8 +9997,7 @@ Then:
 
 
  WordHeader "Else",IM+CO+NN ; (C: orig -- orig) ( -- )  IF flow control
-  ; ## "else"  auto  ANS core
-  ; http://forth-standard.org/standard/core/ELSE
+  ; ## auto  http://forth-standard.org/standard/core/ELSE
   ;
   ; The code is used by ENDOF
 Else:
@@ -7474,8 +10020,7 @@ Else:
 ; BEGIN ... WHILE ... REPEAT
 
  WordHeader "Begin",NN+CO+IM ; ( -- addr )  Mark entry point for loop
-  ; ## "begin"  auto  ANS core
-  ; https://forth-standard.org/standard/core/BEGIN
+  ; ## auto  https://forth-standard.org/standard/core/BEGIN
 Begin:		jsr Here	; remember the loop starting location
 		lda #<Begin	; pairing marker
 		jmp PushZA
@@ -7483,8 +10028,7 @@ Begin:		jsr Here	; remember the loop starting location
 
 
  WordHeader "Again",NN+CO+IM+UF ; ( addr -- ) Code backwards branch to address left by BEGIN
-  ; ## "again"  tested  ANS core ext
-  ; https://forth-standard.org/standard/core/AGAIN
+  ; ## tested  https://forth-standard.org/standard/core/AGAIN
 Again:		jsr underflow_2
 		lda #<Begin	; check pairing
 		jsr QPairCtlA
@@ -7493,8 +10037,7 @@ Again:		jsr underflow_2
 
 
  WordHeader "Until",IM+CO+NN ; (C: dest -- ) ( -- )  Loop flow control
-  ; ## "until"  auto  ANS core
-  ; http://forth-standard.org/standard/core/UNTIL
+  ; ## auto  http://forth-standard.org/standard/core/UNTIL
 Until:		lda #<Begin		; check pairing
 		jsr QPairCtlA
 		jmp ZBranch_Comma	; The address to loop back to is on the stack.
@@ -7502,8 +10045,7 @@ Until:		lda #<Begin		; check pairing
 
 
  WordHeader "While",IM+CO+NN ; ( C: dest -- orig dest ) ( x -- )  Loop flow control
-  ; ## "while"  auto  ANS core
-  ; http://forth-standard.org/standard/core/WHILE
+  ; ## auto  http://forth-standard.org/standard/core/WHILE
 While:		lda #<Begin	; check pairing
 		jsr QPairCtlA
 		jsr If3		; Compile a 0branch & jmp, push addr of addr
@@ -7539,7 +10081,7 @@ ZBranch_Comma: ; compile 0 test
 		lda #$f0		; BEQ
 		bne Branch_CommaA
 
- WordHeader "Branch,",NN ; ( addr A -- )  compile short or long branch
+ WordHeader "Branch,",NN ; ( addr opcode -- )  compile short or long branch
 		jsr PopA		; pop opcode to A
 Branch_CommaA: ;  opcode in A, addr in TOS
 		pha			; save branch opcode
@@ -7569,9 +10111,8 @@ _1byte:		inx			; Drop address
 		jmp Comma_YA		; compile Bcc
 
 
- WordHeader "Word",UF+NN ; ( char "name " -- caddr )  Parse input stream
-  ; ## "word"  auto  ANS core
-  ; https://forth-standard.org/standard/core/WORD
+ WordHeader "Word",NN ; ( char "name " -- caddr )  Parse input stream
+  ; ## auto  https://forth-standard.org/standard/core/WORD
   ; Obsolete parsing word included for backwards compatibility only.
   ; Do not use this, use `PARSE` or `PARSE-NAME`. Skips leading delimiters
   ; and copies word to storage area for a maximum size of 255 bytes.
@@ -7622,22 +10163,20 @@ _CopyStart:	jsr C_Comma_A
 
 
  WordHeader "(",IM+NN ; ( -- )  Discard input up to close paren ( comment )
-  ; ## "("  auto	ANS core
-  ; http://forth-standard.org/standard/core/p
+  ; ## auto  http://forth-standard.org/standard/core/p
 Paren:		lda #')'		; separator
-		jsr Parse_A		; Call parse.
+		jsr Parse_A		; get string
 
 		jmp Two_drop		; 2Drop the result.
 	WordEnd
 
 
  WordHeader ".(",IM+NN ; ( -- )  Print input up to close paren .( comment )
-  ; ## ".("  auto	 ANS core
-  ; http://forth-standard.org/standard/core/Dotp
-Dot_paren:	lda #')'
-		jsr Parse_A
-
-		jmp Type
+  ; ## auto  http://forth-standard.org/standard/core/Dotp
+Dot_paren:	lda #')'		; separator
+		jsr Parse_A		; get string
+					; ( addr len )
+		jmp Type		; type the string
 	WordEnd
 
 
@@ -7675,8 +10214,7 @@ _Next:		cpy tmp2+0
 
 
  WordHeader "Environment?",NN ; ( addr u -- 0 | i*x true )  Return system information
-  ; ## "environment?"  auto  ANS core
-  ; https://forth-standard.org/standard/core/ENVIRONMENTq
+  ; ## auto  https://forth-standard.org/standard/core/ENVIRONMENTq
 Environment_Q:
 		jsr Hash		; ( hash )
 
@@ -7739,7 +10277,7 @@ _Table: ; environment strings
 	.word $7f56,$7fff	; "MAX-N"
 	.word $7f5d,$ffff	; "MAX-U"
 	.word $ce38,$80		; "RETURN-STACK-CELLS"
-	.word $c0f2,DStack0/2	; "STACK-CELLS"
+	.word $c0f2,DDim	; "STACK-CELLS"
 	.word $e336,9		; "WORDLISTS"
   .if "fp" in TALI_OPTIONAL_WORDS
 				; Table 12.2 - Environmental query strings 
@@ -7763,13 +10301,11 @@ _table_dbl = *-_Table	; These return a double-cell number
 .endif ; "environment?"
 
 
- WordHeader "Dump",UF+NN ; ( addr u -- )  Display a memory region
-  ; ## "dump"  tested  ANS tools
-  ; https://forth-standard.org/standard/tools/DUMP
+ WordHeader "Dump",NN ; ( addr u -- )  Display a memory region
+  ; ## tested  https://forth-standard.org/standard/tools/DUMP
   ;
   ; DUMP's exact output is defined as "implementation dependent".
-Dump:
-		jsr underflow_2
+Dump:		jsr underflow_2
 
 		dex			; alloc work area
 		dex
@@ -7940,8 +10476,7 @@ _done:		rts
 
 
  WordHeader ".S",NN ; ( -- )  Non-destructive Print content of Data Stack
-  ; ## ".s"  tested  ANS tools
-  ; https://forth-standard.org/standard/tools/DotS
+  ; ## tested  https://forth-standard.org/standard/tools/DotS
   ; Print content of Data Stack non-distructively. We follow the format
   ; of Gforth and print the number of elements first in brackets,
   ; followed by the Data Stack content (if any).
@@ -7961,7 +10496,7 @@ Dot_s:
 		jsr Emit_A
 		jsr Space
 
-		ldy #DStack0		; for each cell on the stack
+		ldy #DDim*2		; for each cell on the stack
 _loop:		dey
 		dey
 		stx tmp1
@@ -7989,8 +10524,7 @@ _done:
 
 
  WordHeader "Compare",UF+NN ; ( addr1 u1 addr2 u2 -- -1 | 0 | 1)  Compare two strings
-  ; ## "compare"	 auto  ANS string
-  ; https://forth-standard.org/standard/string/COMPARE
+  ; ## auto  https://forth-standard.org/standard/string/COMPARE
   ; Compare string1 (denoted by addr1 u1) to string2 (denoted by
   ; addr2 u2).  Return -1 if string1 < string2, 0 if string1 = string2
   ; and 1 if string1 > string2 (ASCIIbetical comparison).	 A string
@@ -8062,9 +10596,8 @@ _done:		sta DStack+7,x
 		rts
 
 
- WordHeader "Search",UF+NN ; ( addr1 u1 addr2 u2 -- addr3 u3 flag)  Search for a substring
-  ; ## "search"	auto  ANS string
-  ; https://forth-standard.org/standard/string/SEARCH
+ WordHeader "Search",NN ; ( addr1 u1 addr2 u2 -- addr3 u3 flag)  Search for a substring
+  ; ## auto  https://forth-standard.org/standard/string/SEARCH
   ; Search for string2 (denoted by addr2 u2) in string1 (denoted by
   ; addr1 u1). If a match is found the flag will be true and
   ; addr3 will have the address of the start of the match and u3 will have
@@ -8222,8 +10755,7 @@ _letters_match:
 
 
  WordHeader "Marker",IM+NN ; ( "name" -- )  Create a deletion boundry word
-  ; ## "marker"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/MARKER
+  ; ## auto  https://forth-standard.org/standard/core/MARKER
   ; This word replaces FORGET in earlier Forths. Old entries are not
   ; actually deleted, but merely overwritten by restoring CP and wordlist heads.
   ; Run the named word at a later time to restore all of the wordlists
@@ -8292,8 +10824,7 @@ _rloop:		; Copy back on top of the wordlists and search order.
 
 
  WordHeader "Words",NN ; ( -- )  Print known words from Dictionary
-  ; ## "words"  tested  ANS tools
-  ; https://forth-standard.org/standard/tools/WORDS
+  ; ## tested  https://forth-standard.org/standard/tools/WORDS
   ; This is pretty much only used at the command line so we can
   ; be slow and try to save space.
   ; Modified to list later search wordlists first.
@@ -8359,7 +10890,7 @@ _wordslist_done:
 
 
  WordHeader "WordSize",NN ; ( nt -- u )  Get size of word in bytes
-  ; ## "wordsize"	 auto  Tali Forth
+  ; ## auto  Tali Forth
   ; Given an word's name token (nt), return the size of the
   ; word's payload size in bytes (CFA plus PFA) in bytes.
   ; Probably does not count the final RTS.
@@ -8372,24 +10903,21 @@ WordSize:	jsr PopTmp1
 
 
  WordHeader "Aligned",0 ; ( addr -- addr )  Return the first aligned address
-  ; ## "aligned"	auto  ANS core
-  ; https://forth-standard.org/standard/core/ALIGNED
+  ; ## auto  https://forth-standard.org/standard/core/ALIGNED
 Aligned:
 	WordEnd
 		rts
 
 
  WordHeader "Align",0 ; ( -- )  Make sure CP is aligned on word size
-  ; ## "align"  auto  ANS core
-  ; https://forth-standard.org/standard/core/ALIGN
-  ; On the 6502, this does nothing.
-Align:
+  ; ## auto  https://forth-standard.org/standard/core/ALIGN
+Align:		; On the 6502, this does nothing.
 	WordEnd
 		rts
 
 
  WordHeader "Output",NN ; ( -- addr )  Return the address of the EMIT vector address
-  ; ## "output"  tested  Tali Forth
+  ; ## tested  Tali Forth
 xt_output:
 	; Return the address where the jump target for EMIT is stored (but
 	; not the vector itself). By default, this will hold the value of
@@ -8402,7 +10930,7 @@ xt_output:
 
 
  WordHeader "Input",NN ; ( -- addr )  Return address of input vector
-  ; ## "input" tested Tali Forth
+  ; ## tested Tali Forth
 xt_input:	ldy #>input
 		lda #<input
 		jmp PushYA
@@ -8410,8 +10938,7 @@ xt_input:	ldy #>input
 
 
  WordHeader "CR",NN ; ( -- )  Print a line feed
-  ; ## "cr"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/CR
+  ; ## auto  https://forth-standard.org/standard/core/CR
 CR:
  .if "cr" in TALI_OPTION_CR_EOL
 		lda #AscCR
@@ -8426,8 +10953,7 @@ CR:
 
 
  WordHeader "Page",NN ; ( -- )  Clear the screen
-  ; ## "page"  tested  ANS facility
-  ; https://forth-standard.org/standard/facility/PAGE
+  ; ## tested  https://forth-standard.org/standard/facility/PAGE
   ; Clears a page if supported by ANS terminal codes.
 Page:		jsr SLiteral_Runtime
 		  jmp +
@@ -8437,9 +10963,8 @@ Page:		jsr SLiteral_Runtime
 	WordEnd
 
 
- WordHeader "At-XY",UF+NN ; ( ux uy -- )  Move cursor to position given
-  ; ## "at-xy"  tested  ANS facility
-  ; https://forth-standard.org/standard/facility/AT-XY
+ WordHeader "At-XY",NN ; ( ux uy -- )  Move cursor to position given
+  ; ## tested  https://forth-standard.org/standard/facility/AT-XY
   ; On an ANSI compatible terminal, place cursor at row nx colum ny.
   ; ANSI code is ESC[<y>;<x>H
   ;
@@ -8472,8 +10997,7 @@ At_XY:
 
 
  WordHeader "Pad",0 ; ( -- addr )  Return address of user scratchpad
-  ; ## "pad"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/PAD
+  ; ## auto  https://forth-standard.org/standard/core/PAD
   ; Return address to a temporary area in free memory for user.
   ; It is located relative to
   ; the compile area pointer (CP) and therefore varies in position.
@@ -8492,8 +11016,7 @@ Pad:		dex		; push cp+PadOffset
 
 
  WordHeader "<#",0 ; ( -- )  Start number conversion
-  ; ## "<#"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/num-start
+  ; ## auto  https://forth-standard.org/standard/core/num-start
   ; Start the process to create pictured numeric output.
   ;
   ; The new
@@ -8510,9 +11033,8 @@ Less_Number_Sign:
 		rts
 
 
- WordHeader "#>",UF ; ( d -- addr u )  Finish pictured number conversion
-  ; ## "#>"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/num-end
+ WordHeader "#>",NN ; ( d -- addr u )  Finish pictured number conversion
+  ; ## auto  https://forth-standard.org/standard/core/num-end
   ; Finish conversion of pictured number string, putting address and
   ; length on the Data Stack.
 Number_Sign_Greater:
@@ -8537,8 +11059,7 @@ Number_Sign_Greater:
 
 
  WordHeader "Hold",0 ; ( char -- )  Insert character at current output
-  ; ## "hold"  auto  ANS core
-  ; https://forth-standard.org/standard/core/HOLD
+  ; ## auto  https://forth-standard.org/standard/core/HOLD
   ; Prepend a character at the current position of a pictured numeric
   ; output string.
 Hold:		jsr PopA
@@ -8549,8 +11070,7 @@ Hold_A:		dec ToHold
 		rts
 
 ; WordHeader "HoldS",NN ; ( c-addr u -- )  Insert string at current output
-  ; ## "hold"  auto  ANS core
-  ; https://forth-standard.org/standard/core/HOLDS
+  ; ## auto  https://forth-standard.org/standard/core/HOLDS
 ;HoldS:		jsr PopA
 ;		sta tmp2
 ;		jsr PopTmp1
@@ -8565,8 +11085,7 @@ Hold_A:		dec ToHold
 ;	WordEnd
 
  WordHeader "#",UF+NN ; ( ud -- ud )  Add character to pictured output string
-  ; ## "#"  auto	ANS core
-  ; https://forth-standard.org/standard/core/num
+  ; ## auto  https://forth-standard.org/standard/core/num
   ; Add one char to the beginning of the pictured output string.
   ;
   ; Based on
@@ -8579,20 +11098,20 @@ Number_Sign:
 		lda #0			;   init remainder
 		clc
 		ldy #32+1		;   for each bit
-_11:
-		rol a			;   shift remainder
+_div1:
+		rol a			;     shift remainder
 
-		cmp base		;   will it fit?
-		bcc _27
+		cmp base		;     will it fit?
+		bcc _div7
 		sbc base
-_27:
-		rol DStack+2,x		;   shift ud
+_div7:
+		rol DStack+2,x		;     shift ud
 		rol DStack+3,x
 		rol DStack+0,x
 		rol DStack+1,x
 
-		dey
-		bne _11
+		dey			;    next bit
+		bne _div1
 
 		; Convert the remainder to an ASCII character.
 		cmp #9+1		; alternatively this could use s_abc_upper
@@ -8605,8 +11124,7 @@ _27:
 
 
  WordHeader "#S",0 ; ( d -- d )  Convert all digits in pictured output
-  ; ## "#s"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/numS
+  ; ## auto  https://forth-standard.org/standard/core/numS
 Number_Sign_S:
 	;	jsr underflow_2	; Number_sign will check
 _loop:
@@ -8622,8 +11140,7 @@ _loop:
 
 
  WordHeader "Sign",NN ; ( n -- )  Add minus to pictured output
-  ; ## "sign"  auto  ANS core
-  ; https://forth-standard.org/standard/core/SIGN
+  ; ## auto  https://forth-standard.org/standard/core/SIGN
 Sign:		jsr PopYA
 		tya		; test MSB of TOS
 Sign_P: ; enter with N flag loaded
@@ -8635,8 +11152,8 @@ _minus:		lda #'-'	; add minus sign
 	WordEnd
 
 
- WordHeader "Cleave",UF+NN ; ( addr u -- addr2 u2 addr1 u1 )  Split off word from string
-  ; ## "cleave"  auto  Tali Forth
+ WordHeader "Cleave",NN ; ( addr u -- addr2 u2 addr1 u1 )  Split off word from string
+  ; ## auto  Tali Forth
   ; Given a range of memory with words delimited by whitespace,return
   ; the first word at the top of the stack and the rest of the word
   ; following it.
@@ -8648,8 +11165,7 @@ _minus:		lda #'-'	; add minus sign
   ; Since it will be used in loops a lot, we want it to work in pure
   ; assembler and be as fast as we can make it. Calls PARSE-NAME so we
   ; strip leading delimiters.
-Cleave:
-		jsr underflow_2
+Cleave:		jsr underflow_2
 
 		; We arrive here with ( addr u ). We need to strip any leading
 		; spaces by hand: PARSE-NAME does do that, but it doesn't
@@ -8718,14 +11234,13 @@ _done:
 		rts
 
 
- WordHeader "HexStore",UF+NN ; ( addr1 u1 addr2 -- u2 )  Store a list of numbers
-  ; ## "hexstore"	 auto  Tali
+ WordHeader "HexStore",NN ; ( addr1 u1 addr2 -- u2 )  Store a list of numbers
+  ; ## auto  Tali
   ; Given a string addr1 u1 with numbers in the current base seperated
   ; by spaces, store the numbers at the address addr2, returning the
   ; number of elements. Non-number elements are skipped, an zero-length
   ; string produces a zero output.
-Hexstore:
-		jsr underflow_3
+Hexstore:	jsr underflow_3
 
 		jsr Dup		; Save copy of original address
 		jsr Two_to_r		; ( addr1 u1 ) ( R: addr2 addr2 )
@@ -8787,17 +11302,16 @@ _done:
 		jmp Minus		; ( n )
 	WordEnd
 
+Throw_Stack_24: jmp Throw_Stack
 
- WordHeader "Within",UF+NN ; ( n1 n2 n3 -- )  See if within a range
-  ; ## "within"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/WITHIN
+ WordHeader "Within",NN ; ( n1 n2 n3 -- )  See if within a range
+  ; ## auto  https://forth-standard.org/standard/core/WITHIN
   ;
   ; This an assembler version of the ANS Forth implementation
   ; at https://forth-standard.org/standard/core/WITHIN which is
   ; OVER - >R - R> U<  note there is an alternative high-level version
   ; ROT TUCK > -ROT > INVERT AND
-Within:
-		jsr underflow_3
+Within:		DStackCheck 3,Throw_Stack_24
 
 		jsr Over
 		jsr Minus
@@ -8809,7 +11323,7 @@ Within:
 
 
  WordHeader "\",IM+NN ; ( -- )  Ignore rest of line
-  ; ## "\"  auto	ANS core ext
+  ; ## auto
   ; https://forth-standard.org/standard/block/bs
   ; https://forth-standard.org/standard/core/bs
 Backslash:
@@ -8831,20 +11345,19 @@ Backslash:
                 sta toin+0
                 bcc _rts
                 inc toin+1
-		rts
+_rts:		rts
 
 _not_block:
-                lda ciblen+0
+                lda ciblen+0		; consume the remainder of the line
                 sta toin+0
                 lda ciblen+1
                 sta toin+1
 	WordEnd
-_rts:		rts
+		rts
 
 
- WordHeader "Move",NN+UF ; ( addr1 addr2 u -- )  Copy bytes, handle overlapping buffers
-  ; ## "move"  auto  ANS core
-  ; https://forth-standard.org/standard/core/MOVE
+ WordHeader "Move",NN ; ( addr1 addr2 u -- )  Copy bytes, handle overlapping buffers
+  ; ## auto  https://forth-standard.org/standard/core/MOVE
   ; Copy u "address units" from addr1 to addr2. Since our address
   ; units are bytes, this is just a front-end for CMOVE and CMOVE>. This
   ; is actually the only one of these three words that is in the CORE set.
@@ -8871,15 +11384,14 @@ ThreeDrop:	txa		; drop three entries from Data Stack
 	WordEnd
 		rts
 
- WordHeader "CMove>",UF+NN ; ( add1 add2 u -- )  Copy bytes from high to low
-  ; ## "cmove>"  auto  ANS string
-  ; https://forth-standard.org/standard/string/CMOVEtop
+
+ WordHeader "CMove>",NN ; ( add1 add2 u -- )  Copy bytes from high to low
+  ; ## auto  https://forth-standard.org/standard/string/CMOVEtop
   ; Based on code in Leventhal, Lance A. "6502 Assembly Language
   ; Routines", p. 201, where it is called "move right".
   ;
   ; There are no official tests for this word.
-CMove_up:
-		jsr underflow_3
+CMove_up:	DStackCheck 3,Throw_Stack_14
 
 		; Move destination address to where we can work with it
 		lda DStack+2,x
@@ -8926,30 +11438,28 @@ _done:
 		jmp ThreeDrop	; clear up the stack and leave
 	WordEnd
 
+
 Throw_Stack_14: jmp Throw_Stack
 
-
- WordHeader "CMove",UF+NN ; ( addr1 addr2 u -- )  Copy bytes going from low to high
-  ; ## "cmove"  auto  ANS string
-  ; https://forth-standard.org/standard/string/CMOVE
+ WordHeader "CMove",NN ; ( addr1 addr2 u -- )  Copy bytes going from low to high
+  ; ## auto  https://forth-standard.org/standard/string/CMOVE
   ; Copy u bytes from addr1 to addr2, going low to high (addr2 is
   ; larger than addr1). Based on code in Leventhal, Lance A.
   ; "6502 Assembly Language Routines", p. 201, where it is called
   ; "move left".
   ;
   ; There are no official tests for this word.
-CMove:
-		jsr underflow_3
+CMove:		DStackCheck 3,Throw_Stack_14
 
 		; move destination address to where we can work with it
 		lda DStack+2,x
-		sta tmp2	; use tmp2 because easier to remember
+		sta tmp2+0	; use tmp2 because easier to remember
 		lda DStack+3,x
 		sta tmp2+1
 
 		; move source address to where we can work with it
 		lda DStack+4,x
-		sta tmp1	; use tmp1 because easier to remember
+		sta tmp1+0	; use tmp1 because easier to remember
 		lda DStack+5,x
 		sta tmp1+1
 
@@ -8985,8 +11495,7 @@ _done:		jmp ThreeDrop	; clear the stack
 
 
  WordHeader "UM*",NN ; ( u1 u2 -- ud )  Multiply 16 x 16 -> 32  unsigned
-  ; ## "um*"  auto  ANS core
-  ; https://forth-standard.org/standard/core/UMTimes
+  ; ## auto  https://forth-standard.org/standard/core/UMTimes
   ; Multiply two unsigned 16 bit numbers, producing a 32 bit result.
   ; Old Forth versions such as FIG Forth call this U*
   ;
@@ -9062,8 +11571,7 @@ _zero:		lda #0
 
 
  WordHeader "M*",NN ; ( n n -- d )  16 * 16 --> 32 signed
-  ; ## "m*"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/MTimes
+  ; ## auto  https://forth-standard.org/standard/core/MTimes
   ; Multiply two 16 bit numbers, producing a 32 bit result. All
   ; values are signed. Adapted from FIG Forth for Tali Forth.
 M_Star:		DStackCheck 2,Throw_Stack_15
@@ -9090,8 +11598,7 @@ M_Star:		DStackCheck 2,Throw_Stack_15
 		rts
 
  WordHeader "*",0 ; ( n n -- n )  16*16 --> 16  signed or unsigned
-  ; ## "*"  auto	ANS core
-  ; https://forth-standard.org/standard/core/Times
+  ; ## auto  https://forth-standard.org/standard/core/Times
   ; Multiply two signed 16 bit numbers, returning a 16 bit result.
 Star:		; UM_Star will check for underflow
 		jsr UM_Star
@@ -9102,8 +11609,7 @@ Star:		; UM_Star will check for underflow
 
 
  WordHeader "UM/Mod",NN ; ( ud u_div -- u_rem u_quot )  32/16 -> 16,16 division unsigned
-  ; ## "um/mod"  auto  ANS core
-  ; https://forth-standard.org/standard/core/UMDivMOD
+  ; ## auto  https://forth-standard.org/standard/core/UMDivMOD
   ; Divide double cell number by single cell number, returning the
   ; quotient as TOS and any remainder as NOS. All numbers are unsigned.
   ; This is the basic division operation all others use. Based on FIG
@@ -9171,9 +11677,8 @@ Throw_Stack_15: jmp Throw_Stack
 ;	WordEnd
 
 
- WordHeader "SM/Rem",NN ; ( d n1 -- n2 n3 )  Symmetic signed division
-  ; ## "sm/rem"  auto  ANS core
-  ; https://forth-standard.org/standard/core/SMDivREM
+ WordHeader "SM/Rem",NN ; ( d n1 -- n2 n3 )  Symmetric signed division
+  ; ## auto  https://forth-standard.org/standard/core/SMDivREM
   ; Symmetic signed division. Compare FM/MOD. Based on F-PC 3.6
   ; by Ulrich Hoffmann. See http://www.xlerb.de/uho/ansi.seq
 SM_Slash_Rem:
@@ -9222,8 +11727,7 @@ _done:
 
 
  WordHeader "FM/Mod",NN ; ( d n1  -- rem n2 )  Floored signed division
-  ; ## "fm/mod"  auto  ANS core
-  ; https://forth-standard.org/standard/core/FMDivMOD
+  ; ##  https://forth-standard.org/standard/core/FMDivMOD
   ; Note that by default, Tali Forth uses SM/REM for most things.
   ;
   ; There are various ways to realize this. We follow EForth with
@@ -9278,8 +11782,7 @@ FM_Slash_Mod:
 
 
  WordHeader "/Mod",NN ; ( n1 n_div -- n_rem n_quot )  Divide NOS by TOS signed with a remainder
-  ; ## "/mod"  auto  ANS core
-  ; https://forth-standard.org/standard/core/DivMOD
+  ; ## auto  https://forth-standard.org/standard/core/DivMOD
 Slash_Mod:	jsr Dup			; ( n1 n_div n_div )
 		ldy #0			; sign extend n1
 		lda DStack+5,x
@@ -9293,16 +11796,14 @@ Slash_Mod:	jsr Dup			; ( n1 n_div n_div )
 
 
  WordHeader "/",NN ; ( n1 n2 -- n )  Divide signed NOS by TOS
-  ; ## "/"  auto	ANS core
-  ; https://forth-standard.org/standard/core/Div
+  ; ## auto  https://forth-standard.org/standard/core/Div
 Slash:		jsr Slash_Mod
 		jmp Nip		; Nip remainder
 	WordEnd
 
 
  WordHeader "Mod",0 ; ( n1 n2 -- n )  Divide signed NOS by TOS and return the remainder
-  ; ## "mod"  auto  ANS core
-  ; https://forth-standard.org/standard/core/MOD
+  ; ## auto  https://forth-standard.org/standard/core/MOD
 Mod:		jsr Slash_Mod
 
 		inx		; Drop quotient
@@ -9311,9 +11812,8 @@ Mod:		jsr Slash_Mod
 		rts
 
 
- WordHeader "*/Mod",UF+NN ;  ( n1 n2 n3 -- n4 n5 )  n1 * n2 / n3 --> n-mod n
-  ; ## "*/mod"  auto  ANS core
-  ; https://forth-standard.org/standard/core/TimesDivMOD
+ WordHeader "*/Mod",NN ;  ( n1 n2 n3 -- n4 n5 )  n1 * n2 / n3 --> n-mod n
+  ; ## auto  https://forth-standard.org/standard/core/TimesDivMOD
   ; Multiply n1 by n2 producing the intermediate double-cell result d.
   ; Divide d by n3 producing the single-cell remainder n4 and the
   ; single-cell quotient n5.
@@ -9328,8 +11828,7 @@ Star_Slash_Mod:
 
 
  WordHeader "*/",NN ; ( n1 n2 n3 -- n4 )  n1 * n2 / n3 -->  n
-  ; ## "*/"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/TimesDiv
+  ; ## auto  https://forth-standard.org/standard/core/TimesDiv
   ; Multiply n1 by n2 and divide by n3, returning the result
   ; without a remainder. This is */MOD without the mod.
   ;
@@ -9344,9 +11843,8 @@ Star_Slash:
 
 
  WordHeader "M*/",NN ; ( d1 n1 n2 -- d2 )  Multiply signed d1 by n1 and divide by n2.
-  ; ## "m*/"  auto  ANS double
+  ; ## auto  https://forth-standard.org/standard/double/MTimesDiv
   ; n2 may be negative.
-  ; https://forth-standard.org/standard/double/MTimesDiv
   ; From All About FORTH, MVP-Forth, public domain,
   ; from this forth code which is modified slightly for Tali2:
   ; DDUP XOR SWAP ABS >R SWAP ABS >R OVER XOR ROT ROT DABS
@@ -9390,7 +11888,7 @@ _rts:		rts
 
 
  WordHeader "Evaluate",NN ; ( addr u -- )  Evaluate a string as Forth
-  ; ## "evaluate"	 auto  ANS core
+  ; ## auto
   ; https://forth-standard.org/standard/block/EVALUATE
   ; https://forth-standard.org/standard/core/EVALUATE
   ; Set SOURCE-ID to -1, make addr u the input source, set >IN to zero.
@@ -9448,7 +11946,7 @@ load_evaluate: ; special entry point.
 
 
  .if 0  ; >Number has this inlined
- WordHeader "Digit?",UF+NN ; ( char -- u f | char f )  Convert ASCII char to number
+ WordHeader "Digit?",NN ; ( char -- u f | char f )  Convert ASCII char to number
   ; ## "digit?"  auto  Tali Forth
   ; Inspired by the pForth instruction DIGIT, see
   ; https://github.com/philburk/pforth/blob/master/fth/numberio.fth
@@ -9456,8 +11954,7 @@ load_evaluate: ; special entry point.
   ; pForth, we get the base (radix) ourselves instead of having the
   ; user provide it. There is no standard name for this routine, which
   ; itself is not ANS; we use DIGIT? following pForth and Gforth.
-Digit_Question:
-		jsr underflow_1
+Digit_Question:	DStackCheck 1,Throw_Stack_11
 
 		jsr Zero		; alloc room for the flag on the stack
 
@@ -9484,10 +11981,10 @@ _done:
 		rts
   .endif
 
+Throw_Stack_11: jmp Throw_Stack
 
- WordHeader ">Number",UF+NN ; ( ud addr u -- ud addr u )  Continue convert a string to an integer
-  ; ## ">number"	auto  ANS core
-  ; https://forth-standard.org/standard/core/toNUMBER
+ WordHeader ">Number",NN ; ( ud addr u -- ud addr u )  Continue convert a string to an integer
+  ; ## auto  https://forth-standard.org/standard/core/toNUMBER
   ; Convert a string to a double number. Logic here is based on the
   ; routine by Phil Burk of the same name in pForth, see
   ; https://github.com/philburk/pforth/blob/master/fth/numberio.fth
@@ -9495,8 +11992,7 @@ _done:
   ; made sure that we don't have to deal with a sign and we don't have
   ; to deal with a dot as a last character that signalizes double -
   ; this should be a pure number string.
-To_Number:
-		jsr underflow_4
+To_Number:	DStackCheck 4,Throw_Stack_11
 
 		lda DStack+0,x		; no chars left?
 		beq _done
@@ -9584,7 +12080,7 @@ _done:		; no chars left or we hit an unconvertable char
 
 
  WordHeader "Number",UF+NN ; ( addr u -- u | d )  Convert a string to an integer
-  ; ## "number"  auto  Tali Forth
+  ; ## auto  Tali Forth
   ; Convert a number string to a double or single cell number. This
   ; is a wrapper for >NUMBER and follows the convention set out in the
   ; "Forth Programmer's Handbook" (Conklin & Rather) 3rd edition p. 87.
@@ -9795,15 +12291,13 @@ _MinusCheck: ; If the first character is a minus, strip it off and set
 
 
  WordHeader "Hex",NN ; ( -- )  Set radix base to hexadecimal
-  ; ## "hex"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/HEX
+  ; ## auto  https://forth-standard.org/standard/core/HEX
 Hex:		lda #16
 		bne Decimal_a
 	WordEnd
 
  WordHeader "Decimal",0 ; ( -- )  Set radix base to decimal
-  ; ## "decimal"	auto  ANS core
-  ; https://forth-standard.org/standard/core/DECIMAL
+  ; ## auto  https://forth-standard.org/standard/core/DECIMAL
 Decimal:	lda #10
 Decimal_a:	sta base+0
 		lda #0
@@ -9812,24 +12306,23 @@ Decimal_a:	sta base+0
 		rts
 
  WordHeader "Base",NN ; ( -- addr )  Push address of radix base to stack
-  ; ## "base"  auto  ANS core
-  ; https://forth-standard.org/standard/core/BASE
+  ; ## auto  https://forth-standard.org/standard/core/BASE
   ; The ANS Forth standard sees the base up to 36
 		ldy #>base
 		lda #<base
 		jmp PushYA
 	WordEnd
 
- WordHeader "Count",UF+NN ; ( c-addr -- addr u )  Convert counted character string to normal format
-  ; ## "count"  auto  ANS core
-  ; https://forth-standard.org/standard/core/COUNT
+Throw_Stack_10: jmp Throw_Stack
+
+ WordHeader "Count",NN ; ( c-addr -- addr u )  Convert counted character string to normal format
+  ; ## auto  https://forth-standard.org/standard/core/COUNT
   ; Convert old-style character string to address-length pair. Note
   ; that the length of the string c-addr is stored in character length
   ; (8 bit), not cell length (16 bit). This is rarely used these days,
   ; though COUNT can also be used to step through a string character by
   ; character.
-Count:
-		jsr underflow_1
+Count:		DStackCheck 1,Throw_Stack_10
 
 		lda (DStack+0,x)	; A= number of characters
 
@@ -9869,8 +12362,7 @@ DoFufaH:  .fill DoStkDim
  .section code
 
  WordHeader "?Do",CO+IM+NN ; ( limit start -- )(R: -- limit start)  Conditional DO loop start
-  ; ## "?do"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/qDO
+  ; ## auto  https://forth-standard.org/standard/core/qDO
 Question_Do:
 		jsr Do_Leave_Init
 
@@ -9901,8 +12393,7 @@ _2:		lda DoIndex+1
 
 
  WordHeader "Do",CO+IM+NN ; ( limit start -- )(R: -- limit start)  DO loop start
-  ; ## "do"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/DO
+  ; ## auto  https://forth-standard.org/standard/core/DO
   ;
   ; Compile-time part of DO. Could be realized in Forth as
   ;	: DO POSTPONE (DO) HERE ; IMMEDIATE COMPILE-ONLY
@@ -9977,8 +12468,7 @@ _TooDeep:	lda #$100+err_DoLoop_TooDeep
 
 
  WordHeader "Loop",CO+IM+NN ; ( -- )  DO loop end
-  ; ## "loop"  auto  ANS core
-  ; https://forth-standard.org/standard/core/LOOP
+  ; ## auto  https://forth-standard.org/standard/core/LOOP
   ; Compile-time part of LOOP.
 Loop:
   .if 0 ; more compiled code but much faster
@@ -9992,11 +12482,11 @@ Loop:
 
 		lda #<_Runtime2
 		ldy #>_Runtime2
-		jmp Plus_Loop_5
+		bne Plus_Loop_5
   .else
 		lda #<_Runtime
 		ldy #>_Runtime
-		jmp Plus_Loop_5
+		bne Plus_Loop_5
   .endif
 	WordEnd
 
@@ -10014,8 +12504,7 @@ _Runtime2:	clc
 
 
  WordHeader "+Loop",CO+IM+NN ; ( -- )  DO loop end
-  ; ## "+loop"  auto  ANS core
-  ; https://forth-standard.org/standard/core/PlusLOOP
+  ; ## auto  https://forth-standard.org/standard/core/PlusLOOP
   ;
   ; Compile-time part of +LOOP, also used for LOOP. Is usually
   ;	: +LOOP POSTPONE (+LOOP) , POSTPONE UNLOOP ; IMMEDIATE
@@ -10029,16 +12518,16 @@ Plus_Loop:
 		ldy #>Plus_Loop_Runtime
 Plus_Loop_5:	jsr Loop_End		; compile JSR _runtime, BVC back
 
-		lda #<(Unloop-wh_LinkNt-1)
-		ldy #>(Unloop-wh_LinkNt-1)
-		jmp Compile_Comma_NT_YA ; compile Unloop, return
+		lda #<Unloop ;(Unloop-wh_LinkNt-1)
+		ldy #>Unloop ;(Unloop-wh_LinkNt-1)
+		jmp Jsr_Comma_YA ;Compile_Comma_NT_YA ; compile Unloop, return
 	WordEnd
 
 Plus_Loop_Runtime:
 		DStackCheck 1,Throw_Stack_12
 
-		clc			; DoIndex += step
-		lda DStack+0,x
+	;	clc			; left clear by DStackCheck
+		lda DStack+0,x		; DoIndex += step
 		adc DoIndex+0
 		sta DoIndex+0
 		lda DStack+1,x
@@ -10093,8 +12582,7 @@ _p9:
 
 
  WordHeader "Unloop",CO ; ( -- )(R: n1 n2 n3 ---)  Drop DO loop control
-  ; ## "unloop"  auto  ANS core
-  ; https://forth-standard.org/standard/core/UNLOOP
+  ; ## auto  https://forth-standard.org/standard/core/UNLOOP
 Unloop:
 		ldy DoStkIndex
 
@@ -10109,8 +12597,7 @@ Unloop:
 
 
  WordHeader "Leave",IM+NN+CO ; ( -- )  Leave DO/LOOP
-  ; ## "leave"  auto  ANS core
-  ; https://forth-standard.org/standard/core/LEAVE
+  ; ## auto  https://forth-standard.org/standard/core/LEAVE
   ; Note that this does not work with anything but a DO/LOOP in
   ; contrast to other versions such as discussed at
   ; http://blogs.msdn.com/b/ashleyf/archive/2011/02/06/loopty-do-i-loop.aspx
@@ -10147,8 +12634,7 @@ Do_Leave_Init: ; ( -- saved_leave )
 
 
  WordHeader "I",CO ; ( -- n )(R: n -- n)  Push DO loop index
-  ; ## "i"  auto	ANS core
-  ; https://forth-standard.org/standard/core/I
+  ; ## auto  https://forth-standard.org/standard/core/I
   ; Note that this is not the same as R@ ;
   ; see the Control Flow section of the manual for details.
 I:		ldy DoStkIndex
@@ -10167,8 +12653,7 @@ I:		ldy DoStkIndex
 
 
  WordHeader "J",CO ; ( -- n ) (R: n -- n )  Push second DO loop index
-  ; ## "j"  auto	ANS core
-  ; https://forth-standard.org/standard/core/J
+  ; ## auto  https://forth-standard.org/standard/core/J
   ; see the Control Flow section of the manual for more details.
 J:		ldy DoStkIndex
 
@@ -10190,7 +12675,7 @@ J:		ldy DoStkIndex
  .section code
 
  WordHeader 'Abort"',CO+IM+NN ; ( "string" -- )  If flag TOS is true, ABORT with message
-  ; ## "abort""  tested  ANS core
+  ; ## tested
   ; https://forth-standard.org/standard/exception/ABORTq
   ; https://forth-standard.org/standard/core/ABORTq
   ; Abort and print a string.
@@ -10219,7 +12704,7 @@ _do_abort:	; We're true
 
 
  WordHeader "Abort",NN ; ( -- )  Reset the Data Stack and restart the CLI
-  ; ## "abort"  tested  ANS core
+  ; ## tested
   ; https://forth-standard.org/standard/exception/ABORT
   ; https://forth-standard.org/standard/core/ABORT
   ; We can jump here via
@@ -10333,7 +12818,7 @@ QStack:		DStackCheck 0,Throw_Stack
 Throw:		jsr PopA		; pop n
 ThrowA:		jsr Type_Exception_Text_A ; print the associated error string
 
-		ldx #DStack0		; reset data stack (in case of underflow)
+		ldx #DDim*2		; reset data stack (in case of underflow)
 
 		; Exception frames & CATCH aren't implemented,
 Abort_Core:	;   so we act like Abort in core
@@ -10397,7 +12882,7 @@ _NotFound:	ldy #$ff		; print code
 
 
  WordHeader "Empty-Stack",NN ; ( ? -- )  Empty data & FP stacks
-Empty_Stack:	ldx #DStack0	; init data stack
+Empty_Stack:	ldx #DDim*2	; init data stack
 .if "fp" in TALI_OPTIONAL_WORDS
 		lda #FDim	; init FP stack
 		sta FIndex
@@ -10407,18 +12892,17 @@ Empty_Stack:	ldx #DStack0	; init data stack
 
 
  WordHeader "Quit",NN ; ( -- ) Reset the input and get new input
-  ; ## "quit"  tested  ANS core
-  ; https://forth-standard.org/standard/core/QUIT
+  ; ## tested  https://forth-standard.org/standard/core/QUIT
   ; Reset the input and start command loop
 Quit:
 		; Clear the Return Stack. This is a little screwed up
 		; because the 6502 can only set the Return Stack via X,
 		; which is our Data Stack pointer. The ANS specification
 		; demands, however, that ABORT reset the Data Stack pointer
-		txa		; Save the DStack that we just defined
-		ldx #rsp0
+		txa		; Save the DStack index
+		ldx #rsp0	; Set the return stack ptr
 		txs
-		tax		; Restore the DStack. Dude, seriously.
+		tax		; Restore the DStack index.
 
 		lda #0		; SOURCE-ID= zero (keyboard input)
 		sta insrc+0
@@ -10558,8 +13042,7 @@ _line_done:
 
 
  WordHeader "Immediate",NN ; ( -- )  Mark most recent word as IMMEDIATE
-  ; ## "immediate"  auto	ANS core
-  ; https://forth-standard.org/standard/core/IMMEDIATE
+  ; ## auto  https://forth-standard.org/standard/core/IMMEDIATE
   ; Make sure the most recently defined word is immediate. Will only
   ; affect the last word in the dictionary. Note that if the word is
   ; defined in ROM, this will have no affect, but will not produce an
@@ -10575,7 +13058,7 @@ SetFlag:	pha
 		rts
 
  WordHeader "Compile-only",NN ; ( -- )  Mark most recent word as COMPILE-ONLY
-  ; ## "compile-only"  tested  Tali Forth
+  ; ## tested  Tali Forth
   ; Set the Compile Only flag (CO) of the most recently defined word.
   ;
   ; The alternative way to do this is to define a word
@@ -10585,7 +13068,7 @@ Compile_Only:	lda #CO
 	WordEnd
 
  WordHeader "never-native",NN ; ( -- )  Mark most recent word as never natively compiled
-  ; ## "never-native"  auto  Tali Forth
+  ; ## auto  Tali Forth
 Never_Native:	jsr current_to_dp
 		ldy #Wh_Flags
 		lda (dp),y
@@ -10596,7 +13079,7 @@ Never_Native:	jsr current_to_dp
 		rts
 
  WordHeader "always-native",NN ; ( -- )  Mark most recent word as always natively compiled
-  ; ## "always-native"  auto  Tali Forth
+  ; ## auto  Tali Forth
 Always_Native:	jsr current_to_dp
 		ldy #Wh_Flags
 		lda (dp),y
@@ -10607,7 +13090,7 @@ Always_Native:	jsr current_to_dp
 		rts
 
  WordHeader "allow-native",NN ; ( -- )  Mark most recent word to allow native compiling
-  ; ## "allow-native"  auto  Tali Forth
+  ; ## auto  Tali Forth
 Allow_Native:	jsr current_to_dp
 		ldy #Wh_Flags	; offset for status byte
 		lda (dp),y
@@ -10618,14 +13101,14 @@ Allow_Native:	jsr current_to_dp
 
 
  WordHeader "nc-limit",NN ; ( -- addr )  Variable: max # of bytes to inline
-  ; ## "nc-limit"	 tested	 Tali Forth
+  ; ## tested	 Tali Forth
 		ldy #>nc_limit
 		lda #<nc_limit
 		jmp PushYA
 	WordEnd
 
  WordHeader "strip-underflow",NN ; ( -- addr )  Variable: strip underflow flag
-  ; ## "strip-underflow"	tested	Tali Forth
+  ; ## tested	Tali Forth
   ; `STRIP-UNDERFLOW` is a flag variable that determines if underflow
   ; checking should be removed during the compilation of new words.
   ; Default is false.
@@ -10636,8 +13119,7 @@ Allow_Native:	jsr current_to_dp
 
 
  WordHeader "postpone",IM+CO+NN ; ( "name" -- )  Compile word, reducing IMMEDIATEness
-  ; ## "postpone"	 auto	ANS core
-  ; https://forth-standard.org/standard/core/POSTPONE
+  ; ##  auto  https://forth-standard.org/standard/core/POSTPONE
   ; Add the compilation behavior of a word to a new word at compile time.
   ; If the word that follows it is immediate, include
   ; it so that it will be compiled when the word being defined is
@@ -10670,8 +13152,7 @@ _not_immediate:	; It is not an immediate word
 
 
  WordHeader "Recurse",CO+IM+NN ; ( -- )  Compile recursive call to word being defined
-  ; ## "recurse"	auto  ANS core
-  ; https://forth-standard.org/standard/core/RECURSE
+  ; ## auto  https://forth-standard.org/standard/core/RECURSE
   ; Compile a reference to the word that is being compiled.
 Recurse:
 		lda WorkWord+0
@@ -10695,8 +13176,7 @@ _xt:
 
 
  WordHeader "Compile,",NN ; ( xt -- )  Compile xt
-  ; ## "compile,"	 auto  ANS core ext
-  ; https://forth-standard.org/standard/core/COMPILEComma
+  ; ## auto  https://forth-standard.org/standard/core/COMPILEComma
   ; Compile the given xt in the current word definition.
   ; Because we are using subroutine threading, we can't use
   ; , (COMMA) to compile new words the indirect-threaded way.
@@ -10800,8 +13280,7 @@ _copy_end:
 
 
  WordHeader "[",IM+CO+NN ; ( -- )  Switch to interpret state
-  ; ## "["  auto	ANS core
-  ; https://forth-standard.org/standard/core/Bracket
+  ; ## auto  https://forth-standard.org/standard/core/Bracket
 Left_Bracket:	lda state+0		; Already in the interpret state?
 		bne Left_Bracket_NoCheck
 		lda #$100+err_AlreadyInterpreting
@@ -10815,8 +13294,7 @@ Left_Bracket_3:	sta state+0
 		rts
 
  WordHeader "]",IM+NN ; ( -- )  Switch to compile state
-  ; ## "]"  auto	ANS core
-  ; https://forth-standard.org/standard/right-bracket
+  ; ## auto  https://forth-standard.org/standard/right-bracket
 Right_Bracket:
 		lda state+0		; Already in the compile state?
 		beq +
@@ -10828,9 +13306,8 @@ Right_Bracket:
 	WordEnd
 
 
- WordHeader "Literal",IM+CO+UF+NN ; ( n -- )  Compile code using TOS to push value at runtime
-  ; ## "literal"	auto  ANS core
-  ; https://forth-standard.org/standard/core/LITERAL
+ WordHeader "Literal",IM+CO+NN ; ( n -- )  Compile code using TOS to push value at runtime
+  ; ## auto  https://forth-standard.org/standard/core/LITERAL
   ; Compile-only word to store TOS so that it is pushed on stack
   ; during runtime.
 Literal:
@@ -10881,7 +13358,18 @@ _zero:		inx			; drop
 ;		rts
 
 
- WordHeader "LDYA#,",NN ; ( n -- )  compile "ldy #msb; lda #lsb"
+ WordHeader "2Literal",IM+NN ; (C: d -- ) ( -- d )  Compile a literal double word
+  ; ## auto  https://forth-standard.org/standard/double/TwoLITERAL
+Two_literal:
+		jsr underflow_2 ; check double number
+
+		jsr Swap
+		jsr Literal	; do lo cell
+		jmp Literal	; do hi cell
+	WordEnd
+
+
+ WordHeader "LDYA.#",NN ; ( n -- )  compile "ldy #msb; lda #lsb"
 ldya_immed_comma:
 		lda #$a0		; ldy #
 		ldy DStack+1,x
@@ -10902,8 +13390,7 @@ PushYA:		dex
 		rts
 
  WordHeader "True",0 ; ( -- f )  Push TRUE flag to Data Stack
-  ; ## "true"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/TRUE
+  ; ## auto  https://forth-standard.org/standard/core/TRUE
 True:		lda #$FF
 PushAA:		dex
 		dex
@@ -10913,10 +13400,9 @@ PushAA:		dex
 		rts
 
  WordHeader "False",NN ; ( -- f )  Push flag FALSE to Data Stack
-  ; ## "false"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/FALSE
+  ; ## auto  https://forth-standard.org/standard/core/FALSE
 False:		lda #0
-		beq PushZA
+		beq PushAA
 	WordEnd
 
  WordHeader "PushZA",0 ; ( A -- n )  Push zero-extended A to the data stack
@@ -10929,46 +13415,43 @@ PushZA:		dex
 		rts
 
  WordHeader "0",NN ; ( -- 0 )  Push 0 to Data Stack
-  ; ## "0"  auto	Tali Forth
+  ; ## auto	Tali Forth
   ; This routine preserves Y.
 Zero:		lda #0
-		beq PushZA
+		beq PushAA
 	WordEnd
 
  WordHeader "1",NN ; ( -- n )  Push the number 1 to the Data Stack
-  ; ## "1"  auto	Tali Forth
+  ; ## auto	Tali Forth
 One:		lda #1
 		bne PushZA
 	WordEnd
 
  WordHeader "2",NN ; ( -- u )  Push the number 2 to stack
-  ; ## "2"  auto	Tali Forth
+  ; ## auto	Tali Forth
 Two:		lda #2
 		bne PushZA
 	WordEnd
 
  WordHeader "Bl",NN ; ( -- c )  Push ASCII value of SPACE to stack
-  ; ## "bl"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/BL
+  ; ## auto  https://forth-standard.org/standard/core/BL
 Bl:		lda #AscSP
 		bne PushZA
 	WordEnd
 
  WordHeader ">In",NN ; ( -- addr )  Return address of the input pointer
-  ; ## ">in"  auto  ANS core
-  ; https://forth-standard.org/standard/core/toIN
+  ; ## auto  https://forth-standard.org/standard/core/toIN
 		lda #ToIn
 		jmp PushZA	; jmp to be a recognizable constant
 	WordEnd
 
  WordHeader "State",NN ; ( -- addr )  Return the address of compilation state flag
-  ; ## "state"  auto  ANS core
-  ; https://forth-standard.org/standard/core/STATE
+  ; ## auto  https://forth-standard.org/standard/core/STATE
   ; STATE is true when in compilation state, false otherwise. Note
   ; we do not return the state itself, but only the address where
   ; it lives. The state should not be changed directly by the user; see
   ; http://forth.sourceforge.net/standard/dpans/dpans6.htm#6.1.2250
-		lda #state
+		lda #State
 		jmp PushZA	; jmp to be a recognizable constant
 	WordEnd
 
@@ -10982,22 +13465,24 @@ Bl:		lda #AscSP
 		jmp PushZA	; jmp to be a recognizable constant
 	WordEnd
 
+ WordHeader "Tmp2",NN ; ( -- addr ) Variable: zp work area
+		lda #tmp2
+		jmp PushZA	; jmp to be a recognizable constant
+	WordEnd
 
- WordHeader "2Literal",UF+IM+NN ; (C: d -- ) ( -- d)  Compile a literal double word
-  ; ## "2literal"	 auto  ANS double
-  ; https://forth-standard.org/standard/double/TwoLITERAL
-Two_literal:
-		jsr underflow_2 ; check double number
+ WordHeader "Tmp3",NN ; ( -- addr ) Variable: zp work area
+		lda #tmp3
+		jmp PushZA	; jmp to be a recognizable constant
+	WordEnd
 
-		jsr Swap
-		jsr Literal	; do lo cell
-		jmp Literal	; do hi cell
+ WordHeader "Tmp4",NN ; ( -- addr ) Variable: zp work area
+		lda #tmp4
+		jmp PushZA	; jmp to be a recognizable constant
 	WordEnd
 
 
  WordHeader "SLiteral",CO+IM+UF+NN ; ( addr u -- )( -- addr u )  Compile a string for runtime
-  ; ## "sliteral" auto  ANS string
-  ; https://forth-standard.org/standard/string/SLITERAL
+  ; ## auto  https://forth-standard.org/standard/string/SLITERAL
   ; Add the runtime for an existing string.
 SLiteral:
 		jsr underflow_2
@@ -11084,8 +13569,7 @@ SLiteral_Run2:	lda RStack+1,x	; tmp1= RTS addr
 
 
  WordHeader '."',CO+IM+NN ; ( "string" -- )  Print string in compiled word
-  ; ## ".""  auto	 ANS core ext
-  ; https://forth-standard.org/standard/core/Dotq
+  ; ## auto  https://forth-standard.org/standard/core/Dotq
   ; Compile string that is printed during run time. ANS Forth wants
   ; this to be compile-only, even though everybody and their friend
   ; uses it for everything. We follow the book here, and recommend
@@ -11100,13 +13584,12 @@ Dot_quote:
 
 
 ; WordHeader 'C"',IM+NN ; ( "string" -- )( -- addr )  compile counted string literal
-  ; ## "c""  ???  ANS core ext
-  ; https://forth-standard.org/standard/core/Cq
+  ; ## https://forth-standard.org/standard/core/Cq
+; ???
 
 
  WordHeader 'S\"',IM+NN ; ( "string" -- )( -- addr u )  Store string in memory
-  ; ## "s\""  auto  ANS core
-  ; https://forth-standard.org/standard/core/Seq
+  ; ## auto  https://forth-standard.org/standard/core/Seq
   ; Store address and length of string given, returning ( addr u ).
   ; ANS core claims this is compile-only, but the file set expands it
   ; to be interpreted, so it is a state-sensitive word, which in theory
@@ -11118,8 +13601,7 @@ S_Backslash_Quote:
 	WordEnd
 
  WordHeader 'S"',IM+NN ; ( "string" -- )( -- addr u )  Store string in memory
-  ; ## "s""  auto	 ANS core
-  ; https://forth-standard.org/standard/core/Sq
+  ; ## auto  https://forth-standard.org/standard/core/Sq
   ; Store address and length of string given, returning ( addr u ).
   ; ANS core claims this is compile-only, but the file set expands it
   ; to be interpreted, so it is a state-sensitive word, which in theory
@@ -11248,24 +13730,23 @@ _check_esc_chars:
 		cpy #'b'
 		beq _save_character
 
-		lda #AscESC	       ; ESC (ASCII value 27)
+		lda #AscESC	      ; ESC (ASCII value 27)
 		cpy #'e'
 		beq _save_character
 
-		lda #AscFF	       ; FF (ASCII value 12)
+		lda #AscFF	      ; FF (ASCII value 12)
 		cpy #'f'
 		beq _save_character
 
-		lda #AscLF	       ; LF (ASCII value 10)
+		lda #AscLF	      ; LF (ASCII value 10)
 		cpy #'l'
 		beq _save_character
 
-;		lda #AscLF		; newline, impl. dependant, using LF (ASCII values 10)
+	;	lda #AscLF		; newline, impl. dependant, using LF (ASCII values 10)
 		cpy #'n'
 		beq _save_character
 
-		; This one is not like the others because we save two
-		; characters
+		; This one is not like the others because we save two characters
 		cpy #'m'
 		bne +
 		lda #AscCR		; CR/LF pair (ASCII values 13, 10)
@@ -11278,7 +13759,7 @@ _check_esc_chars:
 		cpy #'q'
 		beq _save_character
 
-;		lda #AscDQuote		; Double quote (ASCII value 34)
+	;	lda #AscDQuote		; Double quote (ASCII value 34)
 		cpy #AscDQuote
 		beq _save_character
 
@@ -11386,14 +13867,13 @@ _digit: ; It's 0-9
 
 
  WordHeader "LatestXt",NN ; ( -- xt )  Push most recent xt to the stack
-  ; ## "latestxt"	 auto  Gforth
-  ; http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Anonymous-Definitions.html
+  ; ## auto  http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Anonymous-Definitions.html
 LatestXt:	jsr LatestNt	; ( nt )
 		jmp Name_To_Int	; ( xt )
 	WordEnd
 
  WordHeader "LatestNt",NN ; ( -- nt )  Push most recent nt to the stack
-  ; ## "latestnt"	 auto  Tali Forth
+  ; ## auto  Tali Forth
   ; www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
   ; The Gforth version of this word is called LATEST
 LatestNt:	jsr current_to_dp
@@ -11435,8 +13915,7 @@ dp_to_current: ; wordlists[current] = dp
 
 
  WordHeader "Parse-Name",NN ; ( "name" -- addr u )  Get a whitespaced delimited string from the input 
-  ; ## "parse-name"  auto	 ANS core ext
-  ; https://forth-standard.org/standard/core/PARSE-NAME
+  ; ## auto  https://forth-standard.org/standard/core/PARSE-NAME
   ; Find next word in input string, skipping leading whitespace. This is
   ; a special form of PARSE and drops through to that word. See PARSE
   ; for more detail. We use this word internally for the interpreter
@@ -11505,8 +13984,7 @@ _empty:		lda #$100+err_UndefinedWord	; complain & abort
 
 
  WordHeader "Parse",NN ; ( "name" c -- addr u )  Get a delimited string from the input
-  ; ## "parse"  tested  ANS core ext
-  ; https://forth-standard.org/standard/core/PARSE
+  ; ## tested  https://forth-standard.org/standard/core/PARSE
   ; Find word in input string delimited by character given. Do not
   ; skip leading delimiters -- this is the main difference to PARSE-NAME.
   ; PARSE and PARSE-NAME replace WORD in modern systems. ANS discussion
@@ -11618,9 +14096,8 @@ _eol:
 		rts
 
 
- WordHeader "Execute-Parsing",UF+NN ; ( addr u xt -- )  Pass a string to a parsing word
-  ; ## "execute-parsing"	auto  Gforth
-  ; https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/The-Input-Stream.html
+ WordHeader "Execute-Parsing",NN ; ( addr u xt -- )  Pass a string to a parsing word
+  ; ## auto  https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/The-Input-Stream.html
   ; Execute the parsing word defined by the execution token (xt) on the
   ; string as if it were passed on the command line. See the file
   ; tests/tali.fs for examples.
@@ -11654,8 +14131,7 @@ Execute_parsing:
 
 
  WordHeader "Source",NN ; ( -- addr u )  Return location and size of input buffer
-  ; ## "source"  auto  ANS core
-  ; https://forth-standard.org/standard/core/SOURCE
+  ; ## auto  https://forth-standard.org/standard/core/SOURCE
 Source:
 		lda cib+0	; push address
 		ldy cib+1
@@ -11668,8 +14144,7 @@ Source:
 
 
  WordHeader "Source-Id",NN ; ( -- n )  Return source identifier
-  ; ## "source-id"  tested  ANS core ext
-  ; https://forth-standard.org/standard/core/SOURCE-ID
+  ; ## tested  https://forth-standard.org/standard/core/SOURCE-ID
   ; Identify the
   ; input source unless it is a block (s. Conklin & Rather p. 156). This
   ; will give the input source: 0 is keyboard, -1 ($FFFF) is character
@@ -11681,8 +14156,7 @@ Source_Id:	lda insrc+0
 
 
  WordHeader "Exit",AN+CO ; ( -- )  Return control to the calling word immediately
-  ; ## "exit"  auto  ANS core
-  ; https://forth-standard.org/standard/core/EXIT
+  ; ## auto  https://forth-standard.org/standard/core/EXIT
   ; If we're in a loop, we need to UNLOOP first and get everything
   ; we we might have put on the Return Stack off as well.
 Exit:
@@ -11691,8 +14165,7 @@ Exit:
 
 
  WordHeader ";",CO+IM+NN ; ( -- )  End compilation of new word
-  ; ## ";"  auto	ANS core
-  ; https://forth-standard.org/standard/core/Semi
+  ; ## auto  https://forth-standard.org/standard/core/Semi
   ; End the compilation of a new word into the Dictionary.
   ;
   ; When we
@@ -11724,7 +14197,7 @@ _colonword:
 		; See if word already in Dictionary.
 		; (STATUS bit 7 will be high as Header_Build already
 		;  checked for us.)
-		bit status
+	;	bit status
 		bpl _new_word	; Bit 7 is clear = new word
 					; This word is already in the Dictionary
 
@@ -11733,8 +14206,7 @@ _colonword:
 		; word to the Dictionary yet
 		lda WorkWord+0		; push our nt
 		ldy WorkWord+1
-		jsr PushYA
-		jsr Name_To_String	; get our name string
+		jsr Name_To_String_YA	; get our name string
 
 		lda #<str_redefined	; string "redefined"
 		ldy #>str_redefined
@@ -11797,8 +14269,7 @@ _short:		tya			; fill in length in header
 
 
  WordHeader ":",NN ; ( "name" -- )  Start compilation of a new word, with word header
-  ; ## ":"  auto	ANS core
-  ; https://forth-standard.org/standard/core/Colon
+  ; ## auto  https://forth-standard.org/standard/core/Colon
 Colon:
 		jsr Right_Bracket	; switch to compile state
 
@@ -11816,8 +14287,7 @@ Colon:
 
 
  WordHeader ":NoName",NN ; ( -- )  Start compilation of a new word, no word header
-  ; ## ":NONAME"	auto  ANS core
-  ; https://forth-standard.org/standard/core/ColonNONAME
+  ; ## auto  https://forth-standard.org/standard/core/ColonNONAME
   ; Compile a word with no header.
   ;  ";" will put its xt on the stack.
 Colon_NoName:
@@ -11839,8 +14309,7 @@ Colon_NoName:
 
 
  WordHeader "'",NN ; ( "name" -- xt )  Return a word's execution token (xt)
-  ; ## "'"  auto	ANS core
-  ; https://forth-standard.org/standard/core/Tick
+  ; ## auto  https://forth-standard.org/standard/core/Tick
 Tick:		jsr Tick_Nt
 		jmp Name_To_Int	; ( nt -- xt )
 	WordEnd
@@ -11851,15 +14320,14 @@ Tick_Nt:	jsr parse_name_check	; ( -- addr u )
 
 
  WordHeader "[']",CO+IM+NN ; ( -- )  Store xt of following word during compilation
-  ; ## "[']"  auto  ANS core
-  ; https://forth-standard.org/standard/core/BracketTick
+  ; ## auto  https://forth-standard.org/standard/core/BracketTick
 Bracket_Tick:	jsr Tick
 		jmp Literal
 	WordEnd
 
 
  WordHeader "Find-Name",NN ; ( addr u -- nt|0 )  Get the name token for this name
-  ; ## "find-name"  auto	Gforth
+  ; ## auto	Gforth
   ; www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
   ; Given a string, find the Name Token (nt) of a word or return
   ; zero if the word is not in the dictionary. We use this instead of
@@ -11923,9 +14391,9 @@ swl_prepare: ; ( addr u -- )  prepare for swl_search_wordlist
 		sbc DStack+0,x
 		sta tmp4+0
 
-		ldy #wh_NameLastChar	; tmp3+0= wh_HNL (hash & length)
+		ldy #wh_NameLastChar	; tmp3+0= wh_HashNameLength
 		lda (tmp2),y
-		.cerror wh_HNL_HashMask!=$e0 ; hard coded
+		.cerror wh_HashMask!=$e0 ; hard coded
 		asl a
 		asl a
 		asl a
@@ -12000,7 +14468,7 @@ _char_next:	iny			; to next char
 
 
  WordHeader "Find",NN ; ( caddr -- caddr 0 | xt 1 | xt -1 )  Find word in Dictionary
-  ; ## "find"  auto  ANS core
+  ; ## auto  ANS core
   ; https://forth-standard.org/standard/search/FIND
   ; https://forth-standard.org/standard/core/FIND
   ; Included for backwards compatibility only, because it still
@@ -12038,14 +14506,13 @@ _immediate:	jmp One			; immediate, return ( xt 1 )
 	WordEnd
 
 
- WordHeader "Int>Name",UF+NN ; ( xt -- nt )  Get name token from execution token
-  ; ## "int>name"	 auto  Tali Forth
+ WordHeader "Int>Name",NN ; ( xt -- nt )  Get name token from execution token
+  ; ## auto  Tali Forth
   ; www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
   ; This is called >NAME in Gforth, but we change it to
   ; INT>NAME to match NAME>INT
   ; Also returns nt in tmp1 and sets P.Z .
-Int_To_Name:
-		jsr underflow_1
+Int_To_Name:	jsr underflow_1
 
 		; Unfortunately, to make sure this xt has a header,
 		; we have to walk through all of the wordlists until we find it.
@@ -12098,7 +14565,7 @@ _fail: ; We didn't find it in any of the wordlists.
 
 
  WordHeader "Name>Int",NN ; ( nt -- xt )  Convert Name Token to Execute Token
-  ; ## "name>int"	 tested	 Gforth
+  ; ## tested	 Gforth
   ; See https://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
 Name_To_Int:	jsr PopTmp1
 Name_To_Int_T:	jsr NameToIntTmp
@@ -12140,21 +14607,18 @@ _short:		lda (tmp1),y		; tmp2= xt pointer
 		rts
 
 
- WordHeader "Name>String",UF+NN ; ( nt -- addr u )  Given a name token, return string of word
-  ; ## "name>string"  tested  Gforth
-  ; http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
-Name_To_String:
-		jsr underflow_1
+ WordHeader "Name>String",NN ; ( nt -- addr u )  Given a name token, return string of word
+  ; ## tested  http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Name-token.html
+Name_To_String:	jsr PopYA
+Name_To_String_YA:
+		sta tmp1+0		; tmp1= nt
+		sty tmp1+1
+		jsr PushYA		; ( nt )
 
-		lda DStack+0,x		; tmp1= nt
-		ldy DStack+1,x
-		sta tmp1+0
-		sty tmp1+1		; ( nt )
-
-		ldy #Wh_HashNameLen
+		ldy #Wh_HashNameLen	; A= name length
 		lda (tmp1),y
-		and #wh_HNL_NameLengthMask
-		pha
+		and #wh_NameLengthMask
+		pha			; save string length
 		eor #$ff
 		sec
 		adc #Wh_NameLastChar+1	; calc string start offset
@@ -12165,9 +14629,8 @@ Name_To_String:
 	WordEnd
 
 
- WordHeader ">Body",UF+NN ; ( xt -- addr )  Return a word's Param Field Area (PFA)
-  ; ## ">body"  auto  ANS core
-  ; https://forth-standard.org/standard/core/toBODY
+ WordHeader ">Body",NN ; ( xt -- addr )  Return a word's Param Field Area (PFA)
+  ; ## auto  https://forth-standard.org/standard/core/toBODY
   ; Given a word's execution token (xt), return the address of the
   ; start of that word's parameter field (PFA). This is defined as the
   ; address that HERE would return right after CREATE.
@@ -12177,17 +14640,14 @@ Name_To_String:
   ; We assume the user will only call this on a word with:
   ;   a CFA consisting of a jsr abs
   ;   and the PFA following.
-To_Body:
-		jsr underflow_1
-
-		lda #3		; PFA is after the beginning JSR abs
+To_Body:	lda #3		; PFA is after the beginning JSR abs
 		jmp Plus_A
 	WordEnd
 
+Throw_Stack_07: jmp Throw_Stack
 
  WordHeader "Erase",NN ; ( addr u -- )  Fill memory region with zeros
-  ; ## "erase"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/ERASE
+  ; ## auto  https://forth-standard.org/standard/core/ERASE
   ; Note that ERASE works with "address" units (bytes), not cells.
 Erase:		; FILL will check for underflow
 		jsr Zero
@@ -12195,21 +14655,18 @@ Erase:		; FILL will check for underflow
 	WordEnd
 
  WordHeader "Blank",NN ; ( addr u -- )  Fill memory region with spaces
-  ; ## "blank"  auto  ANS string
-  ; https://forth-standard.org/standard/string/BLANK
+  ; ## auto  https://forth-standard.org/standard/string/BLANK
 Blank:		; Fill will check for underflow.
 		jsr Bl
 		jmp Fill
 	WordEnd
 
- WordHeader "Fill",UF+NN ; ( addr u char -- )  Fill a memory region with a byte
-  ; ## "fill"  auto  ANS core
-  ; https://forth-standard.org/standard/core/FILL
+ WordHeader "Fill",NN ; ( addr u char -- )  Fill a memory region with a byte
+  ; ## auto  https://forth-standard.org/standard/core/FILL
   ; Fill u bytes of memory with char starting at addr.
   ; Note that this works on bytes, not on cells.
   ; It is not defined what happens when we reach the end of the address space
-Fill:
-		jsr underflow_3
+Fill:		DStackCheck 3,Throw_Stack_07
 
 		lda DStack+4,x		; tmp1= address
 		sta tmp1+0
@@ -12238,32 +14695,28 @@ _test2:		dec DStack+3,x		; any more pages?
 
 
  WordHeader "Variable",NN ; ( "name" -- )  Define a variable
-  ; ## "variable"	 auto  ANS core
-  ; https://forth-standard.org/standard/core/VARIABLE
+  ; ## auto  https://forth-standard.org/standard/core/VARIABLE
   ; There are various Forth definitions for this word, such as
   ; `CREATE 1 CELLS ALLOT`  or  `CREATE 0 ,`  We use a variant of the
   ; second one so the variable is initialized to zero
 Variable:	jsr Create		; compile word header & push PFA
 
-		lda #0			; allot & initialize the variable's data
+Z_Comma:	lda #0			; allot & initialize the variable's data
 		tay
 		jmp Comma_YA
 	WordEnd
 
  WordHeader "2Variable",NN ; ( "name" -- )  Create a double word variable
-  ; ## "2variable"  auto	ANS double
-  ; https://forth-standard.org/standard/double/TwoVARIABLE
+  ; ## auto  https://forth-standard.org/standard/double/TwoVARIABLE
   ; The variable is initialized to zero.
 Two_variable:	jsr Variable		; compile word header & push PFA & 1st cell of data
-		jmp Comma_YA		; alloc & init 2nd cell of data
+		jmp Z_Comma		; alloc & init 2nd cell of data
 	WordEnd
 
 
  WordHeader "Constant",UF+NN ; ( n "name" -- )  Define a constant
-  ; ## "constant"	 auto  ANS core
-  ; https://forth-standard.org/standard/core/CONSTANT
-Constant:
-		jsr underflow_1
+  ; ## auto  https://forth-standard.org/standard/core/CONSTANT
+Constant:	jsr underflow_1
 
 		jsr Header_Comma	; compile word header
 
@@ -12273,26 +14726,25 @@ Constant:
 	WordEnd
 
 
- WordHeader "2Constant",UF+NN ; (C: d "name" -- ) ( -- d )  Create a double word constant
-  ; ## "2constant"  auto	ANS double
-  ; https://forth-standard.org/standard/double/TwoCONSTANT
+ WordHeader "2Constant",NN ; (C: d "name" -- ) ( -- d )  Create a double word constant
+  ; ## auto  https://forth-standard.org/standard/double/TwoCONSTANT
 Two_constant:
-		jsr underflow_2
-
+  .if 1
+		jmp TwoValue
+  .else
 		jsr Header_Comma	; compile word header
 		jsr Swap
 		jsr Literal		; compile push lo cell
-		jsr LitCompile		; compile push hi cell, YA=exit routine
+		jsr LitCompile		; compile push hi cell, return YA=exit routine
 		jsr Jmp_Comma_NT_YA	; compile JMP from above
 		jmp adjust_z		; fix word length
+  .endif
 	WordEnd
 
 
- WordHeader "Value",UF+NN ; ( n "name" -- )  Define a value word
-  ; ## "value"  auto  ANS core
-  ; https://forth-standard.org/standard/core/VALUE
-Value:
-		jsr underflow_1
+ WordHeader "Value",NN ; ( n "name" -- )  Define a value word
+  ; ## auto  https://forth-standard.org/standard/core/VALUE
+Value:		jsr underflow_1
 
 		jsr Header_Comma	; compile word header
 
@@ -12306,13 +14758,9 @@ Value:
 	WordEnd
 
 
- WordHeader "2Value",UF+NN ; ( d "name" -- )  Define a 2Value word
-  ; ## "2value"  auto  ANS double-number
-  ; https://forth-standard.org/standard/double/TwoVALUE
-TwoValue:
-		jsr underflow_2
-
-		jsr Header_Comma	; compile word header
+ WordHeader "2Value",NN ; ( d "name" -- )  Define a 2Value word
+  ; ## auto  https://forth-standard.org/standard/double/TwoVALUE
+TwoValue:	jsr Header_Comma	; compile word header
 
 		lda #<TwoValue_Runtime	; compile JSR TValue_Runtime
 		ldy #>TwoValue_Runtime
@@ -12333,13 +14781,12 @@ TwoValue_Runtime:
 
 
  WordHeader "To",NN+IM ; ( n "name" -- ) or ( "name")  Gives a new value to a VALUE or 2VALUE or FVALUE
-  ; ## "to"  auto	 ANS core ext
-  ; https://forth-standard.org/standard/core/TO
+  ; ## auto  https://forth-standard.org/standard/core/TO
   ;
-  ; Don't use this to redefine a CONSTANT - it may fail and is a no-no.
+  ; Don't use this to redefine a CONSTANT .
   ;
   ; Many variations:
-  ;	A: VALUE or 2VALUE or FVALUE
+  ;	A: VALUE or 2VALUE or FVALUE or EVALUE
   ;	B: interpreting or compiling.
 To:
 		; At this point, we don't know if we are interpreted or
@@ -12425,7 +14872,7 @@ _2Value_runtime: jmp Two_Store
 _Test3:
   .if "fp" in TALI_OPTIONAL_WORDS
 		cmp #<FValue_runtime
-		bne _Err
+		bne _Test4
 		; we're modifying a FVALUE
 
 		lda state		; check compile state
@@ -12440,24 +14887,43 @@ _Test3:
 _FValue_interpret: jmp FStore
   .endif ; fp
 
+_Test4:
+  .if "fpe2" in TALI_OPTIONAL_WORDS
+		cmp #<EValue_runtime
+		bne _Err
+		; we're modifying a EVALUE
+
+		lda state		; check compile state
+		beq _EValue_interpret
+
+		; compile code to modify a EVALUE
+		jsr ldya_immed_comma	; compile LDY #; LDA #  of xt+3
+		lda #<EStore_YA
+		ldy #>EStore_YA
+		jmp Jsr_Comma_YA	; compile JSR EStore_YA; return
+
+_EValue_interpret: jmp EStore
+  .endif ; fpe2
+
 _Err:		lda #$100+err_InvalidName ; unrecognized type.
 		jsr ThrowA
 	WordEnd
 
 
  WordHeader "DMax",NN ; ( d1 d2 -- d )  return highest, signed
-  ; ANS double
   ; https://forth-standard.org/standard/double/DMAX
 DMax:		lda #$80
 		bne DMin3
 	WordEnd
 
+Throw_Stack_23: jmp Throw_Stack
+
  WordHeader "DMin",NN ; ( d1 d2 -- d )  return lowest, signed
-  ; ANS double
   ; https://forth-standard.org/standard/double/DMIN
 DMin:		lda #0
 DMin3:		sta tmp2	; save sign correction
-		jsr underflow_4
+
+		DStackCheck 4,Throw_Stack_23
 
 		lda DStack+2,x	; compare
 		cmp DStack+6,x
@@ -12475,8 +14941,8 @@ DMin3:		sta tmp2	; save sign correction
 	WordEnd
 
 
- WordHeader "2Nip",UF+NN ; ( db da -- da ) "Delete NOS, double"
-TwoNip:		jsr underflow_4
+ WordHeader "2Nip",NN ; ( db da -- da ) "Delete NOS, double"
+TwoNip:		DStackCheck 4,Throw_Stack_25
 
 TwoNip_NoUf:	lda DStack+0,x	; copy dTOS to dNOS
 		sta DStack+4,x
@@ -12490,11 +14956,9 @@ TwoNip_NoUf:	lda DStack+0,x	; copy dTOS to dNOS
 	WordEnd
 
 
- WordHeader "S>D",UF ; ( n -- d )  Convert single cell number to double cell
-  ; ## "s>d"  auto  ANS core
-  ; https://forth-standard.org/standard/core/StoD
-S_To_D:
-		jsr underflow_1
+ WordHeader "S>D",NN ; ( n -- d )  Convert single cell number to double cell
+  ; ## auto  https://forth-standard.org/standard/core/StoD
+S_To_D:		DStackCheck 1,Throw_Stack_25
 
 		ldy #0			; assume positive
 		lda DStack+1,x		; test n
@@ -12509,13 +14973,11 @@ S_To_D:
 		rts
 
 
- WordHeader "D>S",UF ; ( d -- n )  Convert a double number to single
-  ; ## "d>s"  auto  ANS double
-  ; https://forth-standard.org/standard/double/DtoS
+ WordHeader "D>S",NN ; ( d -- n )  Convert a double number to single
+  ; ## auto  https://forth-standard.org/standard/double/DtoS
   ; Though this is basically just DROP, we keep it
   ; separate so we can test for underflow
-D_To_S:
-		jsr underflow_2
+D_To_S:		DStackCheck 2,Throw_Stack_25
 
 		inx		; Drop hi cell
 		inx
@@ -12523,11 +14985,10 @@ D_To_S:
 		rts
 
 
- WordHeader "D-",UF ; ( d1 d2 -- d )  Subtract two double-celled numbers
-  ; ## "d-"  auto	 ANS double
-  ; https://forth-standard.org/standard/double/DMinus
+ WordHeader "D-",NN ; ( d1 d2 -- d )  Subtract two double-celled numbers
+  ; ## auto  https://forth-standard.org/standard/double/DMinus
 D_Minus:
-		jsr underflow_4 ; two double numbers
+		DStackCheck 4,Throw_Stack_25
 
 		sec
 
@@ -12555,14 +15016,14 @@ D_Minus:
 	WordEnd
 		rts
 
+Throw_Stack_25: jmp Throw_Stack
 
- WordHeader "D+",UF ; ( d1 d2 -- d )  Add two double-celled numbers
-  ; ## "d+"  auto	 ANS double
-  ; https://forth-standard.org/standard/double/DPlus
+ WordHeader "D+",NN ; ( d1 d2 -- d )  Add two double-celled numbers
+  ; ## auto  https://forth-standard.org/standard/double/DPlus
 D_Plus:
-		jsr underflow_4 ; two double numbers
+		DStackCheck 4,Throw_Stack_25; two double numbers
 
-		clc
+	;	clc
 		lda DStack+2,x	; LSB of lower word
 		adc DStack+6,x
 		sta DStack+6,x
@@ -12588,8 +15049,8 @@ D_Plus:
 		rts
 
 
- WordHeader "D1+",UF ; ( d1 -- d2 )  increment a double
-D1Plus:		jsr underflow_2
+ WordHeader "D1+",NN ; ( d1 -- d2 )  increment a double
+D1Plus:		DStackCheck 4,Throw_Stack_25; two double numbers
 
 		inc DStack+2,x
 		bne +
@@ -12603,8 +15064,8 @@ D1Plus:		jsr underflow_2
 		rts
 
 
- WordHeader "D1-",UF ; ( d1 -- d2 )  Decrement a double
-D1Minus:	jsr underflow_2
+ WordHeader "D1-",NN ; ( d1 -- d2 )  Decrement a double
+D1Minus:	DStackCheck 4,Throw_Stack_25; two double numbers
 
 		lda DStack+2,x
 		bne _1
@@ -12620,16 +15081,17 @@ _1:		dec DStack+2,x
 		rts
 
 
- WordHeader "Allot",UF+NN ; ( n -- )  Reserve or release memory
-  ; ## "allot"  auto  ANS core
-  ; https://forth-standard.org/standard/core/ALLOT
+Allot_ZA:	jsr PushZA
+		jmp Allot
+
+ WordHeader "Allot",NN ; ( n -- )  Reserve or release memory
+  ; ## auto  https://forth-standard.org/standard/core/ALLOT
   ; Reserve a certain number of bytes (not cells) or release them.
   ; If n = 0, do nothing. If n is negative, release n bytes, but only
   ; to the beginning of the Dictionary. If n is positive (the most
   ; common case), reserve n bytes, but not past the end of the
   ; Dictionary. See http://forth-standard.org/standard/core/ALLOT
-Allot:
-		jsr underflow_1
+Allot:		DStackCheck 1,Throw_Stack_25
 
 		clc			; adjust cp
 		lda DStack+0,x
@@ -12780,8 +15242,8 @@ _process_name:
 		jsr Here
 		jsr Swap
 		jsr CMove
-		jsr Dup			;   save length
-		jsr Allot
+		lda DStack+0,x		;   save length
+		jsr Allot_ZA
 
 		sec
 		lda cp+0		; WorkWord= nt
@@ -12793,7 +15255,7 @@ _process_name:
 
 		ldy #wh_NameLastChar
 		lda (WorkWord),y
-		.cerror wh_HNL_HashMask!=$e0 ; hard coded
+		.cerror wh_HashMask!=$e0 ; hard coded
 		asl a
 		asl a
 		asl a
@@ -12836,8 +15298,7 @@ _LinkShort:	tya			; compile wh_LinkNt offset byte
 
 
  WordHeader "Create",NN ; ( "name" -- )  Create Dictionary entry for 'name'
-  ; ## "create"  auto  ANS core
-  ; https://forth-standard.org/standard/core/CREATE
+  ; ## "create"  https://forth-standard.org/standard/core/CREATE
 Create:
 		jsr Header_Comma	; compile word header
 
@@ -12848,11 +15309,10 @@ Create:
 		jmp adjust_z
 	WordEnd
 
-
 DoVar:	;  Push the address of the PFA onto the stack.
+	; This is the default routine installed with CREATE.
 	; This is called with JSR so we can pick up the address
 	; of the PFA off the 6502's stack.
-	; This is the default routine installed with CREATE.
 		pla		; Pull the return address off the machine's stack
 		clc		;   +1 because of the way the JSR works
 		adc #1
@@ -12868,8 +15328,7 @@ DoVar:	;  Push the address of the PFA onto the stack.
 
 
  WordHeader "Does>",CO+IM+NN ; ( -- )  Add payload when defining new words
-  ; ## "does>"  auto  ANS core
-  ; https://forth-standard.org/standard/core/DOES
+  ; ## auto  https://forth-standard.org/standard/core/DOES
   ; Create the payload for defining new defining words. See
   ; http://www.bradrodriguez.com/papers/moving3.htm and
   ; the Developer Guide in the manual for a discussion of
@@ -12942,30 +15401,30 @@ _DoDoes: ; Execute the runtime portion of DOES>.
 		jmp PushAY
 
 
- WordHeader "Unused",0 ; ( -- u )  Return size of space available to Dictionary
-  ; ## "unused"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/UNUSED
+ WordHeader "CpEnd",NN ; ( -- addr )  Return end of dictionary space
+		lda #<cp_end
+		ldy #>cp_end
+		jmp PushYA
+
+ WordHeader "Unused",NN ; ( -- u )  Return size of space available to Dictionary
+  ; ## auto  https://forth-standard.org/standard/core/UNUSED
   ; UNUSED only includes dictionary space.
 Unused:
 _last = cp_end-2*padoffset
-		dex
-		dex
 		sec
 		lda #<_last
 		sbc cp+0
-		sta DStack+0,x
+		tay
 		lda #>_last
 		sbc cp+1
-		sta DStack+1,x
+		jmp PushAY
 	WordEnd
-		rts
 
 
  WordHeader "Depth",NN ; ( -- u )  Get number of cells (not bytes) used by stack
-  ; ## "depth"  auto  ANS core
-  ; https://forth-standard.org/standard/core/DEPTH
+  ; ## auto  https://forth-standard.org/standard/core/DEPTH
 Depth:
-		lda #DStack0	; A= DStack0 - X
+		lda #DDim*2	; A= DDim*2 - X
 		stx tmp4
 		sec
 		sbc tmp4
@@ -12977,8 +15436,7 @@ Depth:
 
 
  WordHeader "Key",NN ; ( -- char )  Get one character from the input
-  ; ## "key"  tested  ANS core
-  ; https://forth-standard.org/standard/core/KEY
+  ; ## tested  https://forth-standard.org/standard/core/KEY
   ; Get a single character of input from the vectored
   ; input without echoing.
 Key:		jsr key_a		; returns char in A
@@ -13001,8 +15459,7 @@ KeyQ_A:		jmp (HaveKey)
 
 
  WordHeader "Refill",NN ; ( -- f )  Refill the input buffer
-  ; ## "refill"  tested  ANS core ext
-  ; https://forth-standard.org/standard/block/REFILL
+  ; ## tested  https://forth-standard.org/standard/block/REFILL
   ; https://forth-standard.org/standard/core/REFILL
   ; Attempt to fill the input buffer from the input source, returning
   ; a true flag if successful. When the input source is the user input
@@ -13076,15 +15533,15 @@ _src_not_string:
 	WordEnd
 
 
- WordHeader "Accept",UF+NN ; ( addr n -- n )  Receive a string of characters from the keyboard
-  ; ## "accept"  auto  ANS core
-  ; https://forth-standard.org/standard/core/ACCEPT
+Throw_Stack_06: jmp Throw_Stack
+
+ WordHeader "Accept",NN ; ( addr n -- n )  Receive a string of characters from the keyboard
+  ; ## auto  https://forth-standard.org/standard/core/ACCEPT
   ; Receive a string of at most n1 characters, placing them at
   ; addr. Return the actual number of characters as n2. Characters
   ; are echoed as they are received. ACCEPT is called by REFILL in
   ; modern Forths.
-Accept:
-		jsr underflow_2
+Accept:		DStackCheck 2,Throw_Stack_06
 
 		lda DStack+0,x		; Abort if we were asked to receive 0 chars
 		ora DStack+1,x
@@ -13382,7 +15839,7 @@ accept_total_recall:
 
 
  WordHeader "Input>R",NN|ST ; ( -- ) ( R: -- n1 n2 n3 n4 )  Save input state to the Return Stack
-  ; ## "input>r"	tested	Tali Forth
+  ; ## tested	Tali Forth
   ; Save the current input state as defined by insrc, cib, ciblen, and
   ; toin to the Return Stack. Used by EVALUATE.
   ; Like https://forth-standard.org/standard/core/SAVE-INPUT
@@ -13429,7 +15886,7 @@ _loop:		lda InSrc,y	; insrc+7 is toin+1
 
 
  WordHeader "R>Input",ST ; ( -- ) ( R: n1 n2 n3 n4 -- )  Restore input state from Return Stack
-  ; ## "r>input"	tested	Tali Forth
+  ; ## tested	Tali Forth
   ; Restore the current input state as defined by insrc, cib, ciblen,
   ; and toin from the Return Stack.
   ;
@@ -13514,14 +15971,12 @@ _ok:		plp		; apply sign
 	WordEnd
 
 
- WordHeader "Bounds",UF ; ( addr u -- addr+u addr )  Prepare address for looping
-  ; ## "bounds"  auto  Gforth
-  ; http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Memory-Blocks.html
+ WordHeader "Bounds",NN ; ( addr u -- addr+u addr )  Prepare address for looping
+  ; ## auto  http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Memory-Blocks.html
   ; Given a string, return the correct Data Stack parameters for
   ; a DO/LOOP loop over its characters. This is realized as
   ; OVER + SWAP in Forth, but we do it a lot faster in assembler
-Bounds:
-		jsr underflow_2
+Bounds:		DStackCheck 2,Throw_Stack_22
 
 		clc
 		lda DStack+2,x		; LSB addr
@@ -13538,14 +15993,12 @@ Bounds:
 	WordEnd
 		rts
 
+Throw_Stack_22: jmp Throw_Stack
 
- WordHeader "Spaces",UF+NN ; ( n -- )  Print a number of spaces
-  ; ## "spaces"  auto  ANS core
-  ; https://forth-standard.org/standard/core/SPACES
+ WordHeader "Spaces",NN ; ( n -- )  Print a number of spaces
+  ; ## auto  https://forth-standard.org/standard/core/SPACES
   ; ANS says this word takes a signed value but prints no spaces for negative values.
- Spaces:
-		jsr underflow_1
-
+Spaces:		DStackCheck 1,Throw_Stack_22
 		jmp _test
 
 _loop:
@@ -13560,12 +16013,10 @@ _test:		dec DStack+0,x		; decrement & test
 		rts
 
 
- WordHeader "-Trailing",UF+NN ; ( addr u1 -- addr u2 )  Remove trailing spaces
-  ; ## "-trailing"  auto	ANS string
-  ; https://forth-standard.org/standard/string/MinusTRAILING
+ WordHeader "-Trailing",NN ; ( addr u1 -- addr u2 )  Remove trailing spaces
+  ; ## auto  https://forth-standard.org/standard/string/MinusTRAILING
   ; Remove trailing spaces
-Minus_trailing:
-		jsr underflow_2
+Minus_trailing:	DStackCheck 2,Throw_Stack_20
 
 		lda DStack+2,x		; tmp1= addr + (u1 & $ff00)
 		sta tmp1+0
@@ -13595,11 +16046,10 @@ _done:		iny			; forward 1 char
 		rts		
 
 
- WordHeader "-Leading",UF+NN ; ( addr1 u1 -- addr2 u2 )  Remove leading spaces
+ WordHeader "-Leading",NN ; ( addr1 u1 -- addr2 u2 )  Remove leading spaces
   ; ## "-leading"	 auto  Tali String
   ; Remove leading whitespace. This is the reverse of -TRAILING
-Minus_leading:
-		jsr underflow_2
+Minus_leading:	DStackCheck 2,Throw_Stack_20
 
 _loop:
 		lda DStack+0,x		; chars left?
@@ -13620,9 +16070,8 @@ _done:
 		rts
 
 
- WordHeader "/String",UF+NN ; ( addr u n -- addr u )  Shorten string by n
-  ; ## "/string"	auto  ANS string
-  ; https://forth-standard.org/standard/string/DivSTRING
+ WordHeader "/String",NN ; ( addr u n -- addr u )  Shorten string by n
+  ; ## auto  https://forth-standard.org/standard/string/DivSTRING
 Slash_String:	DStackCheck 3,Throw_Stack_20
 
 		clc		; addr += n
@@ -13650,24 +16099,20 @@ Slash_String:	DStackCheck 3,Throw_Stack_20
 Throw_Stack_20: jmp Throw_Stack
 
 
- WordHeader "2Drop",UF ; ( n n -- )  Drop TOS and NOS
-  ; ## "2drop"  auto  ANS core
-  ; https://forth-standard.org/standard/core/TwoDROP
-Two_drop:
-		jsr underflow_2
+ WordHeader "2Drop",NN ; ( n n -- )  Drop TOS and NOS
+  ; ## auto  https://forth-standard.org/standard/core/TwoDROP
+Two_drop:	DStackCheck 2,Throw_Stack_20
 
 		inx
 		inx
 		inx
 		inx
-
 	WordEnd
 		rts
 
 
- WordHeader "2Swap",NN ; ( n1 n2 n3 n4 -- n3 n4 n1 n1 )  Exchange two double words
-  ; ## "2swap"  auto  ANS core
-  ; https://forth-standard.org/standard/core/TwoSWAP
+ WordHeader "2Swap",NN ; ( n1 n2 n3 n4 -- n3 n4 n1 n2 )  Exchange two double words
+  ; ## auto  https://forth-standard.org/standard/core/TwoSWAP
 Two_Swap:	DStackCheck 4,Throw_Stack_20
 
 		stx tmp1
@@ -13686,9 +16131,8 @@ _loop:		inx
 		rts
 
 
- WordHeader "2Over",UF+NN ; ( d1 d2 -- d1 d2 d1 )  Copy double word NOS to TOS
-  ; ## "2over"  auto  ANS core
-  ; https://forth-standard.org/standard/core/TwoOVER
+ WordHeader "2Over",NN ; ( d1 d2 -- d1 d2 d1 )  Copy double word NOS to TOS
+  ; ## auto  https://forth-standard.org/standard/core/TwoOVER
 Two_over:	DStackCheck 4,Throw_Stack_20
 
 		ldy #4
@@ -13701,17 +16145,14 @@ _loop:		dex
 		rts
 
 
- WordHeader "2!",UF ; ( n1 n2 addr -- )  Store two numbers at given address
-  ; ## "2!"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/TwoStore
+ WordHeader "2!",NN ; ( n1 n2 addr -- )  Store two numbers at given address
+  ; ## auto  https://forth-standard.org/standard/core/TwoStore
   ; Stores so n2 goes to addr and n1 to the next consecutive cell.
-Two_Store:
-		jsr underflow_3
-
-		jsr PopYA
+Two_Store:	jsr PopYA
 Two_Store_YA:	sta tmp1+0	; save addr
 		sty tmp1+1
 
+		DStackCheck 2,Throw_Stack_20
 		lda DStack+0,x	; copy MSB
 		ldy #0
 		sta (tmp1),y
@@ -13734,8 +16175,7 @@ Two_Store_YA:	sta tmp1+0	; save addr
 
 
  WordHeader "2@",0 ; ( addr -- n1 n2 )  Fetch the cell pair n1 n2 stored at addr
-  ; ## "2@"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/TwoFetch
+  ; ## auto  https://forth-standard.org/standard/core/TwoFetch
   ; Note n2 stored at addr and n1 in the next cell -- in our case,
   ; the next two bytes. This is equvalent to  `DUP CELL+ @ SWAP @`
 Two_fetch:	jsr PopYA
@@ -13809,8 +16249,7 @@ DStoreYA:	sta tmp1+0	; save addr
 
 
  WordHeader "2R@",CO+NN ; ( -- n n )  Copy top two entries from Return Stack
-  ; ## "2r@"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/TwoRFetch
+  ; ## auto  https://forth-standard.org/standard/core/TwoRFetch
   ;
   ; This is R> R> 2DUP >R >R SWAP but we can do it a lot faster in
   ; assembler. We use trickery to access the elements on the Return
@@ -13844,8 +16283,7 @@ Two_r_fetch:
 
 
  WordHeader "2R>",CO+ST ; ( -- n1 n2 ) (R: n1 n2 -- )  Move two cells from Return Stack
-  ; ## "2r>"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/TwoRfrom
+  ; ## auto  https://forth-standard.org/standard/core/TwoRfrom
   ; Pull top two entries from Return Stack.
   ;
   ; Is the same as
@@ -13892,8 +16330,7 @@ Two_r_from:
 
 
  WordHeader "2>R",CO+UF+ST ; ( n1 n2 -- )(R: -- n1 n2)  Move two cells to Return Stack
-  ; ## "2>r"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/TwotoR
+  ; ## auto  https://forth-standard.org/standard/core/TwotoR
   ; Push top two entries to Return Stack.
   ;
   ; The same as SWAP >R >R
@@ -13937,10 +16374,8 @@ Two_to_r:
 
 
  WordHeader "Invert",UF ; ( n1 -- n2 )  Bitwise complement
-  ; ## "invert"  auto  ANS core
-  ; https://forth-standard.org/standard/core/INVERT
-Invert:
-		jsr underflow_1
+  ; ## auto  https://forth-standard.org/standard/core/INVERT
+Invert:		DStackCheck 1,Throw_Stack_17
 
 		lda #$FF
 		eor DStack+0,x	; LSB
@@ -13953,11 +16388,9 @@ Invert:
 		rts
 
 
- WordHeader "Negate",UF ; ( n1 -- n2 )  Two's complement
-  ; ## "negate"  auto  ANS core
-  ; https://forth-standard.org/standard/core/NEGATE
-Negate:
-		jsr underflow_1
+ WordHeader "Negate",NN ; ( n1 -- n2 )  Two's complement
+  ; ## auto  https://forth-standard.org/standard/core/NEGATE
+Negate:		DStackCheck 1,Throw_Stack_17
 
 Negate3:	sec
 Negate4:	lda #0
@@ -13971,8 +16404,7 @@ Negate4:	lda #0
 
 
  WordHeader "Abs",NN ; ( n -- u )  Return absolute value of a number
-  ; ## "abs"  auto  ANS core
-  ; https://forth-standard.org/standard/core/ABS
+  ; ## auto  https://forth-standard.org/standard/core/ABS
 Abs:		DStackCheck 1,Throw_Stack_17
 
 		lda DStack+1,x	; n negative?
@@ -13984,8 +16416,7 @@ Throw_Stack_17: jmp Throw_Stack
 
 
  WordHeader "DNegate",NN ; ( d -- d )  2s complement double cell number
-  ; ## "dnegate"	auto  ANS double
-  ; https://forth-standard.org/standard/double/DNEGATE
+  ; ## auto  https://forth-standard.org/standard/double/DNEGATE
 DNegate:	DStackCheck 2,Throw_Stack_17 ; double number
 
 DNegate3:	sec
@@ -14001,8 +16432,7 @@ DNegate3:	sec
 
 
  WordHeader "DAbs",NN ; ( d -- d )  Return the absolute value of a double
-  ; ## "dabs"  auto  ANS double
-  ; https://forth-standard.org/standard/double/DABS
+  ; ## auto  https://forth-standard.org/standard/double/DABS
 DAbs:		DStackCheck 2,Throw_Stack_17 ; double number
 
 		lda DStack+1,x	; d negative?
@@ -14169,8 +16599,7 @@ Throw_Stack_08: jmp Throw_Stack
 
 
 WordHeader "=",NN ; ( n1 n2 -- f )  Return n1 == n2
-  ; ## "="  auto	ANS core
-  ; https://forth-standard.org/standard/core/Equal
+  ; ## auto  https://forth-standard.org/standard/core/Equal
 Equal:		lda DStack+0,x		; LSB
 		cmp DStack+2,x
 		bne False1
@@ -14188,8 +16617,7 @@ Return1:	DStackCheck 2,Throw_Stack_08
 	WordEnd
 
  WordHeader "<>",NN ; ( n1 n2 -- f )  return n1 != n2
-  ; ## "<>"  auto	 ANS core ext
-  ; https://forth-standard.org/standard/core/ne
+  ; ## auto  https://forth-standard.org/standard/core/ne
 Not_Equals:	lda DStack+0,x		; LSB
 		cmp DStack+2,x
 		bne True1
@@ -14203,8 +16631,7 @@ False1:		lda #0		; return FALSE
 
 
  WordHeader "<",NN ; ( n1 n2 -- f )  return n1 < n2
-  ; ## "<"  auto	ANS core
-  ; https://forth-standard.org/standard/core/less
+  ; ## auto  https://forth-standard.org/standard/core/less
 Less_Than:	lda DStack+2,x	; compare
 		cmp DStack+0,x
 		lda DStack+3,x
@@ -14221,8 +16648,7 @@ Ge:		jsr Less_Than
 	WordEnd
 
  WordHeader "U<",NN ; ( u1 u2 -- f )  Return u1 < u2 (unsigned)
-  ; ## "u<"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/Uless
+  ; ## auto  https://forth-standard.org/standard/core/Uless
 U_Less_Than:	lda DStack+2,x
 		cmp DStack+0,x
 		lda DStack+3,x
@@ -14232,8 +16658,7 @@ U_Less_Than:	lda DStack+2,x
 	WordEnd
 
  WordHeader "U>",NN ; ( u1 u2 -- f )  return u1 > u2 (unsigned)
-  ; ## "u>"  auto	 ANS core ext
-  ; https://forth-standard.org/standard/core/Umore
+  ; ## auto  https://forth-standard.org/standard/core/Umore
 U_Greater_Than:	lda DStack+0,x
 		cmp DStack+2,x
 		lda DStack+1,x
@@ -14244,8 +16669,7 @@ U_Greater_Than:	lda DStack+0,x
 
 
  WordHeader ">",NN ; ( n1 n2 -- f )  return n1 > n2
-  ; ## ">"  auto	ANS core
-  ; https://forth-standard.org/standard/core/more
+  ; ## auto  https://forth-standard.org/standard/core/more
 Greater_Than:	lda DStack+0,x	; compare
 		cmp DStack+2,x
 		lda DStack+1,x
@@ -14271,12 +16695,9 @@ ULe:		jsr U_Greater_Than
 		jmp ZEqA
 	WordEnd
 
-Throw_Stack_11: jmp Throw_Stack
-
 
  WordHeader "0=",NN ; ( n -- f )  Return n == 0
-  ; ## "0="  auto	 ANS core
-  ; https://forth-standard.org/standard/core/ZeroEqual
+  ; ## auto  https://forth-standard.org/standard/core/ZeroEqual
 Zero_Equal:	lda DStack+1,x
 ZEq3:		ora DStack+0,x
 		bne False0
@@ -14290,8 +16711,7 @@ ZEqA: ; complement boolean, value in A
 		rts
 
  WordHeader "0<>",NN ; ( n -- f )  Return n != 0
-  ; ## "0<>"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/Zerone
+  ; ## auto  https://forth-standard.org/standard/core/Zerone
 Zero_Unequal:	lda DStack+1,x
 ZNe3:		ora DStack+0,x
 		beq False0
@@ -14304,8 +16724,7 @@ Return0:	sta DStack+0,x
 	WordEnd
 
  WordHeader "0>",NN ; ( n -- f )  Return n > 0
-  ; ## "0>"  auto	 ANS core ext
-  ; https://forth-standard.org/standard/core/Zeromore
+  ; ## auto  https://forth-standard.org/standard/core/Zeromore
 Zero_Greater:	lda DStack+1,x	; MSB
 		bpl ZNe3	; >= 0 ?
 
@@ -14326,8 +16745,7 @@ ZGe:		lda DStack+1,x
 	WordEnd
 
  WordHeader "0<",NN ; ( n -- f )  return n < 0
-  ; ## "0<"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/Zeroless
+  ; ## auto  https://forth-standard.org/standard/core/Zeroless
 Zero_Less:	lda DStack+1,x	; MSB
 		bpl False0
 		bmi True0
@@ -14337,9 +16755,8 @@ Zero_Less:	lda DStack+1,x	; MSB
 Throw_Stack_05: jmp Throw_Stack
 
 
- WordHeader "Min",UF+NN ; ( n1 n2 -- n )  Keep smaller of two signed numbers
-  ; ## "min"  auto  ANS core
-  ; https://forth-standard.org/standard/core/MIN
+ WordHeader "Min",NN ; ( n1 n2 -- n )  Keep smaller of two signed numbers
+  ; ## auto  https://forth-standard.org/standard/core/MIN
   ; See http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
 Min:		DStackCheck 2,Throw_Stack_05
 
@@ -14355,8 +16772,7 @@ Min_3:		bmi Nip_NoUf	; if negative, NOS is larger and needs to be dumped
 		rts
 
  WordHeader "Max",NN ; ( n1 n2 -- n )  Keep larger of two signed numbers
-  ; ## "max"  auto  ANS core
-  ; https://forth-standard.org/standard/core/MAX
+  ; ## auto  https://forth-standard.org/standard/core/MAX
   ; See also
   ;   http://6502.org/tutorials/compare_instructions.html and
   ;   http://www.righto.com/2012/12/the-6502-overflow-flag-explained.html
@@ -14374,11 +16790,9 @@ Max_3:		bpl Nip_NoUf	; if negative, NOS is larger and needs to be kept
 		rts
 
 
- WordHeader "Nip",UF ; ( n1 n2 -- n2 )  Delete NOS
-  ; ## "nip"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/NIP
-Nip:
-		jsr underflow_2
+ WordHeader "Nip",NN ; ( n1 n2 -- n2 )  Delete NOS
+  ; ## auto  https://forth-standard.org/standard/core/NIP
+Nip:		DStackCheck 2,Throw_Stack_05
 
 Nip_NoUf:	lda DStack+0,x	; PopYA
 		ldy DStack+1,x
@@ -14391,8 +16805,7 @@ Nip_NoUf:	lda DStack+0,x	; PopYA
 
 
  WordHeader "Pick",0 ; ( n n u -- n n n )  Move element u of the stack to TOS
-  ; ## "pick"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/PICK
+  ; ## auto  https://forth-standard.org/standard/core/PICK
   ; Take the u-th element out of the stack and put it on TOS,
   ; overwriting the original TOS. 0 PICK is equivalent to DUP, 1 PICK to
   ; OVER. Note that using PICK is considered poor coding form. Also note
@@ -14417,8 +16830,7 @@ Pick:
 
 
  WordHeader "Char",NN ; ( "c" -- u )  Convert character to ASCII value
-  ; ## "char"  auto  ANS core
-  ; https://forth-standard.org/standard/core/CHAR
+  ; ## auto  https://forth-standard.org/standard/core/CHAR
 Char:
 		; get character from string, returns ( addr u )
 		jsr parse_name_check
@@ -14430,8 +16842,7 @@ Char:
 
 
  WordHeader "[Char]",CO+IM+NN ; ( "c" -- )  Compile character literal
-  ; ## "[char]"  auto  ANS core
-  ; https://forth-standard.org/standard/core/BracketCHAR
+  ; ## auto  https://forth-standard.org/standard/core/BracketCHAR
   ; Compile the ASCII value of a character as a literal. This is an
   ; immediate, compile-only word.
   ;
@@ -14444,15 +16855,13 @@ Bracket_Char:	jsr Char
 
 
  WordHeader "Char+",NN ; ( addr -- addr+1 )  Add the size of a character unit to address
-  ; ## "char+"  auto  ANS core
-  ; https://forth-standard.org/standard/core/CHARPlus
+  ; ## auto  https://forth-standard.org/standard/core/CHARPlus
 Char_Plus:	jmp One_Plus
 	WordEnd
 
 
  WordHeader "Chars",AN ; ( n -- n )  Number of bytes that n chars need
-  ; ## "chars"  auto  ANS core
-  ; https://forth-standard.org/standard/core/CHARS
+  ; ## auto  https://forth-standard.org/standard/core/CHARS
   ; Return how many address units n chars are.
   ; On 6502, these are equal & this word does nothing.
   ; It is included for compatibility with other Forth versions
@@ -14463,10 +16872,9 @@ Chars:
 		rts
 
 
- WordHeader "Cells",UF ; ( u1 -- u2 )  Convert cells to size in bytes
-  ; ## "cells"  auto  ANS core
-  ; https://forth-standard.org/standard/core/CELLS
-Cells:		jsr underflow_1
+ WordHeader "Cells",NN ; ( u1 -- u2 )  Convert cells to size in bytes
+  ; ## auto  https://forth-standard.org/standard/core/CELLS
+Cells:		DStackCheck 1,Throw_Stack_19
 
 		asl DStack+0,x		; 2*
 		rol DStack+1,x
@@ -14475,16 +16883,13 @@ Cells:		jsr underflow_1
 
 
  WordHeader "Cell+",UF ; ( u -- u )  Add cell size in bytes
-  ; ## "cell+"  auto  ANS core
-  ; https://forth-standard.org/standard/core/CELLPlus
+  ; ## auto  https://forth-standard.org/standard/core/CELLPlus
   ; Add the number of bytes ("address units") that one cell needs.
-  ; Since this is an 8 bit machine with 16 bit cells, we add two bytes.
-Cell_Plus:	jsr underflow_1
-
-Cell_Plus_NoUf:	lda #2		; our cells are 2 bytes
+Cell_Plus:	lda #2		; our cells are 2 bytes
 
 Plus_A: ; ( n A -- n+A ) add unsigned A to TOS
-		clc
+		DStackCheck 1,Throw_Stack_19
+	;	clc
 		adc DStack+0,x
 		sta DStack+0,x
 		bcc +
@@ -14504,18 +16909,16 @@ Nos_Plus_A: ; add unsigned A to NOS
 
 
  WordHeader "Here",NN ; ( -- addr )  Push Compiler Pointer on Data Stack
-  ; ## "here"  auto  ANS core
-  ; https://forth-standard.org/standard/core/HERE
+  ; ## auto  https://forth-standard.org/standard/core/HERE
 Here:		lda cp+0
 		ldy cp+1
 		jmp PushYA
 	WordEnd
 
 
- WordHeader "1-",UF ; ( u -- u-1 )  Decrement TOS
-  ; ## "1-"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/OneMinus
-One_Minus:	jsr underflow_1
+ WordHeader "1-",NN ; ( u -- u-1 )  Decrement TOS
+  ; ## auto  https://forth-standard.org/standard/core/OneMinus
+One_Minus:	DStackCheck 1,Throw_Stack_19
 One_Minus_NoUf:
 		lda DStack+0,x
 		bne +
@@ -14541,11 +16944,9 @@ Minus_A: ; ( n1 A -- n2 ) add negative extended A to TOS
 		dec DStack+1,x
 +		rts
 
-
- WordHeader "1+",UF ; ( u -- u+1 )  Increase TOS by one
-  ; ## "1+"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/OnePlus
-One_Plus:	jsr underflow_1
+ WordHeader "1+",NN ; ( u -- u+1 )  Increase TOS by one
+  ; ## auto  https://forth-standard.org/standard/core/OnePlus
+One_Plus:	DStackCheck 1,Throw_Stack_19
 
 		inc DStack+0,x
 		bne +
@@ -14561,6 +16962,8 @@ NOS_One_Plus: ; ( n1 n2 -- n1+1 n2 )  Increment NOS
 		inc DStack+3,x
 +		rts
 
+
+Throw_Stack_19: jmp Throw_Stack
 
  WordHeader "UM+",0 ; ( d1 u -- d2 )  Return d1 + u  (unsigned u)
 UMPlus:		jsr PopYA
@@ -14589,9 +16992,9 @@ MPlus:		jsr UMPlus
 		rts
 
 
- WordHeader "D2*",UF ; ( d1 -- d2 )  Shift double left 1 bit
+ WordHeader "D2*",NN ; ( d1 -- d2 )  Shift double left 1 bit
   ; https://forth-standard.org/standard/double/DTwoTimes
-D2Star:		jsr underflow_2
+D2Star:		DStackCheck 2,Throw_Stack_19
 
 		asl DStack+2,x
 		rol DStack+3,x
@@ -14600,9 +17003,9 @@ D2Star:		jsr underflow_2
 	WordEnd
 		rts
 
- WordHeader "D2/",UF ; ( d1 -- d2 )  Shift double right 1 bit, signed
+ WordHeader "D2/",NN ; ( d1 -- d2 )  Shift double right 1 bit, signed
   ; https://forth-standard.org/standard/double/DTwoDiv
-D2Slash:	jsr underflow_2
+D2Slash:	DStackCheck 2,Throw_Stack_19
 
 		lda DStack+1,x		; setup for sign-extended shift right
 		asl a
@@ -14613,19 +17016,17 @@ D2SlashU:	ror DStack+1,x
 	WordEnd
 		rts
 
- WordHeader "UD2/",UF+NN ; ( ud1 -- ud2 )  Shift double right 1 bit, unsigned
-DU2Slash:	jsr underflow_2
+ WordHeader "UD2/",NN ; ( ud1 -- ud2 )  Shift double right 1 bit, unsigned
+DU2Slash:	DStackCheck 2,Throw_Stack_19
 
 		clc
 		bcc D2SlashU
 	WordEnd
 
 
- WordHeader "2*",UF ; ( n -- n )  Multiply TOS by two
-  ; ## "2*"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/TwoTimes
-Two_Star:
-		jsr underflow_1
+ WordHeader "2*",NN ; ( n -- n )  Multiply TOS by two
+  ; ## auto  https://forth-standard.org/standard/core/TwoTimes
+Two_Star:	DStackCheck 1,Throw_Stack_19
 
 		asl DStack+0,x
 		rol DStack+1,x
@@ -14633,11 +17034,9 @@ Two_Star:
 		rts
 
 
- WordHeader "2/",UF ; ( n1 -- n )  Divide TOS by two
-  ; ## "2/"  auto	 ANS core
-  ; """https://forth-standard.org/standard/core/TwoDiv"""
-Two_Slash:
-		jsr underflow_1
+ WordHeader "2/",NN ; ( n1 -- n )  Divide TOS by two
+  ; ## auto  https://forth-standard.org/standard/core/TwoDiv
+Two_Slash:	DStackCheck 1,Throw_Stack_19
 
 		lda DStack+1,x		; load sign into carry, for signed shift
 		asl
@@ -14648,8 +17047,7 @@ Two_Slash:
 
 
  WordHeader "U2/",UF ; ( u1 -- u )  Divide TOS by two (unsigned)
-UTwo_Slash:
-		jsr underflow_1
+UTwo_Slash:	DStackCheck 1,Throw_Stack_18
 
 		lsr DStack+1,x
 		ror DStack+0,x
@@ -14675,8 +17073,7 @@ _9:
 
 
  WordHeader "RShift",0 ; ( x u -- x )  Shift TOS to the right
-  ; ## "rshift"  auto  ANS core
-  ; https://forth-standard.org/standard/core/RSHIFT
+  ; ## auto  https://forth-standard.org/standard/core/RSHIFT
 RShift:		jsr PopA2	; pop u, check for 2 params
 RShift_A:	tay		; get shift count
 		beq _done
@@ -14692,8 +17089,7 @@ _done:
 
 
  WordHeader "LShift",0 ; ( x u -- u )  Shift TOS left
-  ; ## "lshift"  auto  ANS core
-  ; https://forth-standard.org/standard/core/LSHIFT
+  ; ## auto  https://forth-standard.org/standard/core/LSHIFT
 LShift:		jsr PopA2	; pop u, check for 2 params
 LShift_A:	tay		; get shift count
 		beq _done
@@ -14708,11 +17104,9 @@ _done:
 		rts
 
 
- WordHeader "And",UF ; ( n1 n2 -- n )  Bitwise AND TOS and NOS
-  ; ## "and"  auto  ANS core
-  ; https://forth-standard.org/standard/core/AND
-And2:
-		jsr underflow_2
+ WordHeader "And",NN ; ( n1 n2 -- n )  Bitwise AND TOS and NOS
+  ; ## auto  https://forth-standard.org/standard/core/AND
+And2:		DStackCheck 2,Throw_Stack_18
 
 		lda DStack+0,x
 		and DStack+2,x
@@ -14728,11 +17122,11 @@ And2:
 		rts
 
 
- WordHeader "Or",UF ; ( n1 n2 -- n )  Bitwise OR TOS and NOS
-  ; ## "or"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/OR
-Or:
-		jsr underflow_2
+Throw_Stack_18: jmp Throw_Stack
+
+ WordHeader "Or",NN ; ( n1 n2 -- n )  Bitwise OR TOS and NOS
+  ; ## auto  https://forth-standard.org/standard/core/OR
+Or:		DStackCheck 2,Throw_Stack_18
 
 		lda DStack+0,x
 		ora DStack+2,x
@@ -14748,11 +17142,9 @@ Or:
 		rts
 
 
- WordHeader "Xor",UF ; ( n1 n2 -- n )  Bitwise XOR TOS and NOS
-  ; ## "xor"  auto  ANS core
-  ; https://forth-standard.org/standard/core/XOR
-Xor:
-		jsr underflow_2
+ WordHeader "Xor",NN ; ( n1 n2 -- n )  Bitwise XOR TOS and NOS
+  ; ## auto  https://forth-standard.org/standard/core/XOR
+Xor:		DStackCheck 2,Throw_Stack_18
 
 		lda DStack+0,x
 		eor DStack+2,x
@@ -14768,11 +17160,9 @@ Xor:
 		rts
 
 
- WordHeader "+",UF ; ( n1 n2 -- n )  Add TOS to NOS
-  ; ## "+"  auto	ANS core
-  ; https://forth-standard.org/standard/core/Plus
-Plus:
-		jsr underflow_2
+ WordHeader "+",NN ; ( n1 n2 -- n )  Add TOS to NOS
+  ; ## auto  https://forth-standard.org/standard/core/Plus
+Plus:		DStackCheck 2,Throw_Stack_18
 
 		clc
 		lda DStack+0,x		; LSB
@@ -14788,11 +17178,9 @@ Plus:
 		rts
 
 
- WordHeader "-",UF ; ( n1 n2 -- n )  Subtract TOS from NOS
-  ; ## "-"  auto	ANS core
-  ; https://forth-standard.org/standard/core/Minus
-Minus:
-		jsr underflow_2
+ WordHeader "-",NN ; ( n1 n2 -- n )  Subtract TOS from NOS
+  ; ## auto  https://forth-standard.org/standard/core/Minus
+Minus:		DStackCheck 2,Throw_Stack_18
 
 		sec
 		lda DStack+2,x	; LSB
@@ -14809,8 +17197,7 @@ Minus:
 
 
  WordHeader ".",NN ; ( n -- )  Print signed single
-  ; ## "."  auto	ANS core
-  ; https://forth-standard.org/standard/core/d
+  ; ## auto  https://forth-standard.org/standard/core/d
 Dot:		lda DStack+1,x		; ( n )	save sign
 		php
 		jsr Abs			; ( u )
@@ -14820,8 +17207,7 @@ Dot:		lda DStack+1,x		; ( n )	save sign
 
 
  WordHeader "D.",NN ; ( d -- )  Print signed double
-  ; ## "d."  tested  ANS double
-  ; http://forth-standard.org/standard/double/Dd
+  ; ## tested  http://forth-standard.org/standard/double/Dd
 D_Dot:		lda DStack+1,x		; save sign
 		php
 		jsr DAbs
@@ -14836,8 +17222,7 @@ fmt_d3:		jsr Less_Number_Sign	; ( ud )	start formatting
 
 
  WordHeader "U.",UF+NN ; ( u -- )  Print TOS as unsigned number
-  ; ## "u."  tested  ANS core
-  ; https://forth-standard.org/standard/core/Ud
+  ; ## tested  https://forth-standard.org/standard/core/Ud
 U_Dot:		jsr underflow_1
 		jsr print_u
 		jmp Space
@@ -14845,7 +17230,7 @@ U_Dot:		jsr underflow_1
 
 
  WordHeader "UD.",UF+NN ; ( ud -- )  Print double as unsigned
-  ; ## "ud."  auto  Tali double
+  ; ## auto  Tali double
 UD_Dot:		jsr underflow_2 ; double number
 		jsr print_ud
 		jmp Space
@@ -14863,8 +17248,7 @@ print_ud: ; ( ud -- )  Print, without trailing space
 
 
  WordHeader "U.R",NN ; ( u u -- )  Print NOS as unsigned number right-justified with TOS width
-  ; ## "u.r"  tested  ANS core ext
-  ; https://forth-standard.org/standard/core/UDotR
+  ; ## tested  https://forth-standard.org/standard/core/UDotR
 U_Dot_R:	jsr PopA		; save field width
 U_Dot_R_A:	pha
 		jsr Zero		; u>d  cvt u to ud
@@ -14873,7 +17257,7 @@ U_Dot_R_A:	pha
 
 
  WordHeader "UD.R",NN ; ( ud u -- )  Print unsigned double right-justified u wide
-  ; ## "ud.r"  auto  Tali double
+  ; ## auto  Tali double
 UD_Dot_R:	jsr PopA			; save field width
 UD_Dot_R_A:	pha
 fmt_udr3:	jsr Less_Number_Sign		; start formatted
@@ -14890,8 +17274,7 @@ fmt_r:		jsr Number_sign_greater		; finish formatted
 
 
  WordHeader ".R",NN ; ( n u -- )  Print NOS as unsigned number in TOS width
-  ; ## ".r"  tested  ANS core ext
-  ; https://forth-standard.org/standard/core/DotR
+  ; ## tested  https://forth-standard.org/standard/core/DotR
 Dot_R:		jsr PopA		; save field width
 Dot_R_A:	pha
 		lda DStack+1,x		; save sign
@@ -14903,8 +17286,7 @@ Dot_R_A:	pha
 
 
  WordHeader "D.R",NN ; ( d u -- )  Print double right-justified u wide
-  ; ## "d.r"  tested  ANS double
-  ; http://forth-standard.org/standard/double/DDotR"""
+  ; ## tested  http://forth-standard.org/standard/double/DDotR"""
 D_Dot_R:	jsr PopA		; save field width
 D_Dot_R_A:	pha
 		lda DStack+1,x		; save sign
@@ -14919,8 +17301,7 @@ fmt_dr3:	jsr Less_Number_Sign	; start formatted output
 
 
  WordHeader "?",NN ; ( addr -- )  Print content of a variable
-  ; ## "?"  tested  ANS tools
-  ; https://forth-standard.org/standard/tools/q
+  ; ## tested  https://forth-standard.org/standard/tools/q
   ;
   ; Only used interactively. Since humans are so slow, we
   ; save size and just go for the subroutine jumps
@@ -14931,11 +17312,9 @@ Question:
 	WordEnd
 
 
- WordHeader "2Dup",UF ; ( n1 n2 -- n1 n2 n1 n2 )  Duplicate top two stack elements
-  ; ## "2dup"  auto  ANS core
-  ; https://forth-standard.org/standard/core/TwoDUP
-Two_Dup:
-		jsr underflow_2
+ WordHeader "2Dup",NN ; ( n1 n2 -- n1 n2 n1 n2 )  Duplicate top two stack elements
+  ; ## auto  https://forth-standard.org/standard/core/TwoDUP
+Two_Dup:	DStackCheck 2,Throw_Stack_13
 
 		dex
 		dex
@@ -14954,12 +17333,11 @@ Two_Dup:
 	WordEnd
 		rts
 
+Throw_Stack_13: jmp Throw_Stack
 
- WordHeader "Tuck",UF ; ( b a -- a b a )  Copy TOS below NOS
-  ; ## "tuck"  auto  ANS core ext
-  ; https://forth-standard.org/standard/core/TUCK
-Tuck:
-		jsr underflow_2
+ WordHeader "Tuck",NN ; ( b a -- a b a )  Copy TOS below NOS
+  ; ## auto  https://forth-standard.org/standard/core/TUCK
+Tuck:		DStackCheck 2,Throw_Stack_13
 
 		dex
 		dex
@@ -14980,8 +17358,7 @@ Tuck:
 
 
  WordHeader "C,",NN ; ( c -- )  Append one byte/char in memory
-  ; ## "c,"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/CComma
+  ; ## auto  https://forth-standard.org/standard/core/CComma
 C_Comma:	jsr PopA	; pop c, with underflow check
 C_Comma_A: ; A=byte
 		; preserves Y.
@@ -14999,8 +17376,7 @@ C_Comma_A: ; A=byte
 
 
  WordHeader ",",NN ; ( n -- )  Append one cell in memory
-  ; ## ","  auto	ANS core
-  ; https://forth-standard.org/standard/core/Comma
+  ; ## auto  https://forth-standard.org/standard/core/Comma
   ; Store TOS at current place in memory.
   ;
   ; Since 6502 doesn't care, we don't have any alignment issues.
@@ -15045,10 +17421,9 @@ Jmp_Comma_NT_YA: ; ( YA=nt -- )
 	WordEnd
 
 
- WordHeader "C@",UF ; ( addr -- c )  Get a character/byte from given address
-  ; ## "c@"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/CFetch
-C_Fetch:	jsr underflow_1
+ WordHeader "C@",NN ; ( addr -- c )  Get a character/byte from given address
+  ; ## auto   https://forth-standard.org/standard/core/CFetch
+C_Fetch:	DStackCheck 1,Throw_Stack_16
 
 		lda (DStack+0,x)
 		sta DStack+0,x
@@ -15058,10 +17433,9 @@ C_Fetch:	jsr underflow_1
 		rts
 
 
- WordHeader "C!",UF ; ( c addr -- )  Store character at address given
-  ; ## "c!"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/CStore
-C_Store:	jsr underflow_2
+ WordHeader "C!",NN ; ( c addr -- )  Store character at address given
+  ; ## auto  https://forth-standard.org/standard/core/CStore
+C_Store:	DStackCheck 2,Throw_Stack_16
 
 		lda DStack+2,x
 		sta (DStack+0,x)
@@ -15073,11 +17447,12 @@ C_Store:	jsr underflow_2
 	WordEnd
 		rts
 
+Throw_Stack_16: jmp Throw_Stack
 
  WordHeader "1+!",0 ; ( addr -- )  increment cell at addr
-OnePlusStore:
-		lda #1
+OnePlusStore:	lda #1
 
+		DStackCheck 1,Throw_Stack_16
 		clc
 		adc (DStack+0,x)	; increment lo byte
 		sta (DStack+0,x)
@@ -15097,11 +17472,9 @@ _7:
 		rts 
 
 
- WordHeader "+!",UF+NN ; ( n addr -- )  Add number to value at given address
-  ; ## "+!"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/PlusStore
-Plus_store:
-		jsr underflow_2
+ WordHeader "+!",NN ; ( n addr -- )  Add number to value at given address
+  ; ## auto  https://forth-standard.org/standard/core/PlusStore
+Plus_store:	DStackCheck 2,Throw_Stack_16
 
 		clc
 		lda DStack+2,x
@@ -15121,15 +17494,14 @@ Plus_store:
 
 
  WordHeader "Bell",NN ; ( -- )  Emit ASCII Bell
-  ; ## "bell"  tested  Tali Forth
+  ; ## tested  Tali Forth
 Bell:		lda #7		; ASCII value for BELL
 		bne Emit_A
 	WordEnd
 
 
  WordHeader "Emit",NN ; ( char -- )  Print character to current output
-  ; ## "emit"  auto  ANS core
-  ; https://forth-standard.org/standard/core/EMIT
+  ; ## auto  https://forth-standard.org/standard/core/EMIT
   ; Run-time default for EMIT. The user can revector this by changing
   ; the value of the OUTPUT variable. We ignore the MSB completely, and
   ; do not check to see if we have been given a valid ASCII character.
@@ -15140,19 +17512,16 @@ Emit_A: ; print char in A
 
 
  WordHeader "Space",NN ; ( -- )  Print a single space
-  ; ## "space"  auto  ANS core
-  ; https://forth-standard.org/standard/core/SPACE
+  ; ## auto  https://forth-standard.org/standard/core/SPACE
 Space:		lda #AscSP
 		bne Emit_A
 	WordEnd
 
 
  WordHeader "Type",UF+NN ; ( addr u -- )  Print string
-  ; ## "type"  auto  ANS core
-  ; https://forth-standard.org/standard/core/TYPE
+  ; ## auto  https://forth-standard.org/standard/core/TYPE
   ; Works through EMIT to allow OUTPUT revectoring.
-Type:
-		jsr underflow_2
+Type:		DStackCheck 2,Throw_Stack_03
 		jmp _test
 
 _loop:
@@ -15195,8 +17564,7 @@ Print_ASCIIZ_YA: ; Print zero-terminated string at YA, with newline
 
 
  WordHeader "Execute",NN ; ( xt -- )  Jump to word using execution token
-  ; ## "execute"	auto  ANS core
-  ; https://forth-standard.org/standard/core/EXECUTE
+  ; ## auto  https://forth-standard.org/standard/core/EXECUTE
 Execute:	DStackCheck 1,Throw_Stack_03
 
 		lda DStack+1,x	; addr for RTI
@@ -15211,8 +17579,7 @@ Execute:	DStackCheck 1,Throw_Stack_03
 
 
  WordHeader "2Rot",NN ; ( da db dc -- db dc da )  Rotate first three stack entries downwards
-  ; ## "2rot"  auto  ANS double
-  ; https://forth-standard.org/standard/double/TwoROT
+  ; ## auto  https://forth-standard.org/standard/double/TwoROT
 TwoRot:		DStackCheck 6,Throw_Stack_03
 
 		stx tmp1+0
@@ -15238,8 +17605,7 @@ Throw_Stack_03: jmp Throw_Stack
   ; https://forth-standard.org/standard/core/ROLL
 
  WordHeader "Rot",NN ; ( a b c -- b c a )  Rotate first three stack entries downwards
-  ; ## "rot"  auto  ANS core
-  ; https://forth-standard.org/standard/core/ROT
+  ; ## auto  https://forth-standard.org/standard/core/ROT
   ; Remember "R for 'Revolution'" - the bottom entry comes out
   ; on top!
 Rot:		DStackCheck 3,Throw_Stack_03
@@ -15262,8 +17628,7 @@ Rot:		DStackCheck 3,Throw_Stack_03
 
 
  WordHeader "-Rot",NN ; ( a b c -- c a b )  Rotate upwards
-  ; ## "-rot"  auto  Gforth
-  ; http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Data-stack.html
+  ; ## auto  http://www.complang.tuwien.ac.at/forth/gforth/Docs-html/Data-stack.html
 Not_Rot:	DStackCheck 3,Throw_Stack_03
 
 		ldy DStack+1,x	; do MSB
@@ -15283,8 +17648,7 @@ Not_Rot:	DStackCheck 3,Throw_Stack_03
 		rts
 
  WordHeader "@",NN ; ( addr -- n )  Push cell content from memory to stack
-  ; ## "@"  auto	ANS core
-  ; https://forth-standard.org/standard/core/Fetch
+  ; ## auto  https://forth-standard.org/standard/core/Fetch
 Fetch:		DStackCheck 1,Throw_Stack_03
 
 		lda (DStack+0,x)		; LSB
@@ -15302,8 +17666,7 @@ Fetch:		DStackCheck 1,Throw_Stack_03
 
 
  WordHeader "!",NN ; ( n addr -- )  Store TOS in memory
-  ; ## "!"  auto	ANS core
-  ; https://forth-standard.org/standard/core/Store
+  ; ## auto  https://forth-standard.org/standard/core/Store
 Store:		DStackCheck 2,Throw_Stack_03
 
 		lda DStack+2,x	; LSB
@@ -15323,6 +17686,7 @@ Store:		DStackCheck 2,Throw_Stack_03
 	WordEnd
 		rts
 
+
  WordHeader "0!",0 ; ( addr -- )  Store 0 in memory
   ; Roughly STZ addr
 ZStore:		jsr PopTmp1	; pop addr, check underflow
@@ -15336,9 +17700,8 @@ ZStore:		jsr PopTmp1	; pop addr, check underflow
 
 
  WordHeader ">R",CO+ST ; ( n -- )(R: -- n)  Move TOS to the Return Stack
-  ; ## ">r"  auto	 ANS core
+  ; ## auto  https://forth-standard.org/standard/core/toR
   ; native is special case
-  ; https://forth-standard.org/standard/core/toR
   ; This word is handled differently for native and for
   ; subroutine coding, see `COMPILE,`.
 To_R:
@@ -15371,11 +17734,9 @@ To_R:
 	WordEnd
 		rts
 
-
  WordHeader "R>",CO+ST ; ( -- n )(R: n --)  Move top of Return Stack to TOS
-  ; ## "r>"  auto	 ANS core
+  ; ## auto  https://forth-standard.org/standard/core/Rfrom
   ; native is special case
-  ; https://forth-standard.org/standard/core/Rfrom
   ; Move Top of Return Stack to Top of Data Stack.
   ;
   ; We have to move
@@ -15408,10 +17769,8 @@ R_From:
 	WordEnd
 		rts
 
-
  WordHeader "R@",NN+CO ; ( -- n )  Get copy of top of Return Stack
-  ; ## "r@"  auto	 ANS core
-  ; https://forth-standard.org/standard/core/RFetch
+  ; ## auto  https://forth-standard.org/standard/core/RFetch
   ; This word is Compile Only in Tali Forth, though Gforth has it
   ; work normally as well
 R_Fetch:
@@ -15424,12 +17783,33 @@ R_Fetch:
 		jmp PushYA
 	WordEnd
 
+ WordHeader "RDrop",CO+ST ; ( -- )(R: n --)  Drop top of Return Stack
+RDrop:
+		; This is ommitted when natively compiled.
+		pla		; Move the RTS addr out of the way
+		sta tmp5+0
+		pla
+		sta tmp5+1
 
- WordHeader "Over",UF ; ( b a -- b a b )  Copy NOS to TOS
-  ; ## "over"  auto  ANS core
-  ; https://forth-standard.org/standard/core/OVER
-Over:
-		jsr underflow_2
+		; --- CUT FOR NATIVE CODING ---
+
+		pla		; LSB
+		pla		; MSB
+
+		; --- CUT FOR NATIVE CODING ---
+
+		; This is ommitted when natively compiled.
+		lda tmp5+1	; Restore the RTS addr
+		pha
+		lda tmp5+0
+		pha
+	WordEnd
+		rts
+
+
+ WordHeader "Over",NN ; ( b a -- b a b )  Copy NOS to TOS
+  ; ## auto  https://forth-standard.org/standard/core/OVER
+Over:		DStackCheck 2,Throw_Stack_04
 
 		lda DStack+2,x	; LSB
 		ldy DStack+3,x	; MSB
@@ -15442,11 +17822,9 @@ Over:
 		rts
 
 
- WordHeader "?Dup",UF+NN ; ( n -- 0 | n n )  Duplicate TOS if non-zero
-  ; ## "?dup"  auto  ANS core
-  ; https://forth-standard.org/standard/core/qDUP
-Question_Dup:
-		jsr underflow_1
+ WordHeader "?Dup",NN ; ( n -- 0 | n n )  Duplicate TOS if non-zero
+  ; ## auto  https://forth-standard.org/standard/core/qDUP
+Question_Dup:	DStackCheck 1,Throw_Stack_04
 
 		lda DStack+0,x	; Check if TOS is zero
 		ora DStack+1,x
@@ -15454,11 +17832,9 @@ Question_Dup:
 	WordEnd
 		rts
 
- WordHeader "Dup",UF ; ( u -- u u )  Duplicate TOS
-  ; ## "dup"  auto  ANS core
-  ; https://forth-standard.org/standard/core/DUP
-Dup:
-		jsr underflow_1
+ WordHeader "Dup",NN ; ( u -- u u )  Duplicate TOS
+  ; ## auto  https://forth-standard.org/standard/core/DUP
+Dup:		DStackCheck 1,Throw_Stack_04
 
 Dup_NoUf:	lda DStack+0,x	; LSB
 		ldy DStack+1,x	; MSB
@@ -15470,6 +17846,7 @@ Dup_NoUf:	lda DStack+0,x	; LSB
 	WordEnd
 		rts
 
+Throw_Stack_04: jmp Throw_Stack
 
 PushAY: ; ( AY -- n )
 		dex
@@ -15479,11 +17856,9 @@ PushAY: ; ( AY -- n )
 		rts
 
 
- WordHeader "Swap",UF ; ( b a -- a b )  Exchange TOS and NOS
-  ; ## "swap"  auto  ANS core
-  ; https://forth-standard.org/standard/core/SWAP
-Swap:
-		jsr underflow_2
+ WordHeader "Swap",NN ; ( b a -- a b )  Exchange TOS and NOS
+  ; ## auto  https://forth-standard.org/standard/core/SWAP
+Swap:		DStackCheck 2,Throw_Stack_04
 
 		lda DStack+0,x	; do LSB
 		ldy DStack+2,x
@@ -15498,11 +17873,9 @@ Swap:
 		rts
 
 
- WordHeader "Drop",UF ; ( u -- )  Discard top cell on Data Stack
-  ; ## "drop"  auto  ANS core
-  ; https://forth-standard.org/standard/core/DROP
-Drop:
-		jsr underflow_1
+ WordHeader "Drop",NN ; ( u -- )  Discard top cell on Data Stack
+  ; ## auto  https://forth-standard.org/standard/core/DROP
+Drop:		DStackCheck 1,Throw_Stack_04
 
 		inx
 		inx
@@ -15521,21 +17894,13 @@ WordListLink .var 0
   ; set the wordlists. These words have entries in the
   ; FORTH-WORDLIST as well.
 
- WordHeader "Words",NN
-		jmp Words
-	WordEnd
+ WordHeader "Words",NN,Words,8
 
- WordHeader "Forth-Wordlist",NN
-		jmp Forth_WordList
-	WordEnd
+ WordHeader "Forth-Wordlist",NN,Forth_WordList,8
 
- WordHeader "Forth",NN
-		jmp Forth
-	WordEnd
+ WordHeader "Forth",NN,Forth,8
 
- WordHeader "Set-Order",NN
-		jmp Set_Order
-	WordEnd
+ WordHeader "Set-Order",NN,Set_Order,8
 
 .endif
 
@@ -15563,65 +17928,6 @@ WordListLink .var 0
 ; (tasm65c02), see https://github.com/scotws/tasm65c02 for the standalone
 ; version. Tasm65c02 is in the public domain.
 
-;------ assembler word processor routines:
-
-asm_r: ; opcode follows JSR, 1byte relative on param stack
-	pla		; pop RTS addr
-	tay
-	pla
-	jsr asm_op	; compile opcode
-;	jsr Here	; calc displacement
-;	jsr One_plus
-;	jsr Minus
-	lda DStack+1,x	; check range
-	beq _plus
-	cmp #$ff
-	beq _minus
-_err:	lda #$100+err_OutOfRange
-	jmp ThrowA
-
-_plus:	lda DStack+0,x
-	bmi _err
-	bpl _store
-
-_minus:	lda DStack+0,x
-	bpl _err
-_store:	jmp C_Comma
-
-
-asm_1: ; opcode follows JSR, 1byte on param stack
-	pla		; pop RTS addr
-	tay
-	pla
-	jsr asm_op	; compile opcode
-	lda DStack+1,x	; compile operand
-	beq _store	;   unsigned byte?
-;	cmp #$ff	;   signed byte?
-;	bne _err
-_store:	jmp C_Comma
-
-_err:	lda #$100+err_OutOfRange
-	jmp ThrowA
-
-
-asm_2: ; opcode follows JSR, 2byte on param stack
-	pla		; pop RTS addr
-	tay
-	pla
-	jsr asm_op	; compile opcode
-	jmp Comma	; compile operand
-
-
-asm_0: ; opcode follows JSR, no additional bytes
-	pla		; pop RTS addr
-	tay
-	pla
-asm_op:	sty tmp1+0	; save RTS addr
-	sta tmp1+1
-	ldy #1		; get opcode byte
-	lda (tmp1),y
-	jmp C_Comma_A	; compile opcode
-
 ; MNEMONICS--------------------------------------------------------
 
 ; The assembler instructions are realized as individual Forth words.
@@ -15633,6 +17939,7 @@ Inst .macro name, opcode, processor ; compile assembler instruction word
 	.byte \opcode
   .endmacro
 
+ Inst "adc"	,$6d,asm_2 ; ADC nnnn
  Inst "adc.#"	,$69,asm_1 ; ADC #nn
  Inst "adc.x"	,$7d,asm_2 ; ADC nnnn,X
  Inst "adc.y"	,$79,asm_2 ; ADC nnnn,Y
@@ -15813,6 +18120,65 @@ Inst .macro name, opcode, processor ; compile assembler instruction word
 
 asm_table = WordListLink ; head of instruction word list for disassembler
 
+;------ assembler word processor routines:
+
+asm_r: ; opcode follows JSR, 1byte relative on param stack
+	pla		; pop RTS addr
+	tay
+	pla
+	jsr asm_op	; compile opcode
+;	jsr Here	; calc displacement
+;	jsr One_plus
+;	jsr Minus
+	lda DStack+1,x	; check range
+	beq _plus
+	cmp #$ff
+	beq _minus
+_err:	lda #$100+err_OutOfRange
+	jmp ThrowA
+
+_plus:	lda DStack+0,x
+	bmi _err
+	bpl _store
+
+_minus:	lda DStack+0,x
+	bpl _err
+_store:	jmp C_Comma
+
+
+asm_1: ; opcode follows JSR, 1byte on param stack
+	pla		; pop RTS addr
+	tay
+	pla
+	jsr asm_op	; compile opcode
+	lda DStack+1,x	; compile operand
+;	beq _store	;   unsigned byte?
+;	cmp #$ff	;   signed byte?
+	bne _err
+_store:	jmp C_Comma
+
+_err:	lda #$100+err_OutOfRange
+	jmp ThrowA
+
+
+asm_2: ; opcode follows JSR, 2byte on param stack
+	pla		; pop RTS addr
+	tay
+	pla
+	jsr asm_op	; compile opcode
+	jmp Comma	; compile operand
+
+
+asm_0: ; opcode follows JSR, no additional bytes
+	pla		; pop RTS addr
+	tay
+	pla
+asm_op:	sty tmp1+0	; save RTS addr
+	sta tmp1+1
+	ldy #1		; get opcode byte
+	lda (tmp1),y
+	jmp C_Comma_A	; compile opcode
+
 
 ; Assembler pseudo-instructions, directives and macros
 
@@ -15826,9 +18192,7 @@ asm_table = WordListLink ; head of instruction word list for disassembler
 	WordEnd
 
 
- WordHeader "-->",IM+NN ; ( -- addr )	 Save address
-		jmp Here
-	WordEnd
+ WordHeader "-->",IM+NN,Here,8 ; ( -- addr )	 Save address
 
 
  WordHeader "<j",IM ; ( addr -- addr )  Calc absolute address
@@ -15862,10 +18226,9 @@ asm_back_branch:
   ; Convert a segment of memory to assembler output.
   ; This produces Simpler Assembly Notation (SAN) code
   ; see the section on The Disassembler in the manual for more details.
-DisAsm:
-		jsr Bounds		; ( addr_end addr )
+DisAsm:		jsr Bounds		; ( addr_end addr )
 _instr: ; instruction loop
-		jsr underflow_2
+	;	jsr underflow_2
 
 ;		.byte $3B	; tsc  debug???
 ;		cmp #$fb	; debug???
@@ -16064,6 +18427,25 @@ _not_sliteral:
 ;		bne _not_2literal
 
 ;_not_2literal:
+
+.if "fp" in TALI_OPTIONAL_WORDS
+		cmp #<FLiti		; float literal?
+		bne _not_FLiti
+		cpy #>FLiti
+		bne _not_FLiti
+
+		jsr CR
+		jsr Dup			; ( addr_end addr addr )
+		jsr Dot_Hex
+		jsr Space
+		jsr _get_byte
+		jsr _get_byte
+		jsr _get_byte
+		jsr _get_byte
+		jsr _get_byte
+
+_not_FLiti:
+  .endif
 		jmp _instr
 
 
@@ -16110,7 +18492,7 @@ WordListLink .var 0	; start wordlist
 
 
  WordHeader "l",NN ; ( -- )  List the current screen
-  ; ## "l"  tested  Tali Editor
+  ; ##  tested  Tali Editor
 Editor_l:	jmp ListScr
 	WordEnd
 
@@ -16126,7 +18508,7 @@ Editor_Screen_Helper: ; ( scr# -- addr )  Get block in buffer, return addr of bu
 
 
  WordHeader "enter-screen",NN ; ( scr# -- )  Enter all lines for given screen
-  ; ## "enter-screen"  auto  Tali Editor
+  ; ##  auto  Tali Editor
 Editor_Enter_Screen:
 		; Set the variable SCR and get a buffer for the
 		; given screen number.
@@ -16153,7 +18535,7 @@ _loop:		sta DStack+0,x
 
 
  WordHeader "line",NN ; ( line# -- c-addr )  Turn a line number into address in current screen
-  ; ## "line"  tested  Tali Editor
+  ; ##  tested  Tali Editor
 Editor_line:
 ;		jsr underflow_1
 
@@ -16172,7 +18554,7 @@ Editor_line:
 
 
  WordHeader "erase-screen",NN ; ( scr# -- )  Erase all lines for given screen
-  ; ## "erase-screen"  tested  Tali Editor
+  ; ##  tested  Tali Editor
 Editor_Erase_Screen:
 		; Set the variable SCR and get a buffer for the
 		; given screen number.
@@ -16188,7 +18570,7 @@ Editor_Erase_Screen:
 
 
  WordHeader "el",NN ; ( line# -- )  Erase the given line number
-  ; ## "el"  tested  Tali Editor
+  ; ## tested  Tali Editor
 Editor_el:
 		; Turn the line number into buffer offset.
 		; This also loads the block into the buffer if it's
@@ -16204,7 +18586,7 @@ Editor_el:
 
 
  WordHeader "o",NN ; ( line# -- )  Overwrite the given line
-  ; ## "o"  tested  Tali Editor
+  ; ## tested  Tali Editor
 Editor_o:
 		; Print prompt
 		jsr CR
