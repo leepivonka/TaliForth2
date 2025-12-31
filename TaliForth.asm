@@ -181,10 +181,11 @@ tmp2:	.word ?		; temporary storage
 tmp3:	.word ?		; temporary storage
 tmp4:	.word ?		; temporary storage (tmpdsp)
 tmp5:	.word ?		; temporary storage (tmptos)
+tmp6:	.word ?		; temporary
 editor1: .word ?	; temporary for editors
 editor2: .word ?	; temporary for editors
 editor3: .word ?	; temporary for editors
-DStack:	.fill DDim*2	; data stack
+DStack:	.fill DSDim*2	; data stack
  .endsection zp
 
  .section code
@@ -415,7 +416,7 @@ styta .macro adr1,adr2 ; compile appropriate sty adr,x
 
 
 DStackCheck .macro depth,ErrorDestination ; compile a data stack underflow check
-	cpx #(DDim-\depth)*2+1	; far enough below end of data stack (& not negative)?
+	cpx #(DSDim-\depth)*2+1	; far enough below end of data stack (& not negative)?
 	bcs \ErrorDestination
 	.endmacro
 
@@ -793,15 +794,15 @@ RandM:		jsr Dup		; ( umod umod )
 ;   1 byte  of 2s complement binary exponent
 
  .section zp ; bss
-FIndex:	.byte ?		; floating-point stack index. empty=FDim, full=0
+FIndex:	.byte ?		; floating-point stack index. empty=FSDim, full=0
 
-; FP stack has FDim entries, defined in platform.
-; FP stack is a set of byte arrays, each with FDim # of entries indexed by FIndex:
-FSExp:   .fill FDim	; byte array[FDim] FP stack exponent
-FSMant0: .fill FDim	; byte array[FDim] FP stack mantissa MSByte
-FSMant1: .fill FDim	; byte array[FDim] FP stack mantissa 2nd
-FSMant2: .fill FDim	; byte array[FDim] FP stack mantissa 3rd
-FSMant3: .fill FDim	; byte array[FDim] FP stack mantissa 4th
+; FP stack has FSDim entries, defined in platform.
+; FP stack is a set of byte arrays, each with FSDim # of entries indexed by FIndex:
+FSExp:   .fill FSDim	; byte array[FSDim] FP stack exponent
+FSMant0: .fill FSDim	; byte array[FSDim] FP stack mantissa MSByte
+FSMant1: .fill FSDim	; byte array[FSDim] FP stack mantissa 2nd
+FSMant2: .fill FSDim	; byte array[FSDim] FP stack mantissa 3rd
+FSMant3: .fill FSDim	; byte array[FSDim] FP stack mantissa 4th
   ; Will FP stack fit in ZP?  It could be placed in bss if needed.
   ; How to move this decision out to platform???
 
@@ -822,8 +823,8 @@ FSMant3: .fill FDim	; byte array[FDim] FP stack mantissa 4th
 	.endif
 	WordEnd
 
- WordHeader "FDim",NN ; ( -- n )  Constant: # of FP stack entries allocated
-		lda #FDim
+ WordHeader "FSDim",NN ; ( -- n )  Constant: # of FP stack entries allocated
+		lda #FSDim
 		jmp PushZA
 	WordEnd
 
@@ -937,6 +938,9 @@ PartsToF:	jsr FAllocX		; alloc FP stack entry, X= FP stack index
 
  WordHeader "F>Hex",NN ; ( F: r -- ) ( -- d_mantissa n_exponent )  get parts of r
 FToParts:	ldy FIndex	; Y= FP stack index
+		cpy #FSDim-0	; check FP stack for >=1 entries
+		bcs Throw_FPStack_10
+
 		dex		; alloc d_mantissa
 		dex
 		dex
@@ -980,11 +984,15 @@ FDotHex:	jsr FToParts	; get parts of r
 	WordEnd
   .endif
 
+Throw_FPStack_10: jmp Throw_FPStack
+
  WordHeader "FCmpA",NN ; ( F: r1 r2 -- r1 r2 CPU_regs ) \ floating point compare
   ; assumes normalized values
   ; returns: flags N & Z, A=0 for r1==r2, A<0 for r1<r2, A>0 for r1>r2
 FCmpA:		stx tmp1		; save data stack index
 		ldx FIndex		; X= FP stack index
+		cpx #FSDim-1		; check FP stack for >=2 entries
+		bcs Throw_FPStack_10
 
 		lda FSMant0+0,x		; r2 mantissa == 0 ?
 		beq _r2Zero
@@ -1043,19 +1051,33 @@ _MantissaSignDifferent:
 
  WordHeader "FAllocX",NN ; ( F: -- r )  alloc a FP stack entry, returns X=FIndex
 FAllocX:	; preserves A & Y
-		stx tmp1+0	; save data stack index
-		ldx FIndex	; X= floating point stack index
-		dex		; alloc FP stack entry
-		cpx #FDim	; stack overflow or underflow?
-		bcs _err
-		stx FIndex
+		stx tmp1		; save data stack index
+		dec FIndex		; alloc FP stack entry
+		bmi Throw_FpStack	;   if FP stack overflow (or massive underflow)
+		ldx FIndex		; X= floating point stack index
+	WordEnd
 		rts		; return X= FP stack index
 
-_err:		php		; save sign bit
-		ldx tmp1+0	; restore data stack index
-		plp		; restore sign bit
-		jmp Throw_FPStack
-	WordEnd
+Throw_FPStack: ; overflow or underflow (from FAllocX)
+		bmi _over
+		lda #$100+err_FPStackUnderflow
+_9:		jmp ThrowA
+
+_over:		lda #$100+err_FPStackOverflow
+		bne _9
+
+Throw_FpOutOfRange:
+		lda #$100+err_FpOutOfRange
+		jmp ThrowA
+
+
+ FAllocXm .macro throw  ; inline version of FAllocX
+	; preserves A & Y
+		stx tmp1+0	; save data stack index
+		dec FIndex	; alloc a FP stack entry
+		bmi \throw	;   if FP stack overflow (or massive underflow)
+		ldx FIndex	; X= Floating Point stack index
+	.endmacro
 
 
  WordHeader "FMax",NN ; ( F: r1 r2 -- r3 )  r3 is the greater of r1 and r2. 
@@ -1075,28 +1097,36 @@ FMin:		jsr FCmpA
 
  WordHeader "FDepth",NN ; ( -- n )  # of entries on the FP stack
   ; https://forth-standard.org/standard/float/FDEPTH
-FDepth:		lda #FDim
+FDepth:		lda #FSDim
 		sec
 		sbc FIndex
 		jmp PushZA
 	WordEnd
 
- WordHeader "FDrop",0 ; ( F: r -- )  Drop 1 FP stack entry
+ WordHeader "FDrop",NN ; ( F: r -- )  Drop 1 FP stack entry
   ; https://forth-standard.org/standard/float/FDROP
-FDrop:		inc FIndex
-	WordEnd
-		rts
+FDrop:		lda FIndex	; load FP stack index
+		cmp #FSDim	; check FP stack for >=1 entries
+		bcs Throw_FPStack_10a
 
- WordHeader "F2Drop",0 ; ( F: r1 r2 -- )  Drop 2 FP stack entries
-F2Drop:		inc FIndex
 		inc FIndex
 	WordEnd
 		rts
+
+ WordHeader "F2Drop",NN ; ( F: r1 r2 -- )  Drop 2 FP stack entries
+F2Drop:		inc FIndex
+		jmp FDrop
+	WordEnd
+
+Throw_FPStack_10a: jmp Throw_FPStack
 
  WordHeader "FNip",0 ; ( F: r1 r2 -- r2 )   Drop the first item below the top of FP stack
   ; like https://forth-standard.org/standard/core/NIP
 FNip:		stx tmp1		; save data stack index
 		ldx FIndex		; X= FP stack index
+		cpx #FSDim-1		; check FP stack for >=2 entries
+		bcs Throw_FPStack_10a
+
 		lda FSExp+0,x		; copy exponent
 		sta FSExp+1,x
 		lda FSMant0+0,x		; copy mantissa
@@ -1114,7 +1144,7 @@ FNip:		stx tmp1		; save data stack index
 
  WordHeader "FDup",0 ; ( F: r -- r r )  Push a copy of FP TOS
   ; https://forth-standard.org/standard/float/FDUP
-FDup:		jsr FAllocX		; alloc FP stack entry, X=fp stack index
+FDup:		FAllocXm Throw_FPStack_11 ; alloc FP stack entry, X=fp stack index
 		lda FSExp+1,x		; copy exponent
 		sta FSExp+0,x
 		lda FSMant0+1,x		; copy mantissa
@@ -1131,7 +1161,7 @@ FDup:		jsr FAllocX		; alloc FP stack entry, X=fp stack index
 
  WordHeader "FOver",0 ; ( F: r1 r2 -- r1 r2 r1 )  Push a copy of FP NOS
   ; https://forth-standard.org/standard/float/FOVER
-FOver:		jsr FAllocX		; alloc FP stack entry, X=fp stack index
+FOver:		FAllocXm Throw_FPStack_11 ; alloc FP stack entry, X=fp stack index
 		lda FSExp+2,x		; copy exponent
 		sta FSExp+0,x
 		lda FSMant0+2,x		; copy mantissa
@@ -1175,15 +1205,19 @@ F2Dup:		jsr FOver
 	WordEnd
 
 ; WordHeader "F2Dup<",NN ; ( F: r1 r2 -- r1 r2 ) ( -- )
-;F2DupLt:	jsr FCmpA
+;F2DupLt:	jsr FCmpP
 ;		bmi F2Dup
 ;	WordEnd
 ;		rts
+
+Throw_FPStack_11: jmp Throw_FPStack
 
  WordHeader "FSwap",0 ; ( F: r1 r2 -- r2 r1 )  Swap FP TOS & NOS
   ; https://forth-standard.org/standard/float/FSWAP
 FSwap:		stx tmp1+0		; save data stack index
 		ldx FIndex		; X=FP stack index
+		cpx #FSDim-1	; check FP stack for >=2 entries
+		bcs Throw_FPStack_11
 
 		lda FSExp+0,x		; do FSExp
 		ldy FSExp+1,x
@@ -1273,14 +1307,16 @@ FTuck:		jsr FSwap
   ; https://forth-standard.org/standard/float/FROT
 FRot:		stx tmp1		; save data stack index
 
-	.cerror FSMant0-FSExp!=FDim	; make sure our assumptions hold
-	.cerror FSMant1-FSMant0!=FDim
-	.cerror FSMant2-FSMant1!=FDim
-	.cerror FSMant3-FSMant2!=FDim
+	.cerror FSMant0-FSExp!=FSDim	; make sure our assumptions hold
+	.cerror FSMant1-FSMant0!=FSDim
+	.cerror FSMant2-FSMant1!=FSDim
+	.cerror FSMant3-FSMant2!=FSDim
 
 		lda FIndex		; for FSMant3, FSMant2, FSMant1, FSMant0, FSExp
+		cmp #FSDim-2		; check FP stack for >=3 entries
+		bcs Throw_FPStack_11
 		clc
-		adc #4*FDim
+		adc #4*FSDim
 		sec
 _2:		tax
 
@@ -1292,7 +1328,7 @@ _2:		tax
 		styta FSExp+0,x
 
 		txa			;   next byte
-		sbc #FDim
+		sbc #FSDim
 		bcs _2			; until done
 
 ;--- or ---
@@ -1358,7 +1394,9 @@ ToA:		jsr DupToA	; Copy
 
  WordHeader "Dup>A",0 ; ( n -- n ) ( F: -- n )  Copy data stack entry to 1 FP stack entry
 DupToA:		dec FIndex	; alloc FP stack entry (FAllocX)
+		bmi Throw_FPStack_e3
 		ldy FIndex	; Y= FP stack index
+
 		lda DStack+0,x	; copy a cell
 		sta FSMant1,y
 		lda DStack+1,x
@@ -1373,6 +1411,7 @@ DToA:		jsr DDupToA
 
  WordHeader "2Dup>A",0 ; ( d -- d ) ( F: -- d )  Copy double data stack entry to 1 FP stack entry
 DDupToA:	dec FIndex	; alloc FP stack entry (FAllocX)
+		bmi Throw_FPStack_e3
 		ldy FIndex	; Y= FP stack index
 		lda DStack+0,x	; copy 2 cells
 		sta FSMant1,y
@@ -1387,7 +1426,9 @@ DDupToA:	dec FIndex	; alloc FP stack entry (FAllocX)
 
  WordHeader "A@",0 ; ( F: n -- n ) ( -- n )  copy aux data entry on FP stack to data stack
 AFetch:		ldy FIndex	; Y= FP stack index
-AFetch3:	dex		; alloc data stack space
+AFetch3:	cpy #FSDim-0	; check FP stack for >=1 entries
+		bcs Throw_FPStack_e3
+		dex		; alloc data stack space
 		dex
 		lda FSMant1,y	; copy a cell
 		sta DStack+0,x
@@ -1405,7 +1446,10 @@ AFrom:		ldy FIndex
  WordHeader "2A>",0 ; ( -- d ) ( F: d -- )  move double aux data entry on FP to data stack
 DAFrom:		ldy FIndex	; Y= FP stack index
 		inc FIndex	; FDrop (doesn't change Y)
-DAFrom3:	dex		; alloc data stack space
+DAFrom3:	cpy #FSDim-0	; check FP stack for >=1 entries
+		bcs Throw_FPStack_e3
+
+		dex		; alloc data stack space
 		dex
 		dex
 		dex
@@ -1436,6 +1480,8 @@ FToR:		pla		; save RTS addr
 		sta tmp1+1
 
 		ldy FIndex	; copy r
+		cpy #FSDim-0	; check FP stack for >=1 entries
+		bcs Throw_FPStack_e3
 		lda FSExp,y
 		pha
 		lda FSMant0,y
@@ -1483,16 +1529,37 @@ FRTo:		pla		; save rts addr
 
  .endif ; 0
 
+Throw_Stack_33: jmp Throw_Stack
+
+ WordHeader "'F@",IM+CO+NN ; ( "name" -- ) ( F: -- r )  Compile: fetch FP from named FVariable
+		jsr Tick		; get named FVariable data addr
+		jsr Execute
+		jsr ldya_immed_comma	; compile loading addr to YA
+		lda #<FAt_YA		; compile jsr FAt_YA
+		ldy #>FAt_YA
+		jmp Jsr_Comma_YA
+	WordEnd
+
+ WordHeader "F@_YA",NN,FAt_YA,3 ; ( YA -- ) ( F: -- r )
 
  WordHeader "F@",0 ; ( addr -- ) ( F: -- r )  Fetch a FP number, internal format
   ; https://forth-standard.org/standard/float/FFetch
   ; Also see: SF@ DF@ for IEEE formats
-FAt:		jsr PopYA		; pop addr
+FAt:	.if 1
+		DStackCheck 1,Throw_Stack_33
+		lda DStack+0,x		; pop addr faster
+		ldy DStack+1,x
+		inx
+		inx
+	 .else
+		jsr PopYA		; pop addr
+	 .endif
 FAt_YA:		sta tmp2+0		; save addr
 		sty tmp2+1
 
 		ldy #0			; starting offset from tmp2
-FAt_Tmp2Y:	jsr FAllocX		; alloc FP stack entry, X= fp stack index
+FAt_Tmp2Y:
+		FAllocXm Throw_FpStack_12 ; alloc FP stack entry, X= FP stack index
 		lda (tmp2),y		; copy mantissa
 		sta FSMant3,x
 		iny
@@ -1511,6 +1578,18 @@ FAt_Tmp2Y:	jsr FAllocX		; alloc FP stack entry, X= fp stack index
 	WordEnd
 		rts
 
+ WordHeader "'F!",IM+CO+NN ; ( "name" -- )  Compile: FP store to named FVariable
+  ; Run: ( F: r -- )
+		jsr Tick		; get named FVariable data addr
+		jsr Execute
+		jsr ldya_immed_comma	; compile loading addr to YA
+		lda #<FStore_YA		; compile jsr FStore_YA
+		ldy #>FStore_YA
+		jmp Jsr_Comma_YA
+	WordEnd
+
+ WordHeader "F!_YA",NN,FStore_YA,3 ; ( YA -- ) ( F: r -- )
+
  WordHeader "F!",0 ; ( addr -- ) ( F: r -- )  Store a FP number, internal format
   ; https://forth-standard.org/standard/float/FStore
   ; Also see: SF! DF! for IEEE formats
@@ -1521,6 +1600,8 @@ FStore_YA:	sta tmp1+0		; save addr
 		ldy #0
 		stx tmp2		; save data stack index
 		ldx FIndex		; X= FP stack index
+		cpx #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_12
 		lda FSMant3,x		; copy mantissa
 		sta (tmp1),y
 		lda FSMant2,x
@@ -1540,6 +1621,8 @@ FStore_YA:	sta tmp1+0		; save addr
 	WordEnd
 		rts
 
+
+Throw_FPStack_12: jmp Throw_FPStack
 
  WordHeader "F,",NN ; ( F: f -- )  compile a float
 FComma:		lda cp+0		; store f at Here
@@ -1563,6 +1646,8 @@ FZEq:		ldy FIndex
 		bne FFalse1
 
 FTrue1: ; ( F: r -- ) ( -- true )
+		cpy #FSDim-0	; check FP stack for >=1 entries
+		bcs Throw_FPStack_12
 		inc FIndex	; FDrop
 		jmp True	; return true
 	WordEnd
@@ -1581,6 +1666,8 @@ FZLt:		ldy FIndex
 		bmi FTrue1
 
 FFalse1: ; ( F: r -- ) ( -- false )
+		cpy #FSDim-0	; check FP stack for >=1 entries
+		bcs Throw_FPStack_12
 		inc FIndex	; FDrop
 		jmp False	; return false
 	WordEnd
@@ -1680,6 +1767,8 @@ FTRel:		jsr FOver
  WordHeader "F~",NN ; ( F: r1 r2 r3 -- flag )  Approximate equality
   ; https://forth-standard.org/standard/float/Ftilde
 FTilde:		ldy FIndex
+		cpy #FSDim-9		; check FP stack for >=1 entries
+		bcs Throw_FPStack_12a
 		lda FSMant0,y
 		bmi _10			; r3<0
 		bne FTAbs		; r3>0
@@ -1722,8 +1811,12 @@ _Short:		jsr FLitShort
 		jmp Jsr_Comma_YA	; compile jsr FLitYA, & return
 	WordEnd
 
+Throw_FPStack_12a: jmp Throw_FPStack
+
 FLitTest: ; Will short work?
 		ldy FIndex
+		cpy #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_12a
 		lda FSMant1,y		; will short work?
 		ora FSMant2,y
 		ora FSMant3,y
@@ -1771,7 +1864,7 @@ FloatLitI .macro mantissa,exp ; float literal
 
  WordHeader "FConstant",NN ; ( F: r "name" -- )  Compile FP constant word
   ; https://forth-standard.org/standard/float/FCONSTANT
-FConstant:	jsr Header_Comma	; compile word header
+FConstant:	jsr WordHeader_Comma	; compile word header
 
 		jsr FLitTest		; will short work?
 		beq _Short
@@ -1797,8 +1890,10 @@ FConstantRun: ; ( F: -- r )  runtime for long FConstant
 		jmp FAt_Tmp2Y		; fetch inline data, & return
 
 
+Throw_FPStack_12b: jmp Throw_FPStack
+
 FLitYA: ; ( YA -- ) ( F: -- r )  push short fvalue, Y=Exp A=Mant0
-		jsr FAllocX		; alloc FP stack entry, X=FP stack index
+		FAllocXm Throw_FPStack_12b ; alloc FP stack entry, X=FP stack index
 		sta FSMant0,x		; Mant= A,0,0,0
 		styta FSExp,x		; Exp= Y
 		lda #0
@@ -1879,7 +1974,7 @@ FE:		jsr FConstantRun
   ;	x TO name is executed, causing a new value of r to be assigned to name.
   ; TO name Run-time: ( F: r -- )
   ;	Assign the value r to name.
-FValue:		jsr Header_Comma	; compile word header
+FValue:		jsr WordHeader_Comma	; compile word header
 		lda #<FValue_runtime	; compile JSR FValue_runtime
 		ldy #>FValue_runtime
 		jsr Jsr_Comma_YA
@@ -1895,6 +1990,9 @@ FValue_runtime: ; unique, so  TO & optimizer  & disassembly can recognize as FVa
 FScale:		jsr PopA		; pop n
 FScaleA:	stx tmp1		; save data stack index
 		ldx FIndex		; X= FP stack index
+		cpx #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_13a
+
 		ldy FSMant0,x		; mantissa zero?
 		beq _8
 		clc
@@ -1925,7 +2023,7 @@ F10Star:	jsr F2Star
 		lda #2
 		jsr FScaleA
 		jmp FPlus
-
+	WordEnd
 
 ; WordHeader "FM1+",0 ; ( F: q1 -- q2 )  increment mantissa
 ;FMOnePlus:	stx tmp1		; save data stack index
@@ -1957,6 +2055,7 @@ F10Star:	jsr F2Star
 ;	WordEnd
 ;		rts
 
+Throw_FPStack_13a: jmp Throw_FPStack
 
 ; WordHeader "FShift",NN ; ( F: r1 n -- r2 )  align r1 to desired exponent
   ; n=designed exponent
@@ -1964,7 +2063,9 @@ F10Star:	jsr F2Star
 ;FShift:	jsr PopA
 FShiftA:	stx tmp1+0		; save data stack index
 		ldx FIndex		; X= FP stack index
-FShiftAX:	sta tmp1+1		; save desired alignment
+FShiftAX:	cpx #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_13a
+		sta tmp1+1		; save desired alignment
 		sec			; calc bit shift count
 		sbc FSExp,x
 		beq _leave
@@ -2005,6 +2106,9 @@ _leave:		clc
  WordHeader "Floor",NN ; ( F: r1 -- r2 )  Round toward negative infinity 
   ; https://forth-standard.org/standard/float/FLOOR
 Floor:		ldy FIndex
+		cpy #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_13a
+
 		lda FSMant0,y		; negative?
 		bpl _a
 		lda FSExp,y		; > -1 ?
@@ -2027,12 +2131,16 @@ _a:		lda #31
  WordHeader "FTrunc",NN ; ( F: r1 -- r2 ) Round towards zero
   ; https://forth-standard.org/standard/float/FTRUNC
 FTrunc:		ldy FIndex
+		cpy #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_13
+
 		lda FSMant0,y
 		bpl Floor
 		jsr FNegate
 		jsr Floor
 		jmp FNegate
 
+Throw_FPStack_13: jmp Throw_FPStack
 
  WordHeader "FRound",NN ; ( F: r1 -- r2 )  Round to nearest
   ; https://forth-standard.org/standard/float/FROUND
@@ -2067,7 +2175,7 @@ FIntFrc:	jsr FDup	; ( r1 r1 )
   ; returns X= FP stack index
 FMAlignX:	stx tmp1+0	; save data stack index
 		ldx FIndex	; load FP stack index
-		cpx #FDim-1	; check FP stack for >=2 entries
+		cpx #FSDim-1	; check FP stack for >=2 entries
 		bcs Throw_FPStack_3
 
 		; Note: sometimes we get denormalized mantissas
@@ -2095,61 +2203,68 @@ Throw_FPStack_3: jsr Throw_FPStack
 
  WordHeader "FNorm",NN ; ( F: r1 -- r2 )  Normalize r.
 FNorm:		stx tmp1+0		; save data stack index
-FNormX:		ldx FIndex		; switch to FP stack
+		ldx FIndex		; switch to FP stack
+FNormX:		cpx #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_13
+
 		ldy FSExp,x
 		lda FSMant0,x		; mantissa negative?
 		bmi _Neg
 					; mantissa is positive
-		bne _Pos2		; do byte shift
+		bne _Pos7		; do byte shift
 		jsr _ShiftB
 		bne _Pos2
 		jsr _ShiftB
 		bne _Pos2
 		jsr _ShiftB
 		beq _zero		; no significant bits left?
-_Pos2:		clc
-		bmi _RShft
+_Pos2:		bpl _Pos7
+_RShift:	iny			; right shift 1 bit
+		ror a
+		ror FSMant1,x
+		ror FSMant2,x
+		ror FSMant3,x
+		jmp _Finish
+
 _Pos3:		dey			; do bit shift
 		asl FSMant3,x
 		rol FSMant2,x
 		rol FSMant1,x
 		rol a
-		bpl _Pos3
+_Pos7:		cmp #$40		; normalized?
+		bcc _Pos3
 
-_RShft:  ; right shift 1 bit
-		iny
-		ror a
-		ror FSMant1,x
-		ror FSMant2,x
-		ror FSMant3,x
-_28:	; finish
+_Finish:
 		sta FSMant0,x
 		styta FSExp,x
-		ldx tmp1+0	; restore data stack index
+		ldx tmp1+0		; restore data stack index
 		rts
 
 _Neg:	; mantissa is negative
 		cmp #$ff
-		bne _Neg2	; do byte shift
+		bne _Neg7		; do byte shift
 		jsr _ShiftB
+		bpl _RShift
 		cmp #$ff
-		bne _Neg2
+		bne _Neg7
 		jsr _ShiftB
+		bpl _RShift
 		cmp #$ff
-		bne _Neg2
+		bne _Neg7
 		jsr _ShiftB
-;		cmp #$ff
-;		beq _zero	; no significant bits left?
-_Neg2:		cmp #0
-;		sec
-		bpl _RShft
+		bpl _RShift
+		cmp #$ff
+		bne _Neg7
+		beq _zero		; no significant bits left?
+
 _Neg3:		dey
 		asl FSMant3,x
 		rol FSMant2,x
 		rol FSMant1,x
 		rol a
-		bmi _Neg3
-		bpl _RShft
+_Neg7:		cmp #$c0	; normalized?
+		bcs _Neg3
+		bcc _Finish
 
 _Zerop:		pla
 		pla		; pop rts addr from _ShiftB
@@ -2158,7 +2273,7 @@ _zero:		lda #0
 		sta FSMant2,x
 		sta FSMant1,x
 		ldy #$80
-		bne _28
+		bne _Finish
 
 _ShiftB: ; shift left 1 byte
 		tya		; exponent -= 8
@@ -2239,11 +2354,14 @@ F1Minus:	jsr F1
 		jmp FMinus
 	WordEnd
 
+Throw_FPStack_14: jmp Throw_FPStack
 
  WordHeader "FNegate",NN ; ( F: r1 -- r2 )  Negate r1.
   ; https://forth-standard.org/standard/float/FNEGATE
 FNegate:	stx tmp1	; save data stack index
 		ldx FIndex	; X= FP stack index
+		cpx #FSDim-0	; check FP stack for >=1 entries
+		bcs Throw_FPStack_14
 
 		sec		; mantissa = 0 - mantissa
 		lda #0
@@ -2263,6 +2381,8 @@ FNegate:	stx tmp1	; save data stack index
  WordHeader "FAbs",NN ; ( F: r1 -- r2 )  Absolute value of r.
   ; https://forth-standard.org/standard/float/FABS
 FAbs:		ldy FIndex
+		cpy #FSDim-0	; check FP stack for >=1 entries
+		bcs Throw_FPStack_14
 		lda FSMant0,y		; mantissa negative?
 		bmi FNegate
 		rts
@@ -2272,7 +2392,7 @@ Throw_FPStack_4: jmp Throw_FPStack
 
 ; WordHeader "FPos",NN ; ( F: r1 r2 -- r1 r2 CPU.flags )  make r1 & r2 positive & return result sign
 FPos:		ldy FIndex		; load FP stack index
-		cpy #FDim-1		; check FP stack for 2
+		cpy #FSDim-1		; check FP stack for 2
 		bcs Throw_FPStack_4
 
 		lda FSMant0+0,y		; calc result sign
@@ -2290,8 +2410,8 @@ FPos:		ldy FIndex		; load FP stack index
 		stx tmp1+0		; save data stack index
 		ldx FIndex		; load FP stack index
 		plp			; return sign flag
+  	WordEnd
 		rts
-  ;	WordEnd
 
 
  WordHeader "F*",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3.
@@ -2301,13 +2421,13 @@ FStar:
 		php			;   save r3 sign
 
 		lda FSExp+0,x		; add exponents
-		sec
+		clc
 		adc FSExp+1,x
 		sta FSExp+1,x
 		bvc _49			; IfVs, 
 		bcs _zero		;   underflow?
 		ldx tmp1+0		;   restore data stack index
-		plp			; RDrop sign flag
+		plp			;   RDrop sign flag
 		jsr Throw_FpOutOfRange
 
 _zero:		inx			; F2Drop r1 & r2
@@ -2325,14 +2445,78 @@ _49:
 		sta tmp3+0
 		sta tmp3+1
 
-		lda FSMant3+1,x
-		jsr _Byte		; do bytes of r1 mantissa
-		lda FSMant2+1,x
-		jsr _Byte
-		lda FSMant1+1,x
-		jsr _Byte
+		ldy #8			; for each bit in byte
+_e:
+
+		lsr tmp3+1		;   tmp32 >>= 1
+		ror tmp3+0
+		ror tmp2+1
+		ror tmp2+0
+
+		lsr FSMant3+0,x		;   if r2.FSMant3 bit set
+		bcc _a
+		clc
+		lda FSMant0+1,x		;     tmp32 += r1>>24
+		adc tmp2+0
+		sta tmp2+0
+		bcc _a
+		inc tmp2+1
+		bne _a
+		inc tmp3+0
+		bne _a
+		inc tmp3+1
+_a:
+
+		lsr FSMant2+0,x		;   if r2.FSMant2 bit set
+		bcc _b
+		clc
+		lda FSMant1+1,x		;     tmp32 += r1>>16
+		adc tmp2+0
+		sta tmp2+0
 		lda FSMant0+1,x
-		jsr _Byte
+		adc tmp2+1
+		sta tmp2+1
+		bcc _b
+		inc tmp3+0
+		bne _b
+		inc tmp3+1
+_b:
+
+		lsr FSMant1+0,x		;   if r2.FSMant1 bit set
+		bcc _c
+		clc
+		lda FSMant2+1,x		;     tmp32 += r1>>8
+		adc tmp2+0
+		sta tmp2+0
+		lda FSMant1+1,x
+		adc tmp2+1
+		sta tmp2+1
+		lda FSMant0+1,x
+		adc tmp3+0
+		sta tmp3+0
+		bcc _c
+		inc tmp3+1
+_c:
+
+		lsr FSMant0+0,x		;   if r2.FSMant0 bit set
+		bcc _d
+		clc
+		lda FSMant3+1,x		;     tmp32 += r1
+		adc tmp2+0
+		sta tmp2+0
+		lda FSMant2+1,x
+		adc tmp2+1
+		sta tmp2+1
+		lda FSMant1+1,x
+		adc tmp3+0
+		sta tmp3+0
+		lda FSMant0+1,x
+		adc tmp3+1
+		sta tmp3+1
+_d:
+
+		dey			;  next bit
+		bne _e
 
 		lda tmp2+0		; r1.mant= tmp32
 		sta FSMant3+1,x
@@ -2351,35 +2535,6 @@ _49:
 		jmp FNegate
 +
 		jmp FNorm
-
-_Byte: ; do a byte of r1 (in A)
-		eor #$ff
-		sta tmp1+1
-		ldy #8			; for each bit in byte
-_b1:		lsr tmp1+1		;   if bit set
-		bcs _b3
-
-		lda tmp2+0		;     tmp32 += r2
-		adc FSMant3+0,x
-		sta tmp2+0
-		lda tmp2+1
-		adc FSMant2+0,x
-		sta tmp2+1
-		lda tmp3+0
-		adc FSMant1+0,x
-		sta tmp3+0
-		lda tmp3+1
-		adc FSMant0+0,x
-		sta tmp3+1
-
-_b3:		lsr tmp3+1		;   tmp32 >>= 1
-		ror tmp3+0
-		ror tmp2+1
-		ror tmp2+0
-
-		dey			;  next bit
-		bne _b1
-		rts
 	WordEnd
 
 
@@ -2501,29 +2656,58 @@ F1Slash:	jsr F1
 ; but only use 16bits of the input mantissa values.
 ; They are faster, for when lower precision can be tolerated.
 
-  .if 0
+  .if 1
  WordHeader "E*",NN ; ( F: r1 r2 -- r3 )  Multiply r1 by r2, giving r3. (16bit precision)
 EStar:
 		jsr FPos		; make r1 & r2 positive
 		php			;   remember result sign
 
 		lda FSExp+0,x		; add exponents
-		sec
+		clc
 		adc FSExp+1,x
 		sta FSExp+1,x
 		bvs _ExpOvfl
 
-		lda FSMant0+1,x		; save e1
-		pha
-		lda FSMant1+1,x
+		lda #0
+		sta tmp2+0		; zero result
+		sta tmp2+1
+;		sta FSMant2+1,x		; zero lo result
+;		sta FSMant3+1,x
 
-		ldy #0
-		sty FSMant0+1,x
-		sty FSMant1+1,x		; zero result
+		ldy #8			; for 8 bits in byte
+_e:
 
-		jsr _Byte		; do FSMant1+1 byte
-		pla
-		jsr _Byte		; do FSMant0+1 byte
+		lsr tmp2+1		;   result >>=1
+		ror tmp2+0
+
+		lsr FSMant1+1,x		;   if bit set
+		bcc _a
+		clc
+		lda FSMant0+0,x		;     result += r2>>8
+		adc tmp2+0
+		sta tmp2+0
+		bcc _a
+		inc tmp2+1
+_a:
+
+		lsr FSMant0+1,x		;   if bit set
+		bcc _b
+		clc
+		lda FSMant1+0,x		;     result += r2 
+		adc tmp2+0
+		sta tmp2+0
+		lda FSMant0+0,x
+		adc tmp2+1
+		sta tmp2+1
+_b:
+
+		dey			;  next bit
+		bne _e
+
+		lda tmp2+0		; r3 = result
+		sta FSMant1+1,x
+		lda tmp2+1
+		sta FSMant0+1,x
 
 		jmp EFix3		; finish
 
@@ -2537,23 +2721,6 @@ _Zero:		lda #0
 		sta FSMant0+1,x
 		beq EFix3
 
-_Byte: ; do a multiplier byte in A
-		eor #$ff
-		sta tmp1+1
-		ldy #8			; for 8 bits
-_b1:		lsr tmp1+1		;   if bit set
-		bcs _b5
-		lda FSMant1+0,x		;     r3 += r2 
-		adc FSMant1+1,x
-		sta FSMant1+1,x
-		lda FSMant0+0,x
-		adc FSMant0+1,x
-		sta FSMant0+1,x
-_b5:		lsr FSMant0+1,x		;   r3 <<= 1
-		ror FSMant1+1,x
-		dey			;  next bit
-		bne _b1
-		rts
 	WordEnd
 
   .else
@@ -2568,10 +2735,12 @@ EStar:
 		sta FSExp+1,x
 		bvs _ExpOvfl
 
-		ldy #0
-		sty tmp2+0
-		sty tmp2+1		; zero result
-
+		lda #0
+		sta tmp2+0
+		sta tmp2+1		; zero result
+		sta FSMant2+1,x		; zero lo result
+		sta FSMant3+1,x
+ 
 		lda FSMant1+1,x
 		jsr _Byte		; do FSMant1+1 byte
 		lda FSMant0+1,x
@@ -2701,10 +2870,12 @@ E1Slash:	jsr F1
  .endif ; fpe
 
 
+Throw_FPStack_15b: jmp Throw_FPStack
+
  WordHeader "S>F",NN ; ( n -- ) ( F: -- r )  convert n to r.  aka N>F
   ; https://forth-standard.org/standard/float/StoF
 SToF:		jsr PopYA		; pop n
-SToFYA:		jsr FAllocX		; alloc FP stack entry
+SToFYA:		FAllocXm Throw_FPStack_15b ; alloc FP stack entry
 		sta FSMant1,x		; copy n to mantissa
 		styta FSMant0,x
 		lda #0			; pad mantissa
@@ -2718,7 +2889,7 @@ SToFYA:		jsr FAllocX		; alloc FP stack entry
 
  WordHeader "D>F",NN ; ( d -- ) ( F: -- r )  convert d to r
   ; https://forth-standard.org/standard/float/DtoF
-FDToF:		jsr FAllocX		; alloc FP stack entry
+FDToF:		FAllocXm Throw_FPStack_15 ; alloc FP stack entry
 		ldx tmp1+0		; restore data stack index
 		ldy FIndex		; Y= fp stack index
 		lda DStack+2,x		; mantissa= d
@@ -2739,6 +2910,9 @@ FDToF:		jsr FAllocX		; alloc FP stack entry
  WordHeader "F>S",NN ; ( F: r -- ) ( -- n )  Convert r to n.  aka F>N
   ; https://forth-standard.org/standard/float/FtoS
 FToS:		ldy FIndex
+		cpy #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_15
+
 		lda FSMant0,y		; save sign
 		php
 		bpl +
@@ -2771,12 +2945,16 @@ _overflow:	plp			; RDrop saved sign
 		jsr ThrowA
 	WordEnd
 
+Throw_FPStack_15: jmp Throw_FPStack
+
 
  WordHeader "F>D",NN ; ( F: r -- ) ( -- d )  convert r to d
   ; https://forth-standard.org/standard/float/FtoD
   ; d is the double-cell signed-integer equivalent of the integer portion of r.
   ; The fractional portion of r is discarded.
 FToD:		ldy FIndex
+		cpy #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_15
 		lda FSMant0,y		; save sign
 		php
 		bpl +
@@ -2836,6 +3014,8 @@ FRnd:		jsr Rand		; generate next RndState
  WordHeader "FSqrt",NN ; ( F: r1 -- r2 )  Square root.  Newton's method. Short but slowish
   ; https://forth-standard.org/standard/float/FSQRT
 FSqrt:		ldy FIndex
+		cpy #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_15
 		lda FSMant0,y		; zero?
 		bne +
 		rts			;   just return the zero
@@ -3026,9 +3206,12 @@ _d9:
 		rts
 	WordEnd
 
+Throw_FPStack_16a: jmp Throw_FPStack
 
 FLt10:	; ( F: r1 -- r2 ) ( n1 -- n2 ) scale down to <10, counting exponent
 _1:		ldy FIndex		; while r >= 10
+		cpy #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_16a
 		lda FSExp,y
 		bmi _9			;   exponent negative?
 		cmp #4
@@ -3101,7 +3284,6 @@ _20:		iny
 		ora #'0'
 		bne pfchar
 
-
  WordHeader "F.",NN ; ( F: r -- )  Print r in fixed-point notation
   ; https://forth-standard.org/standard/float/Fd
 FDot:		jsr PFDot
@@ -3110,9 +3292,10 @@ FDot2:		jsr Count
 		jmp Space
 	WordEnd
 
+Throw_FPStack_16: jmp Throw_FPStack
 
  WordHeader "F.S",NN ; ( -- )  Non-destructive print of the float stack contents.
-FDotS:		lda #FDim-1	; for each FP stack entry
+FDotS:		lda #FSDim-1	; for each FP stack entry
 		bne _8
 _2:		pha
 
@@ -3174,6 +3357,8 @@ _exp    = DStack+0
 		jsr pfcstart		; start collecting chars, make r positive
 
 _30:		ldy FIndex		; while r < 1
+		cpy #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_16
 		lda FSMant0,y
 		beq _39
 		lda FSExp,y
@@ -3446,7 +3631,7 @@ _err:		jsr SLiteral_runtime
 ; Floating-point Do +Loop
 
  .section bss
-DoFData: .fill 5*2*FDim ; index & limit, should be in RAM
+DoFData: .fill 5*2*FSDim ; index & limit, should be in RAM
  .endsection bss
 
  WordHeader "FI'",NN ; ( r: r1 r2 -- r1 r2 ) ( F: -- r1 )  get float loop limit
@@ -3625,6 +3810,8 @@ SFStore_YA:	sta tmp2+0		; save
 		sty tmp2+1
 
 		ldy FIndex		; negative?
+		cpy #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_17
 		lda FSMant0,y
 		and #$80		;  save sign
 		sta tmp3+1
@@ -3718,6 +3905,8 @@ SFloats:	lda #2
 ;   m=mantissa (leading 1 assumed) (at msb)
 ; $3e200000 = 0.15625,  $c2ed4000 = -118.625
 
+Throw_FPStack_17: jmp Throw_FPStack
+
  WordHeader "DF!",NN ; ( F: r -- ) ( df-addr -- )  Store FP in IEEE double format
   ; Store the floating-point number r as a 64-bit IEEE double-precision number at df-addr.
   ; If the significand of the internal representation of r has more precision than the IEEE double-precision
@@ -3728,8 +3917,10 @@ DFStore:	jsr PopYA		; pop df_addr
 DFStore_YA:	sta tmp2+0		; save df_addr
 		sty tmp2+1
 
-		ldy FIndex		; negative?
-		lda FSMant0,y
+		ldy FIndex
+		cpy #FSDim-0		; check FP stack for >=1 entries
+		bcs Throw_FPStack_17
+		lda FSMant0,y		; negative?
 		and #$80		; remember sign
 		sta tmp3+1
 		bpl +			; make positive
@@ -4086,9 +4277,13 @@ Rad2Deg:	FloatLitI $72977068,6	; 180/PI
 	WordEnd
 
 
+Throw_FPStack_18: jmp Throw_FPStack
+
  WordHeader "FAReduce",NN ; ( F: r1 -- r2 )  Trig: reduce angle to -pi/2..pi/2
   ; C=mirrored around pi/2
 FAReduce:	ldy FIndex
+		cpy #FSDim-0		; check for >=1 FP stack entry
+		bcs Throw_FPStack_18
 		lda FSMant0,y		; zero?
 		beq _ok
 		lda FSExp,y		; get exponent
@@ -4444,6 +4639,8 @@ _rxzero:	inc FIndex	; FDrop rx
 
  WordHeader "FSgn",NN ; ( F: r1 -- r2 )  signum, returns 1,0,-1
 FSgn:		ldy FIndex
+		cpy #FSDim-0	; check for >=1 FP stack entry
+		bcs Throw_FPStack_19
 		lda FSMant0,y
 		beq _zero
 		inc FIndex
@@ -4453,6 +4650,9 @@ FSgn:		ldy FIndex
 
 _zero:		rts
 	WordEnd
+
+Throw_FPStack_19: jmp Throw_FPStack
+
 
 ; WordHeader "-1.e",NN ; ( F: -- r )  return -1
 FM1:		lda #$80
@@ -4755,7 +4955,7 @@ EMin:		jsr ECmpA
 
  WordHeader "EDepth",NN ; ( -- n )  # of entries on the FP stack
   ; https://forth-standard.org/standard/float/FDEPTH
-EDepth:		lda #FDim
+EDepth:		lda #FSDim
 		sec
 		sbc FIndex
 		jmp PushZA
@@ -4913,17 +5113,17 @@ ETuck:		jsr ESwap
   ; https://forth-standard.org/standard/float/FROT
 ERot:		stx tmp1		; save data stack index
 
-	.cerror FSMant0-FSExp!=FDim	; make sure our assumptions hold
-	.cerror FSMant1-FSMant0!=FDim
+	.cerror FSMant0-FSExp!=FSDim	; make sure our assumptions hold
+	.cerror FSMant1-FSMant0!=FSDim
 
 		lda FIndex		; for FSMant3, FSMant2, FSMant1, FSMant0, FSExp
 		clc
-		adc #2*FDim
+		adc #2*FSDim
 		bne _3
 
 _2:		txa			;    next byte
 	;	sec
-		sbc #FDim
+		sbc #FSDim
 _3:		tax
 
 		ldy FSExp+2,x		;   do a byte
@@ -5293,7 +5493,7 @@ FloatLitIE .macro mantissa,exp ; float literal
 
  WordHeader "EConstant",NN ; ( F: r "name" -- )  Create FP constant word
   ; https://forth-standard.org/standard/float/FCONSTANT
-EConstant:	jsr Header_Comma	; compile word header
+EConstant:	jsr WordHeader_Comma	; compile word header
 
 		jsr ELitTest		; will short work?
 		beq _Short
@@ -5399,7 +5599,7 @@ EE:		jsr EConstantRun
   ;	x TO name is executed, causing a new value of r to be assigned to name.
   ; TO name Run-time: ( F: r -- )
   ;	Assign the value r to name.
-EValue:		jsr Header_Comma	; compile word header
+EValue:		jsr WordHeader_Comma	; compile word header
 		lda #<EValue_runtime	; compile JSR EValue_runtime
 		ldy #>EValue_runtime
 		jsr Jsr_Comma_YA
@@ -5468,10 +5668,10 @@ _a:		lda #16-1
 		jmp ENormX
 	WordEnd
 
-; WordHeader "EShift",NN ; ( F: e1 n -- e2 )  align e1 to desired exponent
+ WordHeader "EShift",NN ; ( F: e1 n -- e2 )  align e1 to desired exponent
   ; n=designed exponent
   ; Returns exponent in Y, lo bit in carry
-;EShift:	jsr PopA
+EShift:		jsr PopA
 EShiftA:	stx tmp1+0		; save data stack index
 		ldx FIndex		; X= FP stack index
 EShiftAX:	sta tmp1+1		; save desired alignment
@@ -5551,7 +5751,7 @@ EIntFrc:	jsr EDup	; ( e1 e1 )
   ; returns X= FP stack index
 EMAlignX:	stx tmp1+0	; save data stack index
 		ldx FIndex	; load FP stack index
-		cpx #FDim-1	; check FP stack for >=2 entries
+		cpx #FSDim-1	; check FP stack for >=2 entries
 		bcs Throw_FPStack_e3
 
 		; Note: sometimes we get denormalized mantissas
@@ -5714,7 +5914,7 @@ Throw_FPStack_e4: jmp Throw_FPStack
 
 ; WordHeader "EPos",NN ; ( F: e1 e2 -- e1 e2 CPU.flags )  make e1 & e2 positive & return result sign
 EPos:		ldy FIndex		; load FP stack index
-		cpy #FDim-1		; check FP stack for 2
+		cpy #FSDim-1		; check FP stack for 2
 		bcs Throw_FPStack_e4
 
 		lda FSMant0+0,y		; calc result sign
@@ -6155,7 +6355,7 @@ EDot2:		jsr Count
 
 
  WordHeader "E.S",NN ; ( -- )  Non-destructive print of the float stack contents.
-EDotS:		lda #FDim-1	; for each FP stack entry
+EDotS:		lda #FSDim-1	; for each FP stack entry
 		bne _8
 _2:		pha
 
@@ -9771,7 +9971,7 @@ _line_loop:
   ; ## auto  https://forth-standard.org/standard/core/DEFER
   ; Compile a name that can point to various xt by Defer! or Is .
 Defer:
-		jsr Header_Comma	; compile word header
+		jsr WordHeader_Comma	; compile word header
 
 		lda #<_undefined	; compile "jmp _undefined" (patched later)
 		ldy #>_undefined
@@ -9917,6 +10117,7 @@ Of:
 	WordEnd
 
 _runtime: ; ( x1 x2 -- x1 )
+		DStackCheck 2,Throw_Stack_26 ; verify x1 & x2 are present
 		inx		; Drop x2
 		inx
 		lda DStack-2,x	; compare x1 with x2
@@ -9959,6 +10160,7 @@ zbranch_jsr_comma: ; Compile a 0BRANCH runtime jsr
 
 _runtime: ; ( f -- )
 	; In some Forths, this is called (0BRANCH).
+		DStackCheck 1,Throw_Stack_26 ; verify f is present
 
 		lda DStack+0,x		;flag is false?
 		ora DStack+1,x
@@ -9983,8 +10185,10 @@ zbranch_run_done:
 		rts
 
 
+Throw_Stack_26: jmp Throw_Stack
+
  WordHeader "Then",IM+CO+NN ; (C: orig -- ) ( -- )  IF flow control
-  ; ## auto  http://forth-standard.org/standard/core/THEN
+  ; ## auto  http://fzbranchkklorth-standard.org/standard/core/THEN
 Then:
 		; Get the address to jump to.
 		jsr Here
@@ -10277,7 +10481,7 @@ _Table: ; environment strings
 	.word $7f56,$7fff	; "MAX-N"
 	.word $7f5d,$ffff	; "MAX-U"
 	.word $ce38,$80		; "RETURN-STACK-CELLS"
-	.word $c0f2,DDim	; "STACK-CELLS"
+	.word $c0f2,DSDim	; "STACK-CELLS"
 	.word $e336,9		; "WORDLISTS"
   .if "fp" in TALI_OPTIONAL_WORDS
 				; Table 12.2 - Environmental query strings 
@@ -10286,7 +10490,7 @@ _Table: ; environment strings
 				; ------       ---------------  ---------  -------
 	.word $f24a,$ffff	; "FLOATING"		flag	no	   floating-point word set present
 ;	.word $272f,0		; "FLOATING-EXT"	flag	no	   floating-point extensions word set present
-	.word $9901,FDim	; "FLOATING-STACK"	n	yes	   If n = zero, floating-point numbers are 
+	.word $9901,FSDim	; "FLOATING-STACK"	n	yes	   If n = zero, floating-point numbers are 
 	 			;						kept on the data stack; otherwise n is 
 				;						the maximum depth of the separate 
 				;						floating-point stack.
@@ -10496,7 +10700,7 @@ Dot_s:
 		jsr Emit_A
 		jsr Space
 
-		ldy #DDim*2		; for each cell on the stack
+		ldy #DSDim*2		; for each cell on the stack
 _loop:		dey
 		dey
 		stx tmp1
@@ -11048,7 +11252,13 @@ Number_Sign_Greater:
 		adc #0
 		sta DStack+3,x
 
-		sec			; u= PadOffset - ToHold
+		bcc HoldSize3
+	WordEnd
+
+ WordHeader "HoldSize",NN ; ( -- n )  # of bytes in hold area
+HoldSize:	dex
+		dex
+HoldSize3:	sec			; u= PadOffset - ToHold
 		lda #PadOffset
 		sbc ToHold
 		sta DStack+0,x
@@ -11056,7 +11266,6 @@ Number_Sign_Greater:
 		sta DStack+1,x
 	WordEnd
 		rts
-
 
  WordHeader "Hold",0 ; ( char -- )  Insert character at current output
   ; ## auto  https://forth-standard.org/standard/core/HOLD
@@ -11983,7 +12192,7 @@ _done:
 
 Throw_Stack_11: jmp Throw_Stack
 
- WordHeader ">Number",NN ; ( ud addr u -- ud addr u )  Continue convert a string to an integer
+ WordHeader ">Number",NN ; ( ud addr u -- ud addr u )  Convert a string to an integer
   ; ## auto  https://forth-standard.org/standard/core/toNUMBER
   ; Convert a string to a double number. Logic here is based on the
   ; routine by Phil Burk of the same name in pForth, see
@@ -11997,7 +12206,7 @@ To_Number:	DStackCheck 4,Throw_Stack_11
 		lda DStack+0,x		; no chars left?
 		beq _done
 _Char_loop:
-		lda (DStack+2,x)		; Get next character
+		lda (DStack+2,x)	; Get next character
 		cmp #'0'		; convert to value (Digit_Question)
 		bcc _done
 		cmp #'9'+1
@@ -12281,13 +12490,15 @@ _done:
 
 _MinusCheck: ; If the first character is a minus, strip it off and set
 		; the flag
+		cmp #'+'
+		beq _mcp
 		cmp #'-'		; a minus sign?
-		bne +
+		bne _mc9
 		dec tmp4+1		; set flag
-		jsr NOS_One_Plus	; start one character later
+_mcp:		jsr NOS_One_Plus	; start one character later
 		dec DStack+0,x		; decrease string length by one
 		lda (DStack+2,x)	; get next char
-+		rts
+_mc9:		rts
 
 
  WordHeader "Hex",NN ; ( -- )  Set radix base to hexadecimal
@@ -12361,7 +12572,7 @@ DoFufaH:  .fill DoStkDim
  .endsection bss
  .section code
 
- WordHeader "?Do",CO+IM+NN ; ( limit start -- )(R: -- limit start)  Conditional DO loop start
+ WordHeader "?Do",CO+IM+NN ; ( limit start -- )  Conditional DO loop start
   ; ## auto  https://forth-standard.org/standard/core/qDO
 Question_Do:
 		jsr Do_Leave_Init
@@ -12392,7 +12603,7 @@ _2:		lda DoIndex+1
 		rts		; return Z
 
 
- WordHeader "Do",CO+IM+NN ; ( limit start -- )(R: -- limit start)  DO loop start
+ WordHeader "Do",CO+IM+NN ; ( limit start -- )  DO loop start
   ; ## auto  https://forth-standard.org/standard/core/DO
   ;
   ; Compile-time part of DO. Could be realized in Forth as
@@ -12581,7 +12792,7 @@ _p9:
 		rts
 
 
- WordHeader "Unloop",CO ; ( -- )(R: n1 n2 n3 ---)  Drop DO loop control
+ WordHeader "Unloop",CO ; ( -- )  Drop DO loop control
   ; ## auto  https://forth-standard.org/standard/core/UNLOOP
 Unloop:
 		ldy DoStkIndex
@@ -12633,7 +12844,7 @@ Do_Leave_Init: ; ( -- saved_leave )
 		rts
 
 
- WordHeader "I",CO ; ( -- n )(R: n -- n)  Push DO loop index
+ WordHeader "I",CO ; ( -- n )  Push DO loop index
   ; ## auto  https://forth-standard.org/standard/core/I
   ; Note that this is not the same as R@ ;
   ; see the Control Flow section of the manual for details.
@@ -12652,7 +12863,7 @@ I:		ldy DoStkIndex
 		rts
 
 
- WordHeader "J",CO ; ( -- n ) (R: n -- n )  Push second DO loop index
+ WordHeader "J",CO ; ( -- n )  Push second DO loop index
   ; ## auto  https://forth-standard.org/standard/core/J
   ; see the Control Flow section of the manual for more details.
 J:		ldy DoStkIndex
@@ -12785,21 +12996,6 @@ Throw_Stack: ; overflow or underflow (from DStackCheck)
 _over:		lda #$100+err_Stack_Overflow
 		bne ThrowA
 
- .if "fp" in TALI_OPTIONAL_WORDS
-
-Throw_FPStack: ; overflow or underflow (from FAllocX)
-		bmi _over
-		lda #$100+err_FPStackUnderflow
-		bne ThrowA
-
-_over:		lda #$100+err_FPStackOverflow
-		bne ThrowA
-
-Throw_FpOutOfRange:
-		lda #$100+err_FpOutOfRange
-		bne ThrowA
- .endif ; "fp"
-
  WordHeader "?Stack",NN ; ( -- )  Check stack bounds
 QStack:		DStackCheck 0,Throw_Stack
 
@@ -12807,8 +13003,10 @@ QStack:		DStackCheck 0,Throw_Stack
 
  .if "fp" in TALI_OPTIONAL_WORDS
 		ldy FIndex		; check floating point stack
-		cpy #FDim+1
-		bcs Throw_FPStack
+		cpy #FSDim+1
+		bcc _3
+		jmp Throw_FPStack
+_3:
   .endif
 	WordEnd
 		rts			; all OK
@@ -12818,7 +13016,7 @@ QStack:		DStackCheck 0,Throw_Stack
 Throw:		jsr PopA		; pop n
 ThrowA:		jsr Type_Exception_Text_A ; print the associated error string
 
-		ldx #DDim*2		; reset data stack (in case of underflow)
+		ldx #DSDim*2		; reset data stack (in case of underflow)
 
 		; Exception frames & CATCH aren't implemented,
 Abort_Core:	;   so we act like Abort in core
@@ -12882,9 +13080,9 @@ _NotFound:	ldy #$ff		; print code
 
 
  WordHeader "Empty-Stack",NN ; ( ? -- )  Empty data & FP stacks
-Empty_Stack:	ldx #DDim*2	; init data stack
+Empty_Stack:	ldx #DSDim*2	; init data stack
 .if "fp" in TALI_OPTIONAL_WORDS
-		lda #FDim	; init FP stack
+		lda #FSDim	; init FP stack
 		sta FIndex
  .endif ; fp
 	WordEnd
@@ -13477,6 +13675,16 @@ Bl:		lda #AscSP
 
  WordHeader "Tmp4",NN ; ( -- addr ) Variable: zp work area
 		lda #tmp4
+		jmp PushZA	; jmp to be a recognizable constant
+	WordEnd
+
+ WordHeader "Tmp5",NN ; ( -- addr ) Variable: zp work area
+		lda #tmp5
+		jmp PushZA	; jmp to be a recognizable constant
+	WordEnd
+
+ WordHeader "Tmp6",NN ; ( -- addr ) Variable: zp work area
+		lda #tmp6
 		jmp PushZA	; jmp to be a recognizable constant
 	WordEnd
 
@@ -14718,7 +14926,7 @@ Two_variable:	jsr Variable		; compile word header & push PFA & 1st cell of data
   ; ## auto  https://forth-standard.org/standard/core/CONSTANT
 Constant:	jsr underflow_1
 
-		jsr Header_Comma	; compile word header
+		jsr WordHeader_Comma	; compile word header
 
 		jsr LitCompile		; compile code to load registers, & pick a subroutine
 		jsr Jmp_Comma_NT_YA	; compile code to JMP to the subroutine
@@ -14732,7 +14940,7 @@ Two_constant:
   .if 1
 		jmp TwoValue
   .else
-		jsr Header_Comma	; compile word header
+		jsr WordHeader_Comma	; compile word header
 		jsr Swap
 		jsr Literal		; compile push lo cell
 		jsr LitCompile		; compile push hi cell, return YA=exit routine
@@ -14746,7 +14954,7 @@ Two_constant:
   ; ## auto  https://forth-standard.org/standard/core/VALUE
 Value:		jsr underflow_1
 
-		jsr Header_Comma	; compile word header
+		jsr WordHeader_Comma	; compile word header
 
 		jsr ldya_immed_comma	; compile lda # & ldy #
 					; always use ldya_immed_comma so TO knows the layout
@@ -14760,7 +14968,7 @@ Value:		jsr underflow_1
 
  WordHeader "2Value",NN ; ( d "name" -- )  Define a 2Value word
   ; ## auto  https://forth-standard.org/standard/double/TwoVALUE
-TwoValue:	jsr Header_Comma	; compile word header
+TwoValue:	jsr WordHeader_Comma	; compile word header
 
 		lda #<TwoValue_Runtime	; compile JSR TValue_Runtime
 		ldy #>TwoValue_Runtime
@@ -15173,9 +15381,9 @@ _done:
 		rts
 
 
- WordHeader "Header,",NN ; ( "name" -- )  Compile word header
+ WordHeader "WordHeader,",NN ; ( "name" -- )  Compile word header
   ; See the definition of WordHeader towards the top of this file for details on the header.
-Header_Comma:
+WordHeader_Comma:
 		jsr Header_Build
 
 Header_Link: ; finish linking compiled word header into current dictionary
@@ -15300,7 +15508,7 @@ _LinkShort:	tya			; compile wh_LinkNt offset byte
  WordHeader "Create",NN ; ( "name" -- )  Create Dictionary entry for 'name'
   ; ## "create"  https://forth-standard.org/standard/core/CREATE
 Create:
-		jsr Header_Comma	; compile word header
+		jsr WordHeader_Comma	; compile word header
 
 		lda #<DoVar		; compile JSR DoVar
 		ldy #>DoVar
@@ -15424,7 +15632,7 @@ _last = cp_end-2*padoffset
  WordHeader "Depth",NN ; ( -- u )  Get number of cells (not bytes) used by stack
   ; ## auto  https://forth-standard.org/standard/core/DEPTH
 Depth:
-		lda #DDim*2	; A= DDim*2 - X
+		lda #DSDim*2	; A= DSDim*2 - X
 		stx tmp4
 		sec
 		sbc tmp4
@@ -16908,6 +17116,11 @@ Nos_Plus_A: ; add unsigned A to NOS
 +		rts
 
 
+ WordHeader "cp",NN ; ( -- addr ) variable: compile ptr
+		lda #cp
+		jmp PushZA
+	WordEnd
+
  WordHeader "Here",NN ; ( -- addr )  Push Compiler Pointer on Data Stack
   ; ## auto  https://forth-standard.org/standard/core/HERE
 Here:		lda cp+0
@@ -17057,7 +17270,8 @@ UTwo_Slash:	DStackCheck 1,Throw_Stack_18
 
  WordHeader "DRShift",0 ; ( ud1 u -- ud2 )  shift double right u bits
 DRShift:	jsr PopA	; pop u
-DRShiftA:	tay
+DRShiftA:	DStackCheck 2,Throw_Stack_18
+		tay
 		beq _9
 		lda DStack+1,x
 _2:		lsr a
@@ -17400,6 +17614,8 @@ Drop_Comma:	lda #$e8	;inx
 		bne Comma_YA
 ;	WordEnd
 
+ WordHeader "Jsr,YA",NN,Jsr_Comma_YA,3
+
  WordHeader "Jsr,",NN ; ( addr -- )  compile JSR abs
 Jsr_Comma:	jsr PopYA	; pop addr (optimize can skip)
 Jsr_Comma_YA:	jsr PushYA	; push addr
@@ -17499,6 +17715,7 @@ Bell:		lda #7		; ASCII value for BELL
 		bne Emit_A
 	WordEnd
 
+ WordHeader "EmitA",NN,Emit_A ; ( A=char -- )  print char
 
  WordHeader "Emit",NN ; ( char -- )  Print character to current output
   ; ## auto  https://forth-standard.org/standard/core/EMIT
