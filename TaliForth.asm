@@ -152,6 +152,10 @@ Cib:	.word ?		; address of current input buffer
 CibLen:	.word ?		; length of current input buffer
 ToIn:	.word ?		; pointer to CIB (>IN in Forth)
 state:	.word ?		; STATE: -1 compile, 0 interpret
+			  ; STATE is true when in compilation state, false otherwise. Note
+			  ; we do not return the state itself, but only the address where
+			  ; it lives. The state should not be changed directly by the user; see
+			  ; http://forth.sourceforge.net/standard/dpans/dpans6.htm#6.1.2250
 status: .word ?		; internal status flags
 			; (used by : :NONAME ; ACCEPT)
 			; Bit 7 = Redefined word message postpone
@@ -210,9 +214,14 @@ PrecisionV: .byte ?	; # of decimal places for FP print
 base:	.word ?		; number radix, default decimal
 
 nc_limit: .word ?	; limit for Native Compile size
-uf_strip: .word ?	; flag to strip underflow detection code
+uf_strip: .word ?	; flag variable that determines if underflow
+			  ; checking should be removed during the compilation of new words.
+			  ; Default is false.
 
 output:	.word ?		; vector for EMIT
+			; By default, this will hold the value of kernel_putc routine,
+			; but this can be changed by the user.
+
 input:	.word ?		; vector for KEY
 HaveKey: .word ?	; vector for KEY?
 
@@ -391,7 +400,7 @@ XtPtr1 ::= *
 WordListLink ::= Nt0 ; remember the nt of this word for later
 	.endmacro
 
-WordEnd .macro  ; Mark end of a word's appended code
+WordEnd .macro  ; Mark end of a word's appended code (fix length field)
 	.cerror (WordFlags & DB )!=0 ; does not work on words with disjoint body
 CodeLen	.var *-XtPtr1
 	.if CodeLen>$ff
@@ -405,7 +414,7 @@ Here1 = *	; remember here
 	.endmacro
 
 
-styta .macro adr1,adr2 ; compile appropriate sty adr,x
+styta .macro adr1,adr2 ; compile appropriate "sty adr,x" sequence
 	.if \adr1<$100
 		sty \adr1,\adr2	; sty dir,x exists
 	.else			; sty abs,x doesn't exist, so we work around
@@ -416,8 +425,22 @@ styta .macro adr1,adr2 ; compile appropriate sty adr,x
 
 
 DStackCheck .macro depth,ErrorDestination ; compile a data stack underflow check
-	cpx #(DSDim-\depth)*2+1	; far enough below end of data stack (& not negative)?
+	cpx #(DSDim-\depth)*2+1	; far enough below end of data stack?
+				; negative values (stack overflow) also caught
 	bcs \ErrorDestination
+	.endmacro
+
+WordConstant .macro Name,Value ; compile a word constant
+  WordHeader \Name,NN
+ 	.if \Value<$100
+		lda #\Value
+		jmp PushZA
+	 .else
+		lda #<\Value
+		ldy #>\Value
+		jmp PushYA
+	 .endif
+  WordEnd
 	.endmacro
 
 
@@ -726,25 +749,14 @@ _LinkShort:	ldy #wh_LinkNt		; tmp1 -= tmp1->LinkNt byte offset
 		rts
 
 
- WordHeader "DStack",NN ; ( -- addr )  ptr to DStack
-		lda #DStack
-		jmp PushZA
-	WordEnd
+ WordConstant "DStack",DStack ; ( -- addr )  ptr to DStack
 
- WordHeader "RStack",NN ; ( -- addr )  ptr to RStack
-		ldy #>RStack
-		lda #<RStack
-		jmp PushYA
-	WordEnd
+ WordConstant "RStack",RStack ; ( -- addr )  ptr to RStack
 
 
 ; Random #s ------------------------------------------------------
 
- WordHeader "RndState",NN ; ( -- addr )  Double variable: random # state
-		ldy #>RndState
-		lda #<RndState
-		jmp PushYA
-	WordEnd
+ WordConstant "RndState",RndState ; ( -- addr )  Double variable: random # state
 
  WordHeader "Rand",0 ; ( -- YA )  generate next random # state
   ; 32bit Galois LFSR  https://en.wikipedia.org/wiki/Linear-feedback_shift_register#Galois_LFSRs
@@ -812,77 +824,19 @@ FSMant3: .fill FSDim	; byte array[FSDim] FP stack mantissa 4th
 
 ;--- labels for writing words that play with FP internals------------------------
 
- WordHeader "FIndex",NN ; ( -- addr )   Variable: FP stack arrays index
-	.if FIndex<$100
-		lda #FIndex
-		jmp PushZA
-	.else
-		lda #<FIndex
-		ldy #>FIndex
-		jmp PushYA
-	.endif
-	WordEnd
+ WordConstant "FIndex",FIndex ; ( -- addr )   Variable: FP stack arrays index
 
- WordHeader "FSDim",NN ; ( -- n )  Constant: # of FP stack entries allocated
-		lda #FSDim
-		jmp PushZA
-	WordEnd
+ WordConstant "FSDim",FSDim ; ( -- n )  Constant: # of FP stack entries allocated
 
- WordHeader "FSExp",NN ; ( -- addr )  Byte array variable
-	.if FSExp<$100
-		lda #FSExp
-		jmp PushZA
-	.else
-		lda #<FSExp
-		ldy #>FSExp
-		jmp PushYA
-	.endif
-	WordEnd
+ WordConstant "FSExp",FSExp ; ( -- addr )  Byte array variable
 
- WordHeader "FSMant0",NN ; ( -- addr )  Byte array variable
-	.if FSMant0<$100
-		lda #FSMant0
-		jmp PushZA
-	.else
-		lda #<FSMant0
-		ldy #>FSMant0
-		jmp PushYA
-	.endif
-	WordEnd
+ WordConstant "FSMant0",FSMant0 ; ( -- addr )  Byte array variable
 
- WordHeader "FSMant1",NN ; ( -- addr )  Byte array variable
-	.if FSMant1<$100
-		lda #FSMant1
-		jmp PushZA
-	.else
-		lda #<FSMant1
-		ldy #>FSMant1
-		jmp PushYA
-	.endif
-	WordEnd
+ WordConstant "FSMant1",FSMant1 ; ( -- addr )  Byte array variable
 
- WordHeader "FSMant2",NN ; ( -- addr )  Byte array variable
-	.if FSMant2<$100
-		lda #FSMant2
-		jmp PushZA
-	.else
-		lda #<FSMant2
-		ldy #>FSMant2
-		jmp PushYA
-	.endif
-	WordEnd
+ WordConstant "FSMant2",FSMant2 ; ( -- addr )  Byte array variable
 
- WordHeader "FSMant3",NN ; ( -- addr )  Byte array variable
-	.if FSMant3<$100
-		lda #FSMant3
-		jmp PushZA
-	.else
-		lda #<FSMant3
-		ldy #>FSMant3
-		jmp PushYA
-	.endif
-	WordEnd
-
+ WordConstant "FSMant3",FSMant3 ; ( -- addr )  Byte array variable
 
 Float_Size = 5 ; # of bytes in memory for a float
  WordHeader "Float",NN ; ( -- u )  Constant: size of a float
@@ -9973,7 +9927,7 @@ _line_loop:
 Defer:
 		jsr WordHeader_Comma	; compile word header
 
-		lda #<_undefined	; compile "jmp _undefined" (patched later)
+		lda #<_undefined	; compile "jmp _undefined" (patched by Defer! )
 		ldy #>_undefined
 		jsr Jmp_Comma_YA
 
@@ -10061,12 +10015,8 @@ _compiling:
 	WordEnd
 
 
- WordHeader "UserAddr",NN ; ( -- addr )  Push address of base address of user variables
+ WordConstant "UserAddr",User0 ; ( -- addr )  Push address of base address of user variables
   ; ## tested	 Tali Forth
-UserAddr:	ldy #>User0
-		lda #<User0
-		jmp PushYA
-	WordEnd
 
 
  WordHeader "Buffer:",NN ; ( u "<name>" -- ; -- addr )  Create an uninitialized buffer
@@ -10148,6 +10098,8 @@ zbranch_jmp0_comma:
 		jmp Jmp_Comma_YA
 	WordEnd
 
+
+; See also zbranch_comma
 
 zbranch_jmp_comma = Jmp_Comma		; compile jmp abs
 
@@ -10926,7 +10878,7 @@ _letters_match:
 		ora tmp3+1
 		bne _comparison_loop ; Check the next letter
 
-		; We've run out of letters and they all match!
+		; We've run out of chars and they all match!
 		; Return (addr1+offset) (u1-offset) true
 		; Add offset to addr1.
 		clc
@@ -11120,25 +11072,11 @@ Align:		; On the 6502, this does nothing.
 		rts
 
 
- WordHeader "Output",NN ; ( -- addr )  Return the address of the EMIT vector address
+ WordConstant "Output",output ; ( -- addr )  Return the address of the EMIT vector address
   ; ## tested  Tali Forth
-xt_output:
-	; Return the address where the jump target for EMIT is stored (but
-	; not the vector itself). By default, this will hold the value of
-	; kernel_putc routine, but this can be changed by the user, hence this
-	; routine.
-		ldy #>output
-		lda #<output
-		jmp PushYA
-	WordEnd
 
-
- WordHeader "Input",NN ; ( -- addr )  Return address of input vector
+ WordConstant "Input",input ; ( -- addr )  Return address of input vector
   ; ## tested Tali Forth
-xt_input:	ldy #>input
-		lda #<input
-		jmp PushYA
-	WordEnd
 
 
  WordHeader "CR",NN ; ( -- )  Print a line feed
@@ -12516,13 +12454,9 @@ Decimal_a:	sta base+0
 	WordEnd
 		rts
 
- WordHeader "Base",NN ; ( -- addr )  Push address of radix base to stack
+ WordConstant "Base",base ; ( -- addr )  Push address of radix base to stack
   ; ## auto  https://forth-standard.org/standard/core/BASE
   ; The ANS Forth standard sees the base up to 36
-		ldy #>base
-		lda #<base
-		jmp PushYA
-	WordEnd
 
 Throw_Stack_10: jmp Throw_Stack
 
@@ -13298,22 +13232,11 @@ Allow_Native:	jsr current_to_dp
 		rts
 
 
- WordHeader "nc-limit",NN ; ( -- addr )  Variable: max # of bytes to inline
+ WordConstant "nc-limit",nc_limit ; ( -- addr )  Variable: max # of bytes to inline
   ; ## tested	 Tali Forth
-		ldy #>nc_limit
-		lda #<nc_limit
-		jmp PushYA
-	WordEnd
 
- WordHeader "strip-underflow",NN ; ( -- addr )  Variable: strip underflow flag
+ WordConstant "strip-underflow",uf_strip ; ( -- addr )  Variable: strip underflow flag
   ; ## tested	Tali Forth
-  ; `STRIP-UNDERFLOW` is a flag variable that determines if underflow
-  ; checking should be removed during the compilation of new words.
-  ; Default is false.
-		ldy #>uf_strip
-		lda #<uf_strip
-		jmp PushYA
-	WordEnd
 
 
  WordHeader "postpone",IM+CO+NN ; ( "name" -- )  Compile word, reducing IMMEDIATEness
@@ -13582,6 +13505,7 @@ lda_immed_comma: ; ( n -- ) compile "lda #"
  WordHeader "PushYA",0 ; ( YA -- n )  Push YA to data stack
 PushYA:		dex
 		dex
+					; check for overflow???
 		sta DStack+0,x
 		sty DStack+1,x
 	WordEnd
@@ -13592,6 +13516,7 @@ PushYA:		dex
 True:		lda #$FF
 PushAA:		dex
 		dex
+					; check for overflow???
 		sta DStack+0,x
 		sta DStack+1,x
 	WordEnd
@@ -13605,7 +13530,7 @@ False:		lda #0
 
  WordHeader "PushZA",0 ; ( A -- n )  Push zero-extended A to the data stack
 PushZA:		dex
-		dex
+		dex			; check for overflow???
 		sta DStack+0,x
 		lda #0
 		sta DStack+1,x
@@ -13637,56 +13562,25 @@ Bl:		lda #AscSP
 		bne PushZA
 	WordEnd
 
- WordHeader ">In",NN ; ( -- addr )  Return address of the input pointer
+ WordConstant ">In",ToIn ; ( -- addr )  Return address of the input pointer
   ; ## auto  https://forth-standard.org/standard/core/toIN
-		lda #ToIn
-		jmp PushZA	; jmp to be a recognizable constant
-	WordEnd
 
- WordHeader "State",NN ; ( -- addr )  Return the address of compilation state flag
+ WordConstant "State",State ; ( -- addr )  Return the address of compilation state flag
   ; ## auto  https://forth-standard.org/standard/core/STATE
-  ; STATE is true when in compilation state, false otherwise. Note
-  ; we do not return the state itself, but only the address where
-  ; it lives. The state should not be changed directly by the user; see
-  ; http://forth.sourceforge.net/standard/dpans/dpans6.htm#6.1.2250
-		lda #State
-		jmp PushZA	; jmp to be a recognizable constant
-	WordEnd
 
- WordHeader "dp",NN ; ( -- addr )  Variable: nt of current word
-		lda #dp
-		jmp PushZA	; jmp to be a recognizable constant
-	WordEnd
+ WordConstant "dp",dp ; ( -- addr )  Variable: nt of current word
 
- WordHeader "Tmp1",NN ; ( -- addr ) Variable: zp work area
-		lda #tmp1
-		jmp PushZA	; jmp to be a recognizable constant
-	WordEnd
+ WordConstant "Tmp1",tmp1 ; ( -- addr ) Variable: zp work area
 
- WordHeader "Tmp2",NN ; ( -- addr ) Variable: zp work area
-		lda #tmp2
-		jmp PushZA	; jmp to be a recognizable constant
-	WordEnd
+ WordConstant "Tmp2",tmp2 ; ( -- addr ) Variable: zp work area
 
- WordHeader "Tmp3",NN ; ( -- addr ) Variable: zp work area
-		lda #tmp3
-		jmp PushZA	; jmp to be a recognizable constant
-	WordEnd
+ WordConstant "Tmp3",tmp3 ; ( -- addr ) Variable: zp work area
 
- WordHeader "Tmp4",NN ; ( -- addr ) Variable: zp work area
-		lda #tmp4
-		jmp PushZA	; jmp to be a recognizable constant
-	WordEnd
+ WordConstant "Tmp4",tmp4 ; ( -- addr ) Variable: zp work area
 
- WordHeader "Tmp5",NN ; ( -- addr ) Variable: zp work area
-		lda #tmp5
-		jmp PushZA	; jmp to be a recognizable constant
-	WordEnd
+ WordConstant "Tmp5",tmp5 ; ( -- addr ) Variable: zp work area
 
- WordHeader "Tmp6",NN ; ( -- addr ) Variable: zp work area
-		lda #tmp6
-		jmp PushZA	; jmp to be a recognizable constant
-	WordEnd
+ WordConstant "Tmp6",tmp6 ; ( -- addr ) Variable: zp work area
 
 
  WordHeader "SLiteral",CO+IM+UF+NN ; ( addr u -- )( -- addr u )  Compile a string for runtime
@@ -15609,10 +15503,7 @@ _DoDoes: ; Execute the runtime portion of DOES>.
 		jmp PushAY
 
 
- WordHeader "CpEnd",NN ; ( -- addr )  Return end of dictionary space
-		lda #<cp_end
-		ldy #>cp_end
-		jmp PushYA
+ WordConstant "CpEnd",cp_end ; ( -- addr )  Return end of dictionary space
 
  WordHeader "Unused",NN ; ( -- u )  Return size of space available to Dictionary
   ; ## auto  https://forth-standard.org/standard/core/UNUSED
@@ -17116,10 +17007,7 @@ Nos_Plus_A: ; add unsigned A to NOS
 +		rts
 
 
- WordHeader "cp",NN ; ( -- addr ) variable: compile ptr
-		lda #cp
-		jmp PushZA
-	WordEnd
+ WordConstant "cp",cp ; ( -- addr ) variable: compile ptr
 
  WordHeader "Here",NN ; ( -- addr )  Push Compiler Pointer on Data Stack
   ; ## auto  https://forth-standard.org/standard/core/HERE
@@ -17516,9 +17404,6 @@ fmt_dr3:	jsr Less_Number_Sign	; start formatted output
 
  WordHeader "?",NN ; ( addr -- )  Print content of a variable
   ; ## tested  https://forth-standard.org/standard/tools/q
-  ;
-  ; Only used interactively. Since humans are so slow, we
-  ; save size and just go for the subroutine jumps
 Question:
 		; FETCH takes care of underflow check
 		jsr Fetch
@@ -17528,19 +17413,18 @@ Question:
 
  WordHeader "2Dup",NN ; ( n1 n2 -- n1 n2 n1 n2 )  Duplicate top two stack elements
   ; ## auto  https://forth-standard.org/standard/core/TwoDUP
-Two_Dup:	DStackCheck 2,Throw_Stack_13
+Two_Dup:	dex		; alloc DStack space
+		dex
+		dex
+		dex
+		DStackCheck 4,Throw_Stack_13  ; check space
 
-		dex
-		dex
-		dex
-		dex
-
-		lda DStack+4,x	; TOS
+		lda DStack+4,x	; copy n2
 		sta DStack+0,x
 		lda DStack+5,x
 		sta DStack+1,x
 
-		lda DStack+6,x	; NOS
+		lda DStack+6,x	; copy n1
 		sta DStack+2,x
 		lda DStack+7,x
 		sta DStack+3,x
@@ -17551,10 +17435,9 @@ Throw_Stack_13: jmp Throw_Stack
 
  WordHeader "Tuck",NN ; ( b a -- a b a )  Copy TOS below NOS
   ; ## auto  https://forth-standard.org/standard/core/TUCK
-Tuck:		DStackCheck 2,Throw_Stack_13
-
+Tuck:		dex		; alloc DStack space
 		dex
-		dex
+		DStackCheck 3,Throw_Stack_13 ; check space
 
 		ldy DStack+4,x	; LSB
 		lda DStack+2,x
@@ -17612,7 +17495,7 @@ Two_Comma:	jsr Comma
 Drop_Comma:	lda #$e8	;inx
 		tay
 		bne Comma_YA
-;	WordEnd
+	WordEnd
 
  WordHeader "Jsr,YA",NN,Jsr_Comma_YA,3
 
@@ -17709,12 +17592,6 @@ Plus_store:	DStackCheck 2,Throw_Stack_16
 	WordEnd
 
 
- WordHeader "Bell",NN ; ( -- )  Emit ASCII Bell
-  ; ## tested  Tali Forth
-Bell:		lda #7		; ASCII value for BELL
-		bne Emit_A
-	WordEnd
-
  WordHeader "EmitA",NN,Emit_A ; ( A=char -- )  print char
 
  WordHeader "Emit",NN ; ( char -- )  Print character to current output
@@ -17727,8 +17604,13 @@ Emit_A: ; print char in A
 		jmp (output)		; JSR/RTS
 	WordEnd
 
+ WordHeader "Bell",NN ; ( -- )  Emit ASCII Bell
+  ; ## tested  Tali Forth
+Bell:		lda #7		; ASCII value for BELL
+		bne Emit_A
+	WordEnd
 
- WordHeader "Space",NN ; ( -- )  Print a single space
+ WordHeader "Space",NN ; ( -- )  Emit a single space
   ; ## auto  https://forth-standard.org/standard/core/SPACE
 Space:		lda #AscSP
 		bne Emit_A
@@ -17821,10 +17703,9 @@ Throw_Stack_03: jmp Throw_Stack
 ; WordHeader "Roll",NN ; ( ... u -- ... )  Rotate u+1 items on the top of the stack
   ; https://forth-standard.org/standard/core/ROLL
 
- WordHeader "Rot",NN ; ( a b c -- b c a )  Rotate first three stack entries downwards
+ WordHeader "Rot",NN ; ( a b c -- b c a )  Rotate first 3 stack entries downwards
   ; ## auto  https://forth-standard.org/standard/core/ROT
-  ; Remember "R for 'Revolution'" - the bottom entry comes out
-  ; on top!
+  ; Remember "R for 'Revolution'" - the bottom entry comes out on top!
 Rot:		DStackCheck 3,Throw_Stack_03
 
 		ldy DStack+5,x	; do MSB
@@ -17956,8 +17837,8 @@ To_R:
   ; native is special case
   ; Move Top of Return Stack to Top of Data Stack.
   ;
-  ; We have to move
-  ; the RTS address out of the way first. This word is handled
+  ; We have to move the RTS address out of the way first.
+  ; This word is handled
   ; differently for native and and subroutine compilation, see COMPILE,
   ; This is a compile-only word
 R_From:
@@ -18026,13 +17907,12 @@ RDrop:
 
  WordHeader "Over",NN ; ( b a -- b a b )  Copy NOS to TOS
   ; ## auto  https://forth-standard.org/standard/core/OVER
-Over:		DStackCheck 2,Throw_Stack_04
-
-		lda DStack+2,x	; LSB
+Over:		lda DStack+2,x	; LSB
 		ldy DStack+3,x	; MSB
 
 		dex		; PushYA
 		dex
+		DStackCheck 3,Throw_Stack_04 ; check for 3 cells, not overflow
 		sta DStack+0,x
 		sty DStack+1,x
 	WordEnd
@@ -18045,32 +17925,33 @@ Question_Dup:	DStackCheck 1,Throw_Stack_04
 
 		lda DStack+0,x	; Check if TOS is zero
 		ora DStack+1,x
-		bne Dup_NoUf
+		bne Dup
 	WordEnd
 		rts
 
  WordHeader "Dup",NN ; ( u -- u u )  Duplicate TOS
   ; ## auto  https://forth-standard.org/standard/core/DUP
-Dup:		DStackCheck 1,Throw_Stack_04
-
-Dup_NoUf:	lda DStack+0,x	; LSB
+Dup:		lda DStack+0,x	; LSB
 		ldy DStack+1,x	; MSB
 
+		dex		; PushYA
 		dex
-		dex
+		DStackCheck 2,Throw_Stack_04 ; check for 2 cells, not overflow
 		sta DStack+0,x
 		sty DStack+1,x
 	WordEnd
 		rts
 
-Throw_Stack_04: jmp Throw_Stack
-
 PushAY: ; ( AY -- n )
 		dex
 		dex
+		bmi Throw_Stack_04	; DStack overflow?
 		sty DStack+0,x
 		sta DStack+1,x
+	WordEnd
 		rts
+
+Throw_Stack_04: jmp Throw_Stack
 
 
  WordHeader "Swap",NN ; ( b a -- a b )  Exchange TOS and NOS

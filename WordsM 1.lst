@@ -1,5 +1,3 @@
-
-C:\Users\Lee\Desktop\LJP24\65816\FY>..\..\65816s\release\65816s
 65816S Sep 25 2025 14:36:14
 65c265 mode on
 A=0000 X=0000 Y=0000 S=0180 EnvMXdIzc D=0000 B=00 DBDBDBDB 00dbdb stp
@@ -17,7 +15,7 @@ Copyright 2014-2024 Scot W. Stevenson, Sam Colwell
 Tali Forth 2 comes with absolutely NO WARRANTY
 Type 'bye' to exit
 
-A=00FE X=002E Y=0000 S=01F9 EnvMXdIzC D=0000 B=00 B0F760A9 00f128 bcs f121
+A=00FE X=002E Y=0000 S=01F9 ENvMXdIzC D=0000 B=00 B0F760A9 00f128 bcs f121
 .@fasm.fs
 .g
 \ FORTH assembler extras  ok
@@ -184,7 +182,7 @@ size: #93
 0D38  72 65 64 20 1D C5 20 04  DC 20 61 E1 20 A9 DD 20  red .. . . a. ..
 0D48  8A E1 A9 80 20 5D C9 20  AD DA 20 4B CA 4C 69 0D  .... ].  .. K.Li.
 0D58  74 68 65 6E 20 6F 75 74  20 6F 66 20 72 61 6E 67  then out  of rang
-0D68  65 20 1D C5 20 AB E1 20  11 DC 20 64 DF  e .. ..  .. d.
+0D68  65 20 1D C5 20 AD E1 20  11 DC 20 64 DF  e .. ..  .. d.
 
 0D18 A0 0D      13  ldy.#  ( $000D State +3 )
 0D1A A9 18      24  lda.#  ( $0018 Tmp3 )
@@ -208,7 +206,7 @@ size: #93
 0D55 4C 69 0D
 0D58 74 68 65 6E 20 6F 75 74 20 6F 66 20 72 61 6E 67 65
 0D69 20 1D C5   50461  jsr  ( $C51D Abort" +10 )
-0D6C 20 AB E1   57771  jsr  ( $E1AB Swap )
+0D6C 20 AD E1   57773  jsr  ( $E1AD Swap )
 0D6F 20 11 DC   56337  jsr  ( $DC11 1- )
 0D72 20 64 DF   57188  jsr  ( $DF64 C! )  ok
 : IfC, ( A=opcode -- adr id )  \ common code  compiled
@@ -402,7 +400,7 @@ size: #35
 
 0E7A  A0 0E A9 62 CA CA 95 26  94 27 20 2F DA 20 4B CA  ...b...& .' /. K.
 0E8A  4C 97 0E 6E 6F 74 20 70  61 69 72 65 64 20 1D C5  L..not p aired ..
-0E9A  20 9B E5   ..
+0E9A  20 9D E5   ..
 
 0E7A A0 0E      14  ldy.#  ( $000E State +4 )
 0E7C A9 62      98  lda.#  ( $0062 FSMant0 +1 )
@@ -415,7 +413,7 @@ size: #35
 0E8A 4C 97 0E
 0E8D 6E 6F 74 20 70 61 69 72 65 64
 0E97 20 1D C5   50461  jsr  ( $C51D Abort" +10 )
-0E9A 20 9B E5   58779  jsr  ( $E59B jmp )  ok
+0E9A 20 9D E5   58781  jsr  ( $E59D jmp )  ok
   ok
 : UntilC, ( adr id A=opcode -- )  \ common code  compiled
   [ pha ]  compiled
@@ -676,10 +674,10 @@ size: #147
 10AB  04 DC 20 61 E1 20 A9 DD  20 8A E1 A9 80 20 5D C9  .. a. ..  .... ].
 10BB  20 AD DA 20 4B CA 4C D8  10 57 68 69 6C 65 43 2C   .. K.L. .WhileC,
 10CB  20 6F 75 74 20 6F 66 20  72 61 6E 67 65 20 1D C5   out of  range ..
-10DB  20 AB E1 20 11 DC 20 64  DF A0 0E A9 62 CA CA 95   .. .. d ....b...
+10DB  20 AD E1 20 11 DC 20 64  DF A0 0E A9 62 CA CA 95   .. .. d ....b...
 10EB  26 94 27 20 2F DA 20 4B  CA 4C 08 11 42 65 67 69  &.' /. K .L..Begi
 10FB  6E 2C 20 6E 6F 74 20 70  61 69 72 65 64 20 1D C5  n, not p aired ..
-110B  20 C8 E1   ..
+110B  20 CA E1   ..
 
 107B B5 2C      44  lda.zx  ( $002C DStack +6 )
 107D B4 2D      45  ldy.zx  ( $002D DStack +7 )
@@ -706,7 +704,7 @@ size: #147
 10C1 4C D8 10
 10C4 57 68 69 6C 65 43 2C 20 6F 75 74 20 6F 66 20 72 61 6E 67 65
 10D8 20 1D C5   50461  jsr  ( $C51D Abort" +10 )
-10DB 20 AB E1   57771  jsr  ( $E1AB Swap )
+10DB 20 AD E1   57773  jsr  ( $E1AD Swap )
 10DE 20 11 DC   56337  jsr  ( $DC11 1- )
 10E1 20 64 DF   57188  jsr  ( $DF64 C! )
 10E4 A0 0E      14  ldy.#  ( $000E State +4 )
@@ -720,7 +718,7 @@ size: #147
 10F4 4C 08 11
 10F7 42 65 67 69 6E 2C 20 6E 6F 74 20 70 61 69 72 65 64
 1108 20 1D C5   50461  jsr  ( $C51D Abort" +10 )
-110B 20 C8 E1   57800  jsr  ( $E1C8 Drop )  ok
+110B 20 CA E1   57802  jsr  ( $E1CA Drop )  ok
   ok
 : BWRTest1 ( -- )  compiled
   [ nop  ok
@@ -830,9 +828,9 @@ size: #150
 1259  B2 E0 20 8A E1 20 DC DA  20 8C B7 4C 9D 12 20 B7  .. .. ..  ..L.. .
 1269  BC 20 E5 DF 20 E5 DF 20  8A E1 20 BF 11 20 90 DD  . .. ..  .. .. ..
 1279  20 B2 E0 20 57 BA 20 E5  DF 20 8A E1 20 D0 11 20   .. W. . . .. ..
-1289  90 DD 20 51 DF 20 D6 DF  20 B1 11 20 90 DD 20 B2  .. Q. ..  .. .. .
-1299  E0 4C 5B 12 20 C8 E1 20  6F 11 20 90 DD 20 B2 E0  .L[. ..  o. .. ..
-12A9  4C 1F 12 20 C8 E1  L.. ..
+1289  90 DD 20 51 DF 20 CA DF  20 B1 11 20 90 DD 20 B2  .. Q. ..  .. .. .
+1299  E0 4C 5B 12 20 CA E1 20  6F 11 20 90 DD 20 B2 E0  .L[. ..  o. .. ..
+12A9  4C 1F 12 20 CA E1  L.. ..
 
 1219 20 F3 11   4595  jsr  ( $11F3 LSDAnchor )
 121C 20 B2 E0   57522  jsr  ( $E0B2 @ )
@@ -873,17 +871,17 @@ size: #150
 1285 20 D0 11   4560  jsr  ( $11D0 LSR.Type )
 1288 20 90 DD   56720  jsr  ( $DD90 + )
 128B 20 51 DF   57169  jsr  ( $DF51 C@ )
-128E 20 D6 DF   57302  jsr  ( $DFD6 Emit )
+128E 20 CA DF   57290  jsr  ( $DFCA Emit )
 1291 20 B1 11   4529  jsr  ( $11B1 LSR.Next )
 1294 20 90 DD   56720  jsr  ( $DD90 + )
 1297 20 B2 E0   57522  jsr  ( $E0B2 @ )
 129A 4C 5B 12   4699  jmp  ( $125B LSPrint +66 )
-129D 20 C8 E1   57800  jsr  ( $E1C8 Drop )
+129D 20 CA E1   57802  jsr  ( $E1CA Drop )
 12A0 20 6F 11   4463  jsr  ( $116F LSD.Next )
 12A3 20 90 DD   56720  jsr  ( $DD90 + )
 12A6 20 B2 E0   57522  jsr  ( $E0B2 @ )
 12A9 4C 1F 12   4639  jmp  ( $121F LSPrint +6 )
-12AC 20 C8 E1   57800  jsr  ( $E1C8 Drop )  ok
+12AC 20 CA E1   57802  jsr  ( $E1CA Drop )  ok
   ok
 : LSFinR ( Tmp1=^LSD Tmp2=^LSR -- )  \ resolve relative byte reference  compiled
   [ LSD.Value ldy.#  ] PushTmp1.diy [  \ get value  ok
@@ -1318,6 +1316,7 @@ A=00FE X=002E Y=0000 S=01F9 EnvMXdIzC D=0000 B=00 B0F760A9 00f128 bcs f121
 \ include FAsm.fs  \ get assembler tools  ok
   ok
 : SeeL  SeeLatest  ;  \ generate word disassembly listings redefined SeeL  ok
+\ Tmp1, Tmp2, Tmp3, Tmp4, Tmp5 are scratch words in zero page.  ok
   ok
 Variable MCellBytes  SeeL  32 MCellBytes !  \ # of bytes in an M cell
 nt: $1480 xt: $1504
@@ -1383,8 +1382,8 @@ size: #21
 1668 20 04 15   5380  jsr  ( $1504 MCellBytes )
 166B 20 B2 E0   57522  jsr  ( $E0B2 @ )
 166E 20 D0 C0   49360  jsr  ( $C0D0 / )  ok
-: MTmp123 ( -- )  \ setup Tmp1 & Tmp2 & Tmp3  compiled
-  [ MSPtr lda  MSPtr 1+ ldy              Tmp1 sta.z  Tmp1 1+ sty.z  \ Tmp1= ^ top of MStack  ok
+: MTmp123 ( -- )  \ Tmp1= ^TOS, Tmp2= ^NOS, Tmp3= ^3OS  compiled
+  [ MSPtr lda  MSPtr 1+ ldy              Tmp1 sta.z  Tmp1 1+ sty.z  \ Tmp1= ^ top on MStack  ok
   clc  MCellBytes adc  IfCs, iny  Then,  Tmp2 sta.z  Tmp2 1+ sty.z  \ Tmp2= ^ 2nd on MStack  ok
   clc  MCellBytes adc  IfCs, iny  Then,  Tmp3 sta.z  Tmp3 1+ sty.z  \ Tmp3= ^ 3rd on MStack  ok
   ] ;  SeeL
@@ -1413,7 +1412,7 @@ size: #32
 1699 85 18      24  sta.z  ( $0018 Tmp3 )
 169B 84 19      25  sty.z  ( $0019 Tmp3 +1 )  ok
   ok
-: MSAlloc ( -- m )  \ alloc a new M stack cell  compiled
+: MSAlloc ( M: -- m )  \ alloc a new M stack cell  compiled
   [ MSPtr lda  MSPtr 1+ ldy  sec  MCellBytes sbc  IfCc,  dey  Then,  ok
   MSPtr sta  MSPtr 1+ sty  Tmp1 sta.z  Tmp1 1+ sty.z  \ Tmp1=^m  ok
   MStack $ff And cmp.#  tya  MStack 8 RShift sbc.#  IfCc, ]  \ overflow?  compiled
@@ -1449,7 +1448,7 @@ size: #61
 16E0 20 F1 DF   57329  jsr  ( $DFF1 Type )
 16E3 20 3A C5   50490  jsr  ( $C53A Abort )  ok
   ok
-: M0=P ( M: m -- m P.z )  \ Check if top data stack cell is empty.  compiled
+: M0=P ( M: m -- m P.z )  \ Is top MStack cell zero?  compiled
   MTmp123 [  ok
   LSInit  \ init local labels  ok
   MCellBytes ldy  dey  Begin,  ok
@@ -1474,7 +1473,7 @@ size: #16
 16FB 10 F9      -7  bpl  ( $16F6 M0=P +7 )
 16FD A9 00      0  lda.#  ( $0000 cp )  ok
   ok
-: M0<P ( M: m -- m P.m )  \ Is top data cell negative?  compiled
+: M0<P ( M: m -- m P.m )  \ Is top MStack cell negative?  compiled
   MTmp123 [  MCellBytes ldy  dey  Tmp1 lda.ziy ] ;  SeeL
 nt: $1684 xt: $1708
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
@@ -1488,13 +1487,13 @@ size: #9
 170F B1 14      20  lda.ziy  ( $0014 Tmp1 )  ok
   ok
 : MCmp ( M: m1 m2 -- m1 m2 ) ( -- P.ncz )  \ compare, set CPU flags NCZ  compiled
-  MTmp123 [  \ setup Tmp1 & Tmp2  ok
+  MTmp123 [  \ Tmp1= ^m2, Tmp2= ^m1  ok
   LSInit  \ init local labels  ok
   MCellBytes ldy  dey  ok
-  Tmp1 lda.ziy  sec  Tmp2 sbc.ziy  LRefR @18 beqa  \ compare hi word  ok
+  Tmp2 lda.ziy  sec  Tmp1 sbc.ziy  LRefR @18 beqa  \ compare hi word  ok
     LRefR @NFlip bvsa  rts  ok
   ok
- LDef @11  Tmp1 lda.ziy  Tmp2 cmp.ziy  LRefR @Ne bnea  ok
+ LDef @11  Tmp2 lda.ziy  Tmp1 cmp.ziy  LRefR @Ne bnea  ok
  LDef @18  dey  LRefR @11 bpla  ok
   0 lda.#  rts  \ return =  ok
  LDef @Ne  php  ror.a  plp  ok
@@ -1505,21 +1504,21 @@ nt: $1696 xt: $171A
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #36
 
-171A  20 7D 16 AC 07 15 88 B1  14 38 F1 16 F0 09 70 10   }...... .8....p.
-172A  60 B1 14 D1 16 D0 06 88  10 F7 A9 00 60 08 6A 28  `....... ....`.j(
+171A  20 7D 16 AC 07 15 88 B1  16 38 F1 14 F0 09 70 10   }...... .8....p.
+172A  60 B1 16 D1 14 D0 06 88  10 F7 A9 00 60 08 6A 28  `....... ....`.j(
 173A  49 80 09 01  I...
 
 171A 20 7D 16   5757  jsr  ( $167D MTmp123 )
 171D AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
 1720 88          dey
-1721 B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1721 B1 16      22  lda.ziy  ( $0016 Tmp2 )
 1723 38          sec
-1724 F1 16      22  sbc.ziy  ( $0016 Tmp2 )
+1724 F1 14      20  sbc.ziy  ( $0014 Tmp1 )
 1726 F0 09      9  beq  ( $1731 MCmp +23 )
 1728 70 10      16  bvs  ( $173A MCmp +32 )
 172A 60          rts
-172B B1 14      20  lda.ziy  ( $0014 Tmp1 )
-172D D1 16      22  cmp.ziy  ( $0016 Tmp2 )
+172B B1 16      22  lda.ziy  ( $0016 Tmp2 )
+172D D1 14      20  cmp.ziy  ( $0014 Tmp1 )
 172F D0 06      6  bne  ( $1737 MCmp +29 )
 1731 88          dey
 1732 10 F7      -9  bpl  ( $172B MCmp +17 )
@@ -1662,29 +1661,29 @@ size: #14
   ok
 : MMax ( M: m1 m2 -- m3 )  \ return signed max of m1 & m2  compiled
   \ https://forth-standard.org/standard/core/MAX  compiled
-  MCmp [ ' MDrop bmia  ' MNip bpla ] ;  SeeL
+  MCmp [ ' MDrop bpla  ' MNip bmia ] ;  SeeL
 nt: $1779 xt: $17FD
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #7
 
-17FD  20 1A 17 30 99 10 E2   ..0...
+17FD  20 1A 17 10 99 30 E2   ....0.
 
 17FD 20 1A 17   5914  jsr  ( $171A MCmp )
-1800 30 99      -103  bmi  ( $179B MDrop )
-1802 10 E2      -30  bpl  ( $17E6 MNip )  ok
+1800 10 99      -103  bpl  ( $179B MDrop )
+1802 30 E2      -30  bmi  ( $17E6 MNip )  ok
   ok
 : MMin ( M: m1 m2 -- m3 )  \ return signed min of m1 & m2  compiled
   \ https://forth-standard.org/standard/core/MIN  compiled
-  MCmp [ ' MDrop bpla  ' MNip bmia ] ;  SeeL
+  MCmp [ ' MDrop bmia  ' MNip bpla ] ;  SeeL
 nt: $1789 xt: $180D
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #7
 
-180D  20 1A 17 10 89 30 D2   ....0.
+180D  20 1A 17 30 89 10 D2   ..0...
 
 180D 20 1A 17   5914  jsr  ( $171A MCmp )
-1810 10 89      -119  bpl  ( $179B MDrop )
-1812 30 D2      -46  bmi  ( $17E6 MNip )  ok
+1810 30 89      -119  bmi  ( $179B MDrop )
+1812 10 D2      -46  bpl  ( $17E6 MNip )  ok
   ok
 : MFalse2 ( M: m1 m2 -- ) ( -- false )  \ drop m1 & m2, return false  compiled
   MDrop MDrop False ;  SeeL
@@ -1734,95 +1733,95 @@ size: #7
 1858 F0 C6      -58  beq  ( $1820 MFalse2 )  ok
 : M< ( M: m1 m2 -- ) ( -- f )  \ return signed m1<m2  compiled
   \ https://forth-standard.org/standard/core/less  compiled
-  MCmp [ ' MFalse2 bmia  ' MTrue2 bnea  ' MFalse2 beqa ] ;  SeeL
+  MCmp [ ' MTrue2 bmia  ' MFalse2 bpla ] ;  SeeL
 nt: $17DD xt: $1861
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
-size: #9
+size: #7
 
-1861  20 1A 17 30 BA D0 CC F0  B6   ..0.... .
+1861  20 1A 17 30 CE 10 B8   ..0...
 
 1861 20 1A 17   5914  jsr  ( $171A MCmp )
-1864 30 BA      -70  bmi  ( $1820 MFalse2 )
-1866 D0 CC      -52  bne  ( $1834 MTrue2 )
-1868 F0 B6      -74  beq  ( $1820 MFalse2 )  ok
-: M>= ( M: m1 m2 -- ) ( -- f )  \ return signed m1>=m2  compiled
-  M< 0= ;  SeeL
-nt: $17EE xt: $1872
+1864 30 CE      -50  bmi  ( $1834 MTrue2 )
+1866 10 B8      -72  bpl  ( $1820 MFalse2 )  ok
+: M<= ( M: m1 m2 -- ) ( -- f )  \ return signed m1<=m2  compiled
+  MCmp [ ' MTrue2 bmia  ' MFalse2 bnea  ' MTrue2 beqa ] ;  SeeL
+nt: $17EC xt: $1870
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
-size: #6
+size: #9
 
-1872  20 61 18 20 C6 DA   a. ..
+1870  20 1A 17 30 BF D0 A9 F0  BB   ..0.... .
 
-1872 20 61 18   6241  jsr  ( $1861 M< )
-1875 20 C6 DA   56006  jsr  ( $DAC6 0= )  ok
+1870 20 1A 17   5914  jsr  ( $171A MCmp )
+1873 30 BF      -65  bmi  ( $1834 MTrue2 )
+1875 D0 A9      -87  bne  ( $1820 MFalse2 )
+1877 F0 BB      -69  beq  ( $1834 MTrue2 )  ok
 : MU< ( M: m1 m2 -- ) ( -- f )  \ return unsigned m1<m2  compiled
   \ https://forth-standard.org/standard/core/Uless  compiled
-  MCmp [ ' MFalse2 bcca  ' MTrue2 bnea  ' MFalse2 beqa ] ;  SeeL
-nt: $17FC xt: $1880
+  MCmp [ ' MTrue2 bcca  ' MFalse2 bcsa ] ;  SeeL
+nt: $17FD xt: $1881
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
-size: #9
+size: #7
 
-1880  20 1A 17 90 9B D0 AD F0  97   ....... .
+1881  20 1A 17 90 AE B0 98   ......
 
-1880 20 1A 17   5914  jsr  ( $171A MCmp )
-1883 90 9B      -101  bcc  ( $1820 MFalse2 )
-1885 D0 AD      -83  bne  ( $1834 MTrue2 )
-1887 F0 97      -105  beq  ( $1820 MFalse2 )  ok
-: MU>= ( M: m1 m2 -- ) ( -- f )  \ return unsigned m1>=m2  compiled
+1881 20 1A 17   5914  jsr  ( $171A MCmp )
+1884 90 AE      -82  bcc  ( $1834 MTrue2 )
+1886 B0 98      -104  bcs  ( $1820 MFalse2 )  ok
+: MU<= ( M: m1 m2 -- ) ( -- f )  \ return unsigned m1<=m2  compiled
   MCmp [ ' MTrue2 bcca  ' MFalse2 bnea  ' MTrue2 beqa ] ;  SeeL
-nt: $180E xt: $1892
+nt: $180D xt: $1891
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #9
 
-1892  20 1A 17 90 9D D0 87 F0  99   ....... .
+1891  20 1A 17 90 9E D0 88 F0  9A   ....... .
 
-1892 20 1A 17   5914  jsr  ( $171A MCmp )
-1895 90 9D      -99  bcc  ( $1834 MTrue2 )
-1897 D0 87      -121  bne  ( $1820 MFalse2 )
-1899 F0 99      -103  beq  ( $1834 MTrue2 )  ok
+1891 20 1A 17   5914  jsr  ( $171A MCmp )
+1894 90 9E      -98  bcc  ( $1834 MTrue2 )
+1896 D0 88      -120  bne  ( $1820 MFalse2 )
+1898 F0 9A      -102  beq  ( $1834 MTrue2 )  ok
   ok
 : M0= ( M: m -- ) ( -- f )  \ return m==0  compiled
   M0=P [ IfEq, $ff lda.#  Else, 0 lda.#  Then, tay  ] PushYA MDrop ;  SeeL
-nt: $181F xt: $18A3
+nt: $181E xt: $18A2
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #22
 
-18A3  20 EF 16 D0 05 A9 FF 58  50 02 A9 00 A8 CA CA 95   ......X P.......
-18B3  26 94 27 20 9B 17  &.' ..
+18A2  20 EF 16 D0 05 A9 FF 58  50 02 A9 00 A8 CA CA 95   ......X P.......
+18B2  26 94 27 20 9B 17  &.' ..
 
-18A3 20 EF 16   5871  jsr  ( $16EF M0=P )
-18A6 D0 05      5  bne  ( $18AD M0= +10 )
-18A8 A9 FF      255  lda.#  ( $00FF FSMant3 +128 )
-18AA 58          cli
-18AB 50 02      2  bvc  ( $18AF M0= +12 )
-18AD A9 00      0  lda.#  ( $0000 cp )
-18AF A8          tay
+18A2 20 EF 16   5871  jsr  ( $16EF M0=P )
+18A5 D0 05      5  bne  ( $18AC M0= +10 )
+18A7 A9 FF      255  lda.#  ( $00FF FSMant3 +128 )
+18A9 58          cli
+18AA 50 02      2  bvc  ( $18AE M0= +12 )
+18AC A9 00      0  lda.#  ( $0000 cp )
+18AE A8          tay
+18AF CA          dex
 18B0 CA          dex
-18B1 CA          dex
-18B2 95 26      38  sta.zx  ( $0026 DStack )
-18B4 94 27      39  sty.zx  ( $0027 DStack +1 )
-18B6 20 9B 17   6043  jsr  ( $179B MDrop )  ok
+18B1 95 26      38  sta.zx  ( $0026 DStack )
+18B3 94 27      39  sty.zx  ( $0027 DStack +1 )
+18B5 20 9B 17   6043  jsr  ( $179B MDrop )  ok
 : M0< ( M: m -- ) ( -- f )  \ return signed m<0  compiled
   M0<P [ $80 and.#  IfNe, $ff lda.#  Then, tay ] PushYA MDrop ;  SeeL
-nt: $183D xt: $18C1
+nt: $183C xt: $18C0
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #19
 
-18C1  20 08 17 29 80 F0 02 A9  FF A8 CA CA 95 26 94 27   ..).... .....&.'
-18D1  20 9B 17   ..
+18C0  20 08 17 29 80 F0 02 A9  FF A8 CA CA 95 26 94 27   ..).... .....&.'
+18D0  20 9B 17   ..
 
-18C1 20 08 17   5896  jsr  ( $1708 M0<P )
-18C4 29 80      128  and.#  ( $0080 FSMant3 +1 )
-18C6 F0 02      2  beq  ( $18CA M0< +9 )
-18C8 A9 FF      255  lda.#  ( $00FF FSMant3 +128 )
-18CA A8          tay
+18C0 20 08 17   5896  jsr  ( $1708 M0<P )
+18C3 29 80      128  and.#  ( $0080 FSMant3 +1 )
+18C5 F0 02      2  beq  ( $18C9 M0< +9 )
+18C7 A9 FF      255  lda.#  ( $00FF FSMant3 +128 )
+18C9 A8          tay
+18CA CA          dex
 18CB CA          dex
-18CC CA          dex
-18CD 95 26      38  sta.zx  ( $0026 DStack )
-18CF 94 27      39  sty.zx  ( $0027 DStack +1 )
-18D1 20 9B 17   6043  jsr  ( $179B MDrop )  ok
+18CC 95 26      38  sta.zx  ( $0026 DStack )
+18CE 94 27      39  sty.zx  ( $0027 DStack +1 )
+18D0 20 9B 17   6043  jsr  ( $179B MDrop )  ok
   ok
-: MPad ( A Y -- ) ( M: m1 -- m2 ) \ fill hi bytes of m  compiled
+: MPad ( A Y -- ) ( M: m1 -- m2 ) \ fill hi bytes of m with A from Y  compiled
   [ LSInit  ok
   $80 and.#  IfNe, $ff lda.#  Then,  \ sign extend from A  ok
  LRefA @18 jmp  ok
@@ -1830,202 +1829,214 @@ size: #19
  LDef @11  Tmp1 sta.ziy  ok
  LDef @18  iny   MCellBytes cpy  LRefR @11 bcca  ok
   LSFinish ] ;  SeeL
-nt: $1859 xt: $18DD
+nt: $1858 xt: $18DC
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #17
 
-18DD  29 80 F0 02 A9 FF 4C E8  18 91 14 C8 CC 07 15 90  ).....L. ........
-18ED  F8  .
+18DC  29 80 F0 02 A9 FF 4C E7  18 91 14 C8 CC 07 15 90  ).....L. ........
+18EC  F8  .
 
-18DD 29 80      128  and.#  ( $0080 FSMant3 +1 )
-18DF F0 02      2  beq  ( $18E3 MPad +6 )
-18E1 A9 FF      255  lda.#  ( $00FF FSMant3 +128 )
-18E3 4C E8 18   6376  jmp  ( $18E8 MPad +11 )
-18E6 91 14      20  sta.ziy  ( $0014 Tmp1 )
-18E8 C8          iny
-18E9 CC 07 15   5383  cpy  ( $1507 MCellBytes +3 )
-18EC 90 F8      -8  bcc  ( $18E6 MPad +9 )  ok
+18DC 29 80      128  and.#  ( $0080 FSMant3 +1 )
+18DE F0 02      2  beq  ( $18E2 MPad +6 )
+18E0 A9 FF      255  lda.#  ( $00FF FSMant3 +128 )
+18E2 4C E7 18   6375  jmp  ( $18E7 MPad +11 )
+18E5 91 14      20  sta.ziy  ( $0014 Tmp1 )
+18E7 C8          iny
+18E8 CC 07 15   5383  cpy  ( $1507 MCellBytes +3 )
+18EB 90 F8      -8  bcc  ( $18E5 MPad +9 )  ok
 : S>M ( n -- ) ( M: -- m )  \ convert signed n to m  compiled
   MSAlloc [ DStack lda.zx  0 ldy.#  Tmp1 sta.ziy  DStack 1+ lda.zx  iny  Tmp1 sta.ziy  inx  inx  ok
   ' MPad bnea  ] ;  SeeL
-nt: $1872 xt: $18F6
+nt: $1871 xt: $18F5
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #18
 
-18F6  20 A9 16 B5 26 A0 00 91  14 B5 27 C8 91 14 E8 E8   ...&... ..'.....
-1906  D0 D5  ..
+18F5  20 A9 16 B5 26 A0 00 91  14 B5 27 C8 91 14 E8 E8   ...&... ..'.....
+1905  D0 D5  ..
 
-18F6 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
-18F9 B5 26      38  lda.zx  ( $0026 DStack )
-18FB A0 00      0  ldy.#  ( $0000 cp )
-18FD 91 14      20  sta.ziy  ( $0014 Tmp1 )
-18FF B5 27      39  lda.zx  ( $0027 DStack +1 )
-1901 C8          iny
-1902 91 14      20  sta.ziy  ( $0014 Tmp1 )
+18F5 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
+18F8 B5 26      38  lda.zx  ( $0026 DStack )
+18FA A0 00      0  ldy.#  ( $0000 cp )
+18FC 91 14      20  sta.ziy  ( $0014 Tmp1 )
+18FE B5 27      39  lda.zx  ( $0027 DStack +1 )
+1900 C8          iny
+1901 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1903 E8          inx
 1904 E8          inx
-1905 E8          inx
-1906 D0 D5      -43  bne  ( $18DD MPad )  ok
+1905 D0 D5      -43  bne  ( $18DC MPad )  ok
 : U>M ( u -- ) ( M: -- um )  \ convert unsigned u to um  compiled
   MSAlloc [ DStack lda.zx  0 ldy.#  Tmp1 sta.ziy  DStack 1+ lda.zx  iny  Tmp1 sta.ziy  inx  inx  ok
   lsr.a  ' MPad bpla  ] ;  SeeL
-nt: $188C xt: $1910
+nt: $188B xt: $190F
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #19
 
-1910  20 A9 16 B5 26 A0 00 91  14 B5 27 C8 91 14 E8 E8   ...&... ..'.....
-1920  4A 10 BA  J..
+190F  20 A9 16 B5 26 A0 00 91  14 B5 27 C8 91 14 E8 E8   ...&... ..'.....
+191F  4A 10 BA  J..
 
-1910 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
-1913 B5 26      38  lda.zx  ( $0026 DStack )
-1915 A0 00      0  ldy.#  ( $0000 cp )
-1917 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1919 B5 27      39  lda.zx  ( $0027 DStack +1 )
-191B C8          iny
-191C 91 14      20  sta.ziy  ( $0014 Tmp1 )
+190F 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
+1912 B5 26      38  lda.zx  ( $0026 DStack )
+1914 A0 00      0  ldy.#  ( $0000 cp )
+1916 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1918 B5 27      39  lda.zx  ( $0027 DStack +1 )
+191A C8          iny
+191B 91 14      20  sta.ziy  ( $0014 Tmp1 )
+191D E8          inx
 191E E8          inx
-191F E8          inx
-1920 4A          lsr.a
-1921 10 BA      -70  bpl  ( $18DD MPad )  ok
+191F 4A          lsr.a
+1920 10 BA      -70  bpl  ( $18DC MPad )  ok
   ok
 : MU>D ( M: um1 -- um1 0 )  \ convert unsigned um1 to double unsigned m  compiled
   0 U>M ;  SeeL
-nt: $18A8 xt: $192C
+nt: $18A7 xt: $192B
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #6
 
-192C  20 6B C9 20 10 19   k. ..
+192B  20 6B C9 20 0F 19   k. ..
 
-192C 20 6B C9   51563  jsr  ( $C96B 0 )
-192F 20 10 19   6416  jsr  ( $1910 U>M )  ok
-: MS>D ( M: m1 -- m1 m )  \ convert signed m1 to double m  compiled
+192B 20 6B C9   51563  jsr  ( $C96B 0 )
+192E 20 0F 19   6415  jsr  ( $190F U>M )  ok
+: MS>D ( M: m1 -- m1 mhi )  \ convert signed m1 to double m  compiled
   M0<P [ ' MU>D bpla ] -1 S>M ; SeeL
-nt: $18B7 xt: $193B
+nt: $18B6 xt: $193A
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #18
 
-193B  20 08 17 10 EC A0 FF A9  FF CA CA 95 26 94 27 20   ....... ....&.'
-194B  F6 18  ..
+193A  20 08 17 10 EC A0 FF A9  FF CA CA 95 26 94 27 20   ....... ....&.'
+194A  F5 18  ..
 
-193B 20 08 17   5896  jsr  ( $1708 M0<P )
-193E 10 EC      -20  bpl  ( $192C MU>D )
-1940 A0 FF      255  ldy.#  ( $00FF FSMant3 +128 )
-1942 A9 FF      255  lda.#  ( $00FF FSMant3 +128 )
+193A 20 08 17   5896  jsr  ( $1708 M0<P )
+193D 10 EC      -20  bpl  ( $192B MU>D )
+193F A0 FF      255  ldy.#  ( $00FF FSMant3 +128 )
+1941 A9 FF      255  lda.#  ( $00FF FSMant3 +128 )
+1943 CA          dex
 1944 CA          dex
-1945 CA          dex
-1946 95 26      38  sta.zx  ( $0026 DStack )
-1948 94 27      39  sty.zx  ( $0027 DStack +1 )
-194A 20 F6 18   6390  jsr  ( $18F6 S>M )  ok
+1945 95 26      38  sta.zx  ( $0026 DStack )
+1947 94 27      39  sty.zx  ( $0027 DStack +1 )
+1949 20 F5 18   6389  jsr  ( $18F5 S>M )  ok
   ok
 : M>S ( M: m -- ) ( -- n )  \ convert m to n  compiled
   MTmp123 [ 1 ldy.#  Tmp1 lda.ziy  Tmp2 sta.z  dey  Tmp1 lda.ziy  Tmp2 ldy.z  ok
   ] PushYA [ ' MDrop jmp ] ; SeeL
-nt: $18D1 xt: $1955
+nt: $18D0 xt: $1954
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #23
 
-1955  20 7D 16 A0 01 B1 14 85  16 88 B1 14 A4 16 CA CA   }...... ........
-1965  95 26 94 27 4C 9B 17  .&.'L..
+1954  20 7D 16 A0 01 B1 14 85  16 88 B1 14 A4 16 CA CA   }...... ........
+1964  95 26 94 27 4C 9B 17  .&.'L..
 
-1955 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1958 A0 01      1  ldy.#  ( $0001 cp +1 )
-195A B1 14      20  lda.ziy  ( $0014 Tmp1 )
-195C 85 16      22  sta.z  ( $0016 Tmp2 )
-195E 88          dey
-195F B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1961 A4 16      22  ldy.z  ( $0016 Tmp2 )
+1954 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1957 A0 01      1  ldy.#  ( $0001 cp +1 )
+1959 B1 14      20  lda.ziy  ( $0014 Tmp1 )
+195B 85 16      22  sta.z  ( $0016 Tmp2 )
+195D 88          dey
+195E B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1960 A4 16      22  ldy.z  ( $0016 Tmp2 )
+1962 CA          dex
 1963 CA          dex
-1964 CA          dex
-1965 95 26      38  sta.zx  ( $0026 DStack )
-1967 94 27      39  sty.zx  ( $0027 DStack +1 )
-1969 4C 9B 17   6043  jmp  ( $179B MDrop )  ok
+1964 95 26      38  sta.zx  ( $0026 DStack )
+1966 94 27      39  sty.zx  ( $0027 DStack +1 )
+1968 4C 9B 17   6043  jmp  ( $179B MDrop )  ok
   ok
-: MRol ( M: m1 P.C -- m2 P.C )  \ Rotate the bits of m1 left through the carry bit.  compiled
-  [ php ] MTmp123 [ plp  \ setup Tmp1  ok
-  Tmp2 stx.z  \ save data stack index  ok
-  MCellBytes ldx  0 ldy.#  Begin,  ok
-    Tmp1 lda.ziy  rol.a  Tmp1 sta.ziy  iny   dex  UntilEq,  ok
-  Tmp2 ldx.z  \ restore data stack index  ok
-  ] ;  SeeL
-nt: $18F1 xt: $1975
+: MRolYA ( YA P.C -- P.C )  \ Rotate the bits of (YA) left through the carry bit.  compiled
+  [ LSInit  ok
+  LRefA @AdrL sta  LRefA @AdrH sty  \ patch adr in rol instruction (self modifying code!)  ok
+  txa  pha  \ save data stack index  ok
+  MCellBytes ldy  0 ldx.#  Begin,  ok
+    Here 1+ LEqu @AdrL  Here 2+ LEqu @AdrH  ok
+    $ff00 rol.x   inx   dey  UntilEq,  ok
+  pla  tax  \ restore data stack index  ok
+  LSFinish ] ;  SeeL
+nt: $18F2 xt: $1976
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
-size: #23
+size: #22
 
-1975  08 20 7D 16 28 86 16 AE  07 15 A0 00 B1 14 2A 91  . }.(... ......*.
-1985  14 C8 CA D0 F7 A6 16  .......
+1976  8D 84 19 8C 85 19 8A 48  AC 07 15 A2 00 3E 00 FF  .......H .....>..
+1986  E8 88 D0 F9 68 AA  ....h.
 
-1975 08          php
-1976 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1979 28          plp
-197A 86 16      22  stx.z  ( $0016 Tmp2 )
-197C AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-197F A0 00      0  ldy.#  ( $0000 cp )
-1981 B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1983 2A          rol.a
-1984 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1986 C8          iny
-1987 CA          dex
-1988 D0 F7      -9  bne  ( $1981 MRol +12 )
-198A A6 16      22  ldx.z  ( $0016 Tmp2 )  ok
+1976 8D 84 19   6532  sta  ( $1984 MRolYA +14 )
+1979 8C 85 19   6533  sty  ( $1985 MRolYA +15 )
+197C 8A          txa
+197D 48          pha
+197E AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1981 A2 00      0  ldx.#  ( $0000 cp )
+1983 3E 00 FF   65280  rol.x  ( $FF00 CC@ +3528 )
+1986 E8          inx
+1987 88          dey
+1988 D0 F9      -7  bne  ( $1983 MRolYA +13 )
+198A 68          pla
+198B AA          tax ok
+: MRol ( M: m1 P.C -- m2 P.C )  \ Rotate the bits of m1 left through the carry bit.  compiled
+  [ MSPtr lda  MSPtr 1+ ldy  ' MRolYA jmp  ] ;  SeeL
+nt: $1911 xt: $1995
+flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
+size: #9
+
+1995  AD 35 16 AC 36 16 4C 76  19  .5..6.Lv .
+
+1995 AD 35 16   5685  lda  ( $1635 MSPtr +3 )
+1998 AC 36 16   5686  ldy  ( $1636 MSPtr +4 )
+199B 4C 76 19   6518  jmp  ( $1976 MRolYA )  ok
 : M2* ( M: m1 -- m2 )  \ return m1*2  compiled
   \ https://forth-standard.org/standard/core/TwoTimes  compiled
   [ clc  ' MRol bcca ] ;  SeeL
-nt: $1910 xt: $1994
+nt: $1922 xt: $19A6
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #3
 
-1994  18 90 DE  ...
+19A6  18 90 EC  ...
 
-1994 18          clc
-1995 90 DE      -34  bcc  ( $1975 MRol )  ok
+19A6 18          clc
+19A7 90 EC      -20  bcc  ( $1995 MRol )  ok
   ok
 : MRor ( M: m1 P.C -- m2 P.C )  \ Rotate the bits of m1 right through the carry bit.  compiled
-  [ php ] MTmp123 [ plp  \ setup Tmp1  ok
+  [ php ] MTmp123 [ plp  \ Tmp1= ^m1  ok
   MCellBytes ldy  dey  Begin,  ok
     Tmp1 lda.ziy  ror.a  Tmp1 sta.ziy  dey UntilMi,  ok
   ] ;  SeeL
-nt: $191C xt: $19A0
+nt: $192E xt: $19B2
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #17
 
-19A0  08 20 7D 16 28 AC 07 15  88 B1 14 6A 91 14 88 10  . }.(... ...j....
-19B0  F8  .
+19B2  08 20 7D 16 28 AC 07 15  88 B1 14 6A 91 14 88 10  . }.(... ...j....
+19C2  F8  .
 
-19A0 08          php
-19A1 20 7D 16   5757  jsr  ( $167D MTmp123 )
-19A4 28          plp
-19A5 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-19A8 88          dey
-19A9 B1 14      20  lda.ziy  ( $0014 Tmp1 )
-19AB 6A          ror.a
-19AC 91 14      20  sta.ziy  ( $0014 Tmp1 )
-19AE 88          dey
-19AF 10 F8      -8  bpl  ( $19A9 MRor +9 )  ok
+19B2 08          php
+19B3 20 7D 16   5757  jsr  ( $167D MTmp123 )
+19B6 28          plp
+19B7 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+19BA 88          dey
+19BB B1 14      20  lda.ziy  ( $0014 Tmp1 )
+19BD 6A          ror.a
+19BE 91 14      20  sta.ziy  ( $0014 Tmp1 )
+19C0 88          dey
+19C1 10 F8      -8  bpl  ( $19BB MRor +9 )  ok
 : MU2/ ( M: m1 -- m2 )  \ return unsigned m1/2  compiled
   [ clc  ' MRor bcca ] ;  SeeL
-nt: $1936 xt: $19BA
+nt: $1948 xt: $19CC
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #3
 
-19BA  18 90 E3  ...
+19CC  18 90 E3  ...
 
-19BA 18          clc
-19BB 90 E3      -29  bcc  ( $19A0 MRor )  ok
+19CC 18          clc
+19CD 90 E3      -29  bcc  ( $19B2 MRor )  ok
 : M2/ ( M: m1 -- m2 )  \ return signed m1/2  compiled
   \ https://forth-standard.org/standard/core/TwoDiv  compiled
   M0<P [ asl.a  ' MRor jmp ] ;  SeeL
-nt: $1941 xt: $19C5
+nt: $1953 xt: $19D7
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #7
 
-19C5  20 08 17 0A 4C A0 19   ...L..
+19D7  20 08 17 0A 4C B2 19   ...L..
 
-19C5 20 08 17   5896  jsr  ( $1708 M0<P )
-19C8 0A          asl.a
-19C9 4C A0 19   6560  jmp  ( $19A0 MRor )  ok
+19D7 20 08 17   5896  jsr  ( $1708 M0<P )
+19DA 0A          asl.a
+19DB 4C B2 19   6578  jmp  ( $19B2 MRor )  ok
    ok
 : M1+ ( M: m1 -- m2 )  \ Increment m1  compiled
   \ https://forth-standard.org/standard/core/OnePlus  compiled
-  MTmp123 [  \ setup Tmp1  ok
+  MTmp123 [  \ Tmp1= ^m1  ok
   Tmp2 stx.z  \ save data stack index  ok
   LSInit  \ init local labels  ok
   MCellBytes ldx  0 ldy.#  sec  Begin,  ok
@@ -2034,26 +2045,26 @@ size: #7
   Tmp2 ldx.z  \ restore data stack index  ok
   LSFinish  \ finish local labels  ok
   ] ;  SeeL
-nt: $1950 xt: $19D4
+nt: $1962 xt: $19E6
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #25
 
-19D4  20 7D 16 86 16 AE 07 15  A0 00 38 B1 14 69 00 91   }...... ..8..i..
-19E4  14 90 04 C8 CA D0 F4 A6  16  ........ .
+19E6  20 7D 16 86 16 AE 07 15  A0 00 38 B1 14 69 00 91   }...... ..8..i..
+19F6  14 90 04 C8 CA D0 F4 A6  16  ........ .
 
-19D4 20 7D 16   5757  jsr  ( $167D MTmp123 )
-19D7 86 16      22  stx.z  ( $0016 Tmp2 )
-19D9 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-19DC A0 00      0  ldy.#  ( $0000 cp )
-19DE 38          sec
-19DF B1 14      20  lda.ziy  ( $0014 Tmp1 )
-19E1 69 00      0  adc.#  ( $0000 cp )
-19E3 91 14      20  sta.ziy  ( $0014 Tmp1 )
-19E5 90 04      4  bcc  ( $19EB M1+ +23 )
-19E7 C8          iny
-19E8 CA          dex
-19E9 D0 F4      -12  bne  ( $19DF M1+ +11 )
-19EB A6 16      22  ldx.z  ( $0016 Tmp2 )  ok
+19E6 20 7D 16   5757  jsr  ( $167D MTmp123 )
+19E9 86 16      22  stx.z  ( $0016 Tmp2 )
+19EB AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
+19EE A0 00      0  ldy.#  ( $0000 cp )
+19F0 38          sec
+19F1 B1 14      20  lda.ziy  ( $0014 Tmp1 )
+19F3 69 00      0  adc.#  ( $0000 cp )
+19F5 91 14      20  sta.ziy  ( $0014 Tmp1 )
+19F7 90 04      4  bcc  ( $19FD M1+ +23 )
+19F9 C8          iny
+19FA CA          dex
+19FB D0 F4      -12  bne  ( $19F1 M1+ +11 )
+19FD A6 16      22  ldx.z  ( $0016 Tmp2 )  ok
   ok
 : M1- ( M: m1 -- m2 )  \ decrement m1  compiled
   \ https://forth-standard.org/standard/core/OneMinus  compiled
@@ -2066,26 +2077,26 @@ size: #25
   Tmp2 ldx.z  \ restore data stack index  ok
   LSFinish  \ finish local labels  ok
   ] ;  SeeL
-nt: $1971 xt: $19F5
+nt: $1983 xt: $1A07
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #25
 
-19F5  20 7D 16 86 16 AE 07 15  A0 00 18 B1 14 E9 00 91   }...... ........
-1A05  14 B0 04 C8 CA 10 F4 A6  16  ........ .
+1A07  20 7D 16 86 16 AE 07 15  A0 00 18 B1 14 E9 00 91   }...... ........
+1A17  14 B0 04 C8 CA 10 F4 A6  16  ........ .
 
-19F5 20 7D 16   5757  jsr  ( $167D MTmp123 )
-19F8 86 16      22  stx.z  ( $0016 Tmp2 )
-19FA AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-19FD A0 00      0  ldy.#  ( $0000 cp )
-19FF 18          clc
-1A00 B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1A02 E9 00      0  sbc.#  ( $0000 cp )
-1A04 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1A06 B0 04      4  bcs  ( $1A0C M1- +23 )
-1A08 C8          iny
-1A09 CA          dex
-1A0A 10 F4      -12  bpl  ( $1A00 M1- +11 )
-1A0C A6 16      22  ldx.z  ( $0016 Tmp2 )  ok
+1A07 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1A0A 86 16      22  stx.z  ( $0016 Tmp2 )
+1A0C AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
+1A0F A0 00      0  ldy.#  ( $0000 cp )
+1A11 18          clc
+1A12 B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1A14 E9 00      0  sbc.#  ( $0000 cp )
+1A16 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1A18 B0 04      4  bcs  ( $1A1E M1- +23 )
+1A1A C8          iny
+1A1B CA          dex
+1A1C 10 F4      -12  bpl  ( $1A12 M1- +11 )
+1A1E A6 16      22  ldx.z  ( $0016 Tmp2 )  ok
   ok
 : MOr ( M: m1 m2 -- m3 )  \ Bitwise logical or  compiled
   \ https://forth-standard.org/standard/core/OR  compiled
@@ -2093,84 +2104,84 @@ size: #25
   MCellBytes ldy  dey  Begin,  ok
     Tmp2 lda.ziy  Tmp1 ora.ziy  Tmp2 sta.ziy  dey  UntilMi,  ok
   ] ;  SeeL
-nt: $1992 xt: $1A16
+nt: $19A4 xt: $1A28
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #16
 
-1A16  20 9B 17 AC 07 15 88 B1  16 11 14 91 16 88 10 F7   ....... ........
-1A26
+1A28  20 9B 17 AC 07 15 88 B1  16 11 14 91 16 88 10 F7   ....... ........
+1A38
 
-1A16 20 9B 17   6043  jsr  ( $179B MDrop )
-1A19 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1A1C 88          dey
-1A1D B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1A1F 11 14      20  ora.ziy  ( $0014 Tmp1 )
-1A21 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1A23 88          dey
-1A24 10 F7      -9  bpl  ( $1A1D MOr +7 )  ok
+1A28 20 9B 17   6043  jsr  ( $179B MDrop )
+1A2B AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1A2E 88          dey
+1A2F B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1A31 11 14      20  ora.ziy  ( $0014 Tmp1 )
+1A33 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1A35 88          dey
+1A36 10 F7      -9  bpl  ( $1A2F MOr +7 )  ok
 : MAnd ( M: m1 m2 -- m3 )  \ Bitwise logical and  compiled
   \ https://forth-standard.org/standard/core/AND  compiled
   MDrop [  \ drop m2, Tmp1=^m2, Tmp2=^m1  ok
   MCellBytes ldy  dey  Begin,  ok
     Tmp2 lda.ziy  Tmp1 and.ziy  Tmp2 sta.ziy  dey  UntilMi,  ok
   ] ;  SeeL
-nt: $19AB xt: $1A2F
+nt: $19BD xt: $1A41
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #16
 
-1A2F  20 9B 17 AC 07 15 88 B1  16 31 14 91 16 88 10 F7   ....... .1......
-1A3F
+1A41  20 9B 17 AC 07 15 88 B1  16 31 14 91 16 88 10 F7   ....... .1......
+1A51
 
-1A2F 20 9B 17   6043  jsr  ( $179B MDrop )
-1A32 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1A35 88          dey
-1A36 B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1A38 31 14      20  and.ziy  ( $0014 Tmp1 )
-1A3A 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1A3C 88          dey
-1A3D 10 F7      -9  bpl  ( $1A36 MAnd +7 )  ok
+1A41 20 9B 17   6043  jsr  ( $179B MDrop )
+1A44 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1A47 88          dey
+1A48 B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1A4A 31 14      20  and.ziy  ( $0014 Tmp1 )
+1A4C 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1A4E 88          dey
+1A4F 10 F7      -9  bpl  ( $1A48 MAnd +7 )  ok
 : MXor ( M: m1 m2 -- m3 )  \ Bitwise logical xor  compiled
   \ https://forth-standard.org/standard/core/XOR  compiled
   MDrop [  \ drop m2, Tmp1=^m2, Tmp2=^m1  ok
   MCellBytes ldy  dey  Begin,   ok
     Tmp2 lda.ziy  Tmp1 eor.ziy  Tmp2 sta.ziy  dey  UntilMi,  ok
   ] ;  SeeL
-nt: $19C4 xt: $1A48
+nt: $19D6 xt: $1A5A
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #16
 
-1A48  20 9B 17 AC 07 15 88 B1  16 51 14 91 16 88 10 F7   ....... .Q......
-1A58
+1A5A  20 9B 17 AC 07 15 88 B1  16 51 14 91 16 88 10 F7   ....... .Q......
+1A6A
 
-1A48 20 9B 17   6043  jsr  ( $179B MDrop )
-1A4B AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1A4E 88          dey
-1A4F B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1A51 51 14      20  eor.ziy  ( $0014 Tmp1 )
-1A53 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1A55 88          dey
-1A56 10 F7      -9  bpl  ( $1A4F MXor +7 )  ok
+1A5A 20 9B 17   6043  jsr  ( $179B MDrop )
+1A5D AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1A60 88          dey
+1A61 B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1A63 51 14      20  eor.ziy  ( $0014 Tmp1 )
+1A65 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1A67 88          dey
+1A68 10 F7      -9  bpl  ( $1A61 MXor +7 )  ok
 : MInvert ( M: m1 -- m2 )  \ bitwise invert  compiled
-  MTmp123 [  ok
+  MTmp123 [  \ Tmp1= ^m1  ok
   MCellBytes ldy  dey  Begin, Tmp1 lda.ziy  $ff eor.#  Tmp1 sta.ziy  dey  UntilMi,  ok
   ] ;  SeeL
-nt: $19E0 xt: $1A64
+nt: $19F2 xt: $1A76
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #16
 
-1A64  20 7D 16 AC 07 15 88 B1  14 49 FF 91 14 88 10 F7   }...... .I......
-1A74
+1A76  20 7D 16 AC 07 15 88 B1  14 49 FF 91 14 88 10 F7   }...... .I......
+1A86
 
-1A64 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1A67 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1A6A 88          dey
-1A6B B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1A6D 49 FF      255  eor.#  ( $00FF FSMant3 +128 )
-1A6F 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1A71 88          dey
-1A72 10 F7      -9  bpl  ( $1A6B MInvert +7 )  ok
+1A76 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1A79 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1A7C 88          dey
+1A7D B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1A7F 49 FF      255  eor.#  ( $00FF FSMant3 +128 )
+1A81 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1A83 88          dey
+1A84 10 F7      -9  bpl  ( $1A7D MInvert +7 )  ok
   ok
-: M+1 ( M: m1 m2 -- m3 )  \ Add m1 to m2 giving m3  compiled
+: M+1 ( M: m1 m2 -- m3 )  \ Add m1 to m2 giving m3, name collision with M+  compiled
   \ Strange name so we don't redefine M+ from standard FORTH.  compiled
   \ https://forth-standard.org/standard/core/Plus  compiled
   MDrop  \ drop m2, Tmp1=^m2, Tmp2=^m1  compiled
@@ -2179,27 +2190,27 @@ size: #16
     Tmp2 lda.ziy  Tmp1 adc.ziy  Tmp2 sta.ziy  iny  dex  UntilEq,  ok
   Tmp3 ldx.z  \ restore data stack index  ok
   ] ;  SeeL
-nt: $19F8 xt: $1A7C
+nt: $1A0A xt: $1A8E
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #23
 
-1A7C  20 9B 17 86 18 AE 07 15  A0 00 18 B1 16 71 14 91   ....... .....q..
-1A8C  16 C8 CA D0 F6 A6 18  .......
+1A8E  20 9B 17 86 18 AE 07 15  A0 00 18 B1 16 71 14 91   ....... .....q..
+1A9E  16 C8 CA D0 F6 A6 18  .......
 
-1A7C 20 9B 17   6043  jsr  ( $179B MDrop )
-1A7F 86 18      24  stx.z  ( $0018 Tmp3 )
-1A81 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-1A84 A0 00      0  ldy.#  ( $0000 cp )
-1A86 18          clc
-1A87 B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1A89 71 14      20  adc.ziy  ( $0014 Tmp1 )
-1A8B 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1A8D C8          iny
-1A8E CA          dex
-1A8F D0 F6      -10  bne  ( $1A87 M+1 +11 )
-1A91 A6 18      24  ldx.z  ( $0018 Tmp3 )  ok
+1A8E 20 9B 17   6043  jsr  ( $179B MDrop )
+1A91 86 18      24  stx.z  ( $0018 Tmp3 )
+1A93 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
+1A96 A0 00      0  ldy.#  ( $0000 cp )
+1A98 18          clc
+1A99 B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1A9B 71 14      20  adc.ziy  ( $0014 Tmp1 )
+1A9D 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1A9F C8          iny
+1AA0 CA          dex
+1AA1 D0 F6      -10  bne  ( $1A99 M+1 +11 )
+1AA3 A6 18      24  ldx.z  ( $0018 Tmp3 )  ok
   ok
-: M-1 ( M: m1 m2 -- m3 )  \ Subtract m2 from m1 giving m3  compiled
+: M-1 ( M: m1 m2 -- m3 )  \ Subtract m2 from m1 giving m3, name collision with M-  compiled
   \ Strange name so we don't redefine M+ from standard FORTH.  compiled
   \ https://forth-standard.org/standard/core/Minus  compiled
   MDrop  \ drop m2, Tmp1=^m2, Tmp2=^m1  compiled
@@ -2208,25 +2219,25 @@ size: #23
     Tmp2 lda.ziy  Tmp1 sbc.ziy  Tmp2 sta.ziy  iny  dex  UntilEq,  ok
   Tmp3 ldx.z  \ restore data stack index  ok
   ] ;  SeeL
-nt: $1A17 xt: $1A9B
+nt: $1A29 xt: $1AAD
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #23
 
-1A9B  20 9B 17 86 18 AE 07 15  A0 00 38 B1 16 F1 14 91   ....... ..8.....
-1AAB  16 C8 CA D0 F6 A6 18  .......
+1AAD  20 9B 17 86 18 AE 07 15  A0 00 38 B1 16 F1 14 91   ....... ..8.....
+1ABD  16 C8 CA D0 F6 A6 18  .......
 
-1A9B 20 9B 17   6043  jsr  ( $179B MDrop )
-1A9E 86 18      24  stx.z  ( $0018 Tmp3 )
-1AA0 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-1AA3 A0 00      0  ldy.#  ( $0000 cp )
-1AA5 38          sec
-1AA6 B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1AA8 F1 14      20  sbc.ziy  ( $0014 Tmp1 )
-1AAA 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1AAC C8          iny
-1AAD CA          dex
-1AAE D0 F6      -10  bne  ( $1AA6 M-1 +11 )
-1AB0 A6 18      24  ldx.z  ( $0018 Tmp3 )  ok
+1AAD 20 9B 17   6043  jsr  ( $179B MDrop )
+1AB0 86 18      24  stx.z  ( $0018 Tmp3 )
+1AB2 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
+1AB5 A0 00      0  ldy.#  ( $0000 cp )
+1AB7 38          sec
+1AB8 B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1ABA F1 14      20  sbc.ziy  ( $0014 Tmp1 )
+1ABC 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1ABE C8          iny
+1ABF CA          dex
+1AC0 D0 F6      -10  bne  ( $1AB8 M-1 +11 )
+1AC2 A6 18      24  ldx.z  ( $0018 Tmp3 )  ok
   ok
 : MNegate ( M: m1 -- m2 )  \ return the two's complement of m1  compiled
   \ https://forth-standard.org/mmstandard/core/NEGATE  compiled
@@ -2236,39 +2247,39 @@ size: #23
     0 lda.#  Tmp1 sbc.ziy  Tmp1 sta.ziy  iny  dex  UntilEq,  ok
   Tmp3 ldx.z  \ restore data stack index  ok
   ] ;  SeeL
-nt: $1A3A xt: $1ABE
+nt: $1A4C xt: $1AD0
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #23
 
-1ABE  20 7D 16 86 18 AE 07 15  A0 00 38 A9 00 F1 14 91   }...... ..8.....
-1ACE  14 C8 CA D0 F6 A6 18  .......
+1AD0  20 7D 16 86 18 AE 07 15  A0 00 38 A9 00 F1 14 91   }...... ..8.....
+1AE0  14 C8 CA D0 F6 A6 18  .......
 
-1ABE 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1AC1 86 18      24  stx.z  ( $0018 Tmp3 )
-1AC3 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-1AC6 A0 00      0  ldy.#  ( $0000 cp )
-1AC8 38          sec
-1AC9 A9 00      0  lda.#  ( $0000 cp )
-1ACB F1 14      20  sbc.ziy  ( $0014 Tmp1 )
-1ACD 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1ACF C8          iny
-1AD0 CA          dex
-1AD1 D0 F6      -10  bne  ( $1AC9 MNegate +11 )
-1AD3 A6 18      24  ldx.z  ( $0018 Tmp3 )  ok
+1AD0 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1AD3 86 18      24  stx.z  ( $0018 Tmp3 )
+1AD5 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
+1AD8 A0 00      0  ldy.#  ( $0000 cp )
+1ADA 38          sec
+1ADB A9 00      0  lda.#  ( $0000 cp )
+1ADD F1 14      20  sbc.ziy  ( $0014 Tmp1 )
+1ADF 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1AE1 C8          iny
+1AE2 CA          dex
+1AE3 D0 F6      -10  bne  ( $1ADB MNegate +11 )
+1AE5 A6 18      24  ldx.z  ( $0018 Tmp3 )  ok
   ok
 : MAbs ( M: m1 -- m2 )  \ return absolute value of m1  compiled
   \ https://forth-standard.org/standard/core/ABS  compiled
   M0<P [ ' MNegate bmia ] ;  SeeL
-nt: $1A5A xt: $1ADE
+nt: $1A6C xt: $1AF0
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #5
 
-1ADE  20 08 17 30 DB   ..0.
+1AF0  20 08 17 30 DB   ..0.
 
-1ADE 20 08 17   5896  jsr  ( $1708 M0<P )
-1AE1 30 DB      -37  bmi  ( $1ABE MNegate )  ok
+1AF0 20 08 17   5896  jsr  ( $1708 M0<P )
+1AF3 30 DB      -37  bmi  ( $1AD0 MNegate )  ok
   ok
-: MDNegate ( M: mlo1 mhi1 -- mlo2 mhi2 )  \ return two's complement of double cell.  compiled
+: MDNegate ( M: mlo1 mhi1 -- mlo2 mhi2 )  \ return two's complement of double M.  compiled
   MTmp123  \ Tmp1=^mhi1, Tmp2=^mlo1  compiled
   [ Tmp3 stx.z  \ save data stack index  ok
   MCellBytes ldx  0 ldy.#  sec  Begin,  \ do mlo  ok
@@ -2277,88 +2288,89 @@ size: #5
     0 lda.#  Tmp1 sbc.ziy  Tmp1 sta.ziy  iny  dex  UntilEq,  ok
   Tmp3 ldx.z  \ restore data stack index  ok
   ] ;  SeeL
-nt: $1A6C xt: $1AF0
+nt: $1A7E xt: $1B02
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #38
 
-1AF0  20 7D 16 86 18 AE 07 15  A0 00 38 A9 00 F1 16 91   }...... ..8.....
-1B00  16 C8 CA D0 F6 AE 07 15  A0 00 A9 00 F1 14 91 14  ........ ........
-1B10  C8 CA D0 F6 A6 18  ......
+1B02  20 7D 16 86 18 AE 07 15  A0 00 38 A9 00 F1 16 91   }...... ..8.....
+1B12  16 C8 CA D0 F6 AE 07 15  A0 00 A9 00 F1 14 91 14  ........ ........
+1B22  C8 CA D0 F6 A6 18  ......
 
-1AF0 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1AF3 86 18      24  stx.z  ( $0018 Tmp3 )
-1AF5 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-1AF8 A0 00      0  ldy.#  ( $0000 cp )
-1AFA 38          sec
-1AFB A9 00      0  lda.#  ( $0000 cp )
-1AFD F1 16      22  sbc.ziy  ( $0016 Tmp2 )
-1AFF 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1B01 C8          iny
-1B02 CA          dex
-1B03 D0 F6      -10  bne  ( $1AFB MDNegate +11 )
-1B05 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-1B08 A0 00      0  ldy.#  ( $0000 cp )
-1B0A A9 00      0  lda.#  ( $0000 cp )
-1B0C F1 14      20  sbc.ziy  ( $0014 Tmp1 )
-1B0E 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1B10 C8          iny
-1B11 CA          dex
-1B12 D0 F6      -10  bne  ( $1B0A MDNegate +26 )
-1B14 A6 18      24  ldx.z  ( $0018 Tmp3 )  ok
+1B02 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1B05 86 18      24  stx.z  ( $0018 Tmp3 )
+1B07 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
+1B0A A0 00      0  ldy.#  ( $0000 cp )
+1B0C 38          sec
+1B0D A9 00      0  lda.#  ( $0000 cp )
+1B0F F1 16      22  sbc.ziy  ( $0016 Tmp2 )
+1B11 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1B13 C8          iny
+1B14 CA          dex
+1B15 D0 F6      -10  bne  ( $1B0D MDNegate +11 )
+1B17 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
+1B1A A0 00      0  ldy.#  ( $0000 cp )
+1B1C A9 00      0  lda.#  ( $0000 cp )
+1B1E F1 14      20  sbc.ziy  ( $0014 Tmp1 )
+1B20 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1B22 C8          iny
+1B23 CA          dex
+1B24 D0 F6      -10  bne  ( $1B1C MDNegate +26 )
+1B26 A6 18      24  ldx.z  ( $0018 Tmp3 )  ok
   ok
 : Hex>M ( uhi ... ulo -- ) ( M: -- m ) \ convert words to M  compiled
-  MSAlloc [  \ Tmp1= ^new MCell  ok
+  MSAlloc [  \ Tmp1= ^new m  ok
   0 ldy.#  Begin,  ok
     DStack lda.zx  inx  Tmp1 sta.ziy  iny  MCellBytes cpy UntilCs,  ok
   ] ;  SeeL
-nt: $1A9C xt: $1B20
+nt: $1AAE xt: $1B32
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #16
 
-1B20  20 A9 16 A0 00 B5 26 E8  91 14 C8 CC 07 15 90 F5   .....&. ........
-1B30
+1B32  20 A9 16 A0 00 B5 26 E8  91 14 C8 CC 07 15 90 F5   .....&. ........
+1B42
 
-1B20 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
-1B23 A0 00      0  ldy.#  ( $0000 cp )
-1B25 B5 26      38  lda.zx  ( $0026 DStack )
-1B27 E8          inx
-1B28 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1B2A C8          iny
-1B2B CC 07 15   5383  cpy  ( $1507 MCellBytes +3 )
-1B2E 90 F5      -11  bcc  ( $1B25 Hex>M +5 )  ok
+1B32 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
+1B35 A0 00      0  ldy.#  ( $0000 cp )
+1B37 B5 26      38  lda.zx  ( $0026 DStack )
+1B39 E8          inx
+1B3A 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1B3C C8          iny
+1B3D CC 07 15   5383  cpy  ( $1507 MCellBytes +3 )
+1B40 90 F5      -11  bcc  ( $1B37 Hex>M +5 )  ok
 : M.Hex ( M: m -- )  \ type m in hex  compiled
   [ MCellBytes ldy  dey  Begin, tya  pha  ok
-    ] MTmp123 [ pla  pha  tay  Tmp1 lda.ziy ] PushZA C.Hex [  ok
+    ] MTmp123 [  \ Tmp1=^m  ok
+    pla  pha  tay  Tmp1 lda.ziy ] PushZA C.Hex [  ok
     pla  tay  dey  UntilMi,  ok
   ] MDrop ;  SeeL
-nt: $1AB6 xt: $1B3A
+nt: $1AC8 xt: $1B4C
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #28
 
-1B3A  AC 07 15 88 98 48 20 7D  16 68 48 A8 B1 14 20 5D  .....H } .hH... ]
-1B4A  C9 20 36 BA 68 A8 88 10  EB 20 9B 17  . 6.h... . ..
+1B4C  AC 07 15 88 98 48 20 7D  16 68 48 A8 B1 14 20 5D  .....H } .hH... ]
+1B5C  C9 20 36 BA 68 A8 88 10  EB 20 9B 17  . 6.h... . ..
 
-1B3A AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1B3D 88          dey
-1B3E 98          tya
-1B3F 48          pha
-1B40 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1B43 68          pla
-1B44 48          pha
-1B45 A8          tay
-1B46 B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1B48 20 5D C9   51549  jsr  ( $C95D PushZA )
-1B4B 20 36 BA   47670  jsr  ( $BA36 C.Hex )
-1B4E 68          pla
-1B4F A8          tay
-1B50 88          dey
-1B51 10 EB      -21  bpl  ( $1B3E M.Hex +4 )
-1B53 20 9B 17   6043  jsr  ( $179B MDrop )  ok
+1B4C AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1B4F 88          dey
+1B50 98          tya
+1B51 48          pha
+1B52 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1B55 68          pla
+1B56 48          pha
+1B57 A8          tay
+1B58 B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1B5A 20 5D C9   51549  jsr  ( $C95D PushZA )
+1B5D 20 36 BA   47670  jsr  ( $BA36 C.Hex )
+1B60 68          pla
+1B61 A8          tay
+1B62 88          dey
+1B63 10 EB      -21  bpl  ( $1B50 M.Hex +4 )
+1B65 20 9B 17   6043  jsr  ( $179B MDrop )  ok
       ok
-: MU*ByteA ( M: m1 -- m2 ) ( A -- ) \ return unsigned m*n  compiled
-  [ Tmp5 sta.z ]  \ save multiplier  compiled
+: MU*ByteA ( A -- ) ( M: m1 -- m2 ) \ return unsigned m1*A  compiled
+  [ Tmp5 sta.z ]  \ save multiplier byte  compiled
   MSAlloc  \ alloc work mcell  compiled
-  MTmp123 [  \ setup Tmp1 & Tmp2  ok
+  MTmp123 [  \ Tmp1=^work, Tmp2=^m1  ok
   MCellBytes ldy  dey  Begin,  ok
     Tmp2 lda.ziy  Tmp1 sta.ziy  \ move m1 to work  ok
     0 lda.#  Tmp2 sta.ziy  \ zero m2  ok
@@ -2369,70 +2381,63 @@ size: #28
         Tmp2 lda.ziy  Tmp1 adc.ziy  Tmp2 sta.ziy  iny  tya  MCellBytes eor  UntilEq,  ok
      Then,  ok
     Tmp5 lda.z WhileNe,  \ any multiplier left?  ok
-    clc  0 ldy.#  Begin,  \ double work  ok
-      Tmp1 lda.ziy  rol.a  Tmp1 sta.ziy   iny  tya  MCellBytes eor  UntilEq,  ok
+    clc  Tmp1 lda  Tmp1 1+ ldy ] MRolYA [  \ double work  ok
     Repeat,  ok
   ' MDrop jmp ] ;  SeeL
-nt: $1ADF xt: $1B63
+nt: $1AF1 xt: $1B75
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
-size: #68
+size: #63
 
-1B63  85 1C 20 A9 16 20 7D 16  AC 07 15 88 B1 16 91 14  .. .. }. ........
-1B73  A9 00 91 16 88 10 F5 46  1C 90 10 18 A0 00 B1 16  .......F ........
-1B83  71 14 91 16 C8 98 4D 07  15 D0 F3 A5 1C F0 12 18  q.....M. ........
-1B93  A0 00 B1 14 2A 91 14 C8  98 4D 07 15 D0 F4 4C 7A  ....*... .M....Lz
-1BA3  1B 4C 9B 17  .L..
+1B75  85 1C 20 A9 16 20 7D 16  AC 07 15 88 B1 16 91 14  .. .. }. ........
+1B85  A9 00 91 16 88 10 F5 46  1C 90 10 18 A0 00 B1 16  .......F ........
+1B95  71 14 91 16 C8 98 4D 07  15 D0 F3 A5 1C F0 0D 18  q.....M. ........
+1BA5  AD 14 00 AC 15 00 20 76  19 4C 8C 1B 4C 9B 17  ...... v .L..L..
 
-1B63 85 1C      28  sta.z  ( $001C Tmp5 )
-1B65 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
-1B68 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1B6B AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1B6E 88          dey
-1B6F B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1B71 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1B73 A9 00      0  lda.#  ( $0000 cp )
-1B75 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1B77 88          dey
-1B78 10 F5      -11  bpl  ( $1B6F MU*ByteA +12 )
-1B7A 46 1C      28  lsr.z  ( $001C Tmp5 )
-1B7C 90 10      16  bcc  ( $1B8E MU*ByteA +43 )
-1B7E 18          clc
-1B7F A0 00      0  ldy.#  ( $0000 cp )
+1B75 85 1C      28  sta.z  ( $001C Tmp5 )
+1B77 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
+1B7A 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1B7D AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1B80 88          dey
 1B81 B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1B83 71 14      20  adc.ziy  ( $0014 Tmp1 )
-1B85 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1B87 C8          iny
-1B88 98          tya
-1B89 4D 07 15   5383  eor  ( $1507 MCellBytes +3 )
-1B8C D0 F3      -13  bne  ( $1B81 MU*ByteA +30 )
-1B8E A5 1C      28  lda.z  ( $001C Tmp5 )
-1B90 F0 12      18  beq  ( $1BA4 MU*ByteA +65 )
-1B92 18          clc
-1B93 A0 00      0  ldy.#  ( $0000 cp )
-1B95 B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1B97 2A          rol.a
-1B98 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1B9A C8          iny
-1B9B 98          tya
-1B9C 4D 07 15   5383  eor  ( $1507 MCellBytes +3 )
-1B9F D0 F4      -12  bne  ( $1B95 MU*ByteA +50 )
-1BA1 4C 7A 1B   7034  jmp  ( $1B7A MU*ByteA +23 )
-1BA4 4C 9B 17   6043  jmp  ( $179B MDrop )  ok
+1B83 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1B85 A9 00      0  lda.#  ( $0000 cp )
+1B87 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1B89 88          dey
+1B8A 10 F5      -11  bpl  ( $1B81 MU*ByteA +12 )
+1B8C 46 1C      28  lsr.z  ( $001C Tmp5 )
+1B8E 90 10      16  bcc  ( $1BA0 MU*ByteA +43 )
+1B90 18          clc
+1B91 A0 00      0  ldy.#  ( $0000 cp )
+1B93 B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1B95 71 14      20  adc.ziy  ( $0014 Tmp1 )
+1B97 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1B99 C8          iny
+1B9A 98          tya
+1B9B 4D 07 15   5383  eor  ( $1507 MCellBytes +3 )
+1B9E D0 F3      -13  bne  ( $1B93 MU*ByteA +30 )
+1BA0 A5 1C      28  lda.z  ( $001C Tmp5 )
+1BA2 F0 0D      13  beq  ( $1BB1 MU*ByteA +60 )
+1BA4 18          clc
+1BA5 AD 14 00   20  lda  ( $0014 Tmp1 )
+1BA8 AC 15 00   21  ldy  ( $0015 Tmp1 +1 )
+1BAB 20 76 19   6518  jsr  ( $1976 MRolYA )
+1BAE 4C 8C 1B   7052  jmp  ( $1B8C MU*ByteA +23 )
+1BB1 4C 9B 17   6043  jmp  ( $179B MDrop )  ok
 : MU*Word ( A -- ) ( M: m1 -- m2 )  PopA MU*ByteA ;  SeeL  \ for WordsMTest.fs
-nt: $1B2F xt: $1BB3
+nt: $1B3C xt: $1BC0
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #6
 
-1BB3  20 47 C5 20 63 1B   G. c.
+1BC0  20 47 C5 20 75 1B   G. u.
 
-1BB3 20 47 C5   50503  jsr  ( $C547 PopA )
-1BB6 20 63 1B   7011  jsr  ( $1B63 MU*ByteA )  ok
+1BC0 20 47 C5   50503  jsr  ( $C547 PopA )
+1BC3 20 75 1B   7029  jsr  ( $1B75 MU*ByteA )  ok
   ok
 : MUM* ( M: um1 um2 -- umlo umhi ) \ Multiply unsigned giving double  compiled
   \ https://forth-standard.org/standard/core/UMTimes  compiled
   MSAlloc  \ alloc work mcell  compiled
-  MTmp123 [  \ Tmp1=^work, Tmp2=^umhi, Tmp3=^umlo  ok
-  Tmp5 stx.z  \ save data stack index  ok
+  MTmp123 [  \ Tmp1=^work, Tmp2=^umhi&um2, Tmp3=^umlo&um1  ok
+  Tmp5 stx.z  \ save data stack index so we can use X  ok
    ok
   MCellBytes ldy  dey  Begin,  \ for each byte in mcell  ok
     Tmp2 lda.ziy  Tmp1 sta.ziy  \ copy um2 to work  ok
@@ -2455,102 +2460,101 @@ size: #6
   Tmp5 ldx.z  \ restore data stack index  ok
   ' MDrop jmp  ok
   ] ;  SeeL
-nt: $1B3E xt: $1BC2
+nt: $1B4B xt: $1BCF
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #89
 
-1BC2  20 A9 16 20 7D 16 86 1C  AC 07 15 88 B1 16 91 14   .. }... ........
-1BD2  A9 00 91 16 88 10 F5 A0  00 84 1A B1 18 4A 85 1D  ........ .....J..
-1BE2  A9 08 85 1B 90 10 AE 07  15 18 A0 00 B1 14 71 16  ........ ......q.
-1BF2  91 16 C8 CA D0 F6 AC 07  15 88 B1 16 6A 91 16 88  ........ ....j...
-1C02  10 F8 66 1D C6 1B D0 DC  A4 1A A5 1D 91 18 C8 CC  ..f..... ........
-1C12  07 15 90 C5 A6 1C 4C 9B  17  ......L. .
+1BCF  20 A9 16 20 7D 16 86 1C  AC 07 15 88 B1 16 91 14   .. }... ........
+1BDF  A9 00 91 16 88 10 F5 A0  00 84 1A B1 18 4A 85 1D  ........ .....J..
+1BEF  A9 08 85 1B 90 10 AE 07  15 18 A0 00 B1 14 71 16  ........ ......q.
+1BFF  91 16 C8 CA D0 F6 AC 07  15 88 B1 16 6A 91 16 88  ........ ....j...
+1C0F  10 F8 66 1D C6 1B D0 DC  A4 1A A5 1D 91 18 C8 CC  ..f..... ........
+1C1F  07 15 90 C5 A6 1C 4C 9B  17  ......L. .
 
-1BC2 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
-1BC5 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1BC8 86 1C      28  stx.z  ( $001C Tmp5 )
-1BCA AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1BCD 88          dey
-1BCE B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1BD0 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1BD2 A9 00      0  lda.#  ( $0000 cp )
-1BD4 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1BD6 88          dey
-1BD7 10 F5      -11  bpl  ( $1BCE MUM* +12 )
-1BD9 A0 00      0  ldy.#  ( $0000 cp )
-1BDB 84 1A      26  sty.z  ( $001A Tmp4 )
-1BDD B1 18      24  lda.ziy  ( $0018 Tmp3 )
-1BDF 4A          lsr.a
-1BE0 85 1D      29  sta.z  ( $001D Tmp5 +1 )
-1BE2 A9 08      8  lda.#  ( $0008 >In )
-1BE4 85 1B      27  sta.z  ( $001B Tmp4 +1 )
-1BE6 90 10      16  bcc  ( $1BF8 MUM* +54 )
-1BE8 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-1BEB 18          clc
-1BEC A0 00      0  ldy.#  ( $0000 cp )
-1BEE B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1BF0 71 16      22  adc.ziy  ( $0016 Tmp2 )
-1BF2 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1BF4 C8          iny
-1BF5 CA          dex
-1BF6 D0 F6      -10  bne  ( $1BEE MUM* +44 )
-1BF8 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1BFB 88          dey
-1BFC B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1BFE 6A          ror.a
+1BCF 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
+1BD2 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1BD5 86 1C      28  stx.z  ( $001C Tmp5 )
+1BD7 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1BDA 88          dey
+1BDB B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1BDD 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1BDF A9 00      0  lda.#  ( $0000 cp )
+1BE1 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1BE3 88          dey
+1BE4 10 F5      -11  bpl  ( $1BDB MUM* +12 )
+1BE6 A0 00      0  ldy.#  ( $0000 cp )
+1BE8 84 1A      26  sty.z  ( $001A Tmp4 )
+1BEA B1 18      24  lda.ziy  ( $0018 Tmp3 )
+1BEC 4A          lsr.a
+1BED 85 1D      29  sta.z  ( $001D Tmp5 +1 )
+1BEF A9 08      8  lda.#  ( $0008 >In )
+1BF1 85 1B      27  sta.z  ( $001B Tmp4 +1 )
+1BF3 90 10      16  bcc  ( $1C05 MUM* +54 )
+1BF5 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
+1BF8 18          clc
+1BF9 A0 00      0  ldy.#  ( $0000 cp )
+1BFB B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1BFD 71 16      22  adc.ziy  ( $0016 Tmp2 )
 1BFF 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1C01 88          dey
-1C02 10 F8      -8  bpl  ( $1BFC MUM* +58 )
-1C04 66 1D      29  ror.z  ( $001D Tmp5 +1 )
-1C06 C6 1B      27  dec.z  ( $001B Tmp4 +1 )
-1C08 D0 DC      -36  bne  ( $1BE6 MUM* +36 )
-1C0A A4 1A      26  ldy.z  ( $001A Tmp4 )
-1C0C A5 1D      29  lda.z  ( $001D Tmp5 +1 )
-1C0E 91 18      24  sta.ziy  ( $0018 Tmp3 )
-1C10 C8          iny
-1C11 CC 07 15   5383  cpy  ( $1507 MCellBytes +3 )
-1C14 90 C5      -59  bcc  ( $1BDB MUM* +25 )
-1C16 A6 1C      28  ldx.z  ( $001C Tmp5 )
-1C18 4C 9B 17   6043  jmp  ( $179B MDrop )  ok
+1C01 C8          iny
+1C02 CA          dex
+1C03 D0 F6      -10  bne  ( $1BFB MUM* +44 )
+1C05 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1C08 88          dey
+1C09 B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1C0B 6A          ror.a
+1C0C 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1C0E 88          dey
+1C0F 10 F8      -8  bpl  ( $1C09 MUM* +58 )
+1C11 66 1D      29  ror.z  ( $001D Tmp5 +1 )
+1C13 C6 1B      27  dec.z  ( $001B Tmp4 +1 )
+1C15 D0 DC      -36  bne  ( $1BF3 MUM* +36 )
+1C17 A4 1A      26  ldy.z  ( $001A Tmp4 )
+1C19 A5 1D      29  lda.z  ( $001D Tmp5 +1 )
+1C1B 91 18      24  sta.ziy  ( $0018 Tmp3 )
+1C1D C8          iny
+1C1E CC 07 15   5383  cpy  ( $1507 MCellBytes +3 )
+1C21 90 C5      -59  bcc  ( $1BE8 MUM* +25 )
+1C23 A6 1C      28  ldx.z  ( $001C Tmp5 )
+1C25 4C 9B 17   6043  jmp  ( $179B MDrop )  ok
   ok
-  ok
-: MU* ( M: um1 um2 -- um3 )  compiled
+: MU* ( M: um1 um2 -- um3 )  \ unsigned muliply  compiled
   MUM* MDrop ;  SeeL
-nt: $1B9F xt: $1C23
+nt: $1BAC xt: $1C30
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #6
 
-1C23  20 C2 1B 20 9B 17   .. ..
+1C30  20 CF 1B 20 9B 17   .. ..
 
-1C23 20 C2 1B   7106  jsr  ( $1BC2 MUM* )
-1C26 20 9B 17   6043  jsr  ( $179B MDrop )  ok
-: M*1 ( M: m1 m2 -- m3 )  \ multiply m1 by m2 giving m3  compiled
+1C30 20 CF 1B   7119  jsr  ( $1BCF MUM* )
+1C33 20 9B 17   6043  jsr  ( $179B MDrop )  ok
+: M*1 ( M: m1 m2 -- m3 )  \ signed multiply, name collision with M*  compiled
   \ https://forth-standard.org/standard/core/Times  compiled
   MTmp123 [ MCellBytes lda  asl.a  tay  dey  Tmp1 lda.ziy  php  IfMi,  ok
     ] MSwap MNegate [ Then, ]  compiled
   MU*  compiled
   [ plp  IfMi, ] MNegate [ Then, ]  ;  SeeL
-nt: $1BAD xt: $1C31
+nt: $1BBA xt: $1C3E
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #29
 
-1C31  20 7D 16 AD 07 15 0A A8  88 B1 14 08 10 06 20 48   }...... ...... H
-1C41  17 20 BE 1A 20 23 1C 28  10 03 20 BE 1A  . .. #.( .. ..
+1C3E  20 7D 16 AD 07 15 0A A8  88 B1 14 08 10 06 20 48   }...... ...... H
+1C4E  17 20 D0 1A 20 30 1C 28  10 03 20 D0 1A  . .. 0.( .. ..
 
-1C31 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1C34 AD 07 15   5383  lda  ( $1507 MCellBytes +3 )
-1C37 0A          asl.a
-1C38 A8          tay
-1C39 88          dey
-1C3A B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1C3C 08          php
-1C3D 10 06      6  bpl  ( $1C45 M*1 +20 )
-1C3F 20 48 17   5960  jsr  ( $1748 MSwap )
-1C42 20 BE 1A   6846  jsr  ( $1ABE MNegate )
-1C45 20 23 1C   7203  jsr  ( $1C23 MU* )
-1C48 28          plp
-1C49 10 03      3  bpl  ( $1C4E M*1 +29 )
-1C4B 20 BE 1A   6846  jsr  ( $1ABE MNegate )  ok
+1C3E 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1C41 AD 07 15   5383  lda  ( $1507 MCellBytes +3 )
+1C44 0A          asl.a
+1C45 A8          tay
+1C46 88          dey
+1C47 B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1C49 08          php
+1C4A 10 06      6  bpl  ( $1C52 M*1 +20 )
+1C4C 20 48 17   5960  jsr  ( $1748 MSwap )
+1C4F 20 D0 1A   6864  jsr  ( $1AD0 MNegate )
+1C52 20 30 1C   7216  jsr  ( $1C30 MU* )
+1C55 28          plp
+1C56 10 03      3  bpl  ( $1C5B M*1 +29 )
+1C58 20 D0 1A   6864  jsr  ( $1AD0 MNegate )  ok
 : MM* ( M: m1 m2 -- mlo mhi )  \ signed multiply giving double  compiled
   \ https://forth-standard.org/standard/core/MTimes  compiled
   MTmp123 [  ok
@@ -2558,92 +2562,92 @@ size: #29
   MAbs MSwap MAbs MUM*  compiled
   [ plp  IfMi, ] MDNegate [ Then, ]  compiled
   ;  SeeL
-nt: $1BD2 xt: $1C56
+nt: $1BDF xt: $1C63
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #30
 
-1C56  20 7D 16 AC 07 15 88 B1  14 51 16 08 20 DE 1A 20   }...... .Q.. ..
-1C66  48 17 20 DE 1A 20 C2 1B  28 10 03 20 F0 1A  H. .. .. (.. ..
+1C63  20 7D 16 AC 07 15 88 B1  14 51 16 08 20 F0 1A 20   }...... .Q.. ..
+1C73  48 17 20 F0 1A 20 CF 1B  28 10 03 20 02 1B  H. .. .. (.. ..
 
-1C56 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1C59 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1C5C 88          dey
-1C5D B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1C5F 51 16      22  eor.ziy  ( $0016 Tmp2 )
-1C61 08          php
-1C62 20 DE 1A   6878  jsr  ( $1ADE MAbs )
-1C65 20 48 17   5960  jsr  ( $1748 MSwap )
-1C68 20 DE 1A   6878  jsr  ( $1ADE MAbs )
-1C6B 20 C2 1B   7106  jsr  ( $1BC2 MUM* )
-1C6E 28          plp
-1C6F 10 03      3  bpl  ( $1C74 MM* +30 )
-1C71 20 F0 1A   6896  jsr  ( $1AF0 MDNegate )  ok
+1C63 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1C66 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1C69 88          dey
+1C6A B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1C6C 51 16      22  eor.ziy  ( $0016 Tmp2 )
+1C6E 08          php
+1C6F 20 F0 1A   6896  jsr  ( $1AF0 MAbs )
+1C72 20 48 17   5960  jsr  ( $1748 MSwap )
+1C75 20 F0 1A   6896  jsr  ( $1AF0 MAbs )
+1C78 20 CF 1B   7119  jsr  ( $1BCF MUM* )
+1C7B 28          plp
+1C7C 10 03      3  bpl  ( $1C81 MM* +30 )
+1C7E 20 02 1B   6914  jsr  ( $1B02 MDNegate )  ok
   ok
-: MU/ModByteA ( M: um1 -- umquotient ) ( udivisor -- A=uremainder )  compiled
-  PopA [ Tmp5 sta.z  \ save divisor  ok
+: MU/ModByteA ( M: umdividend -- umquotient ) ( udivisor -- A=uremainder )  compiled
+  PopA [ Tmp5 sta.z  \ save divisor byte  ok
   ] M2* [  \ get 1st dividend bit  ok
-  php  MCellBytes lda  asl.a  asl.a  asl.a  Tmp5 1+ sta.z  plp  \ # of bits  ok
   0 lda.#  \ init top byte of dividend  ok
-  Begin,  \ for each dividend bit  ok
-    rol.a  ok
-    Tmp5 cmp.z  IfCs, Tmp5 sbc.z Then,  ok
-    pha  ] MRol [ pla  ok
-   Tmp5 1+ dec.z  UntilEq,  ok
+  MCellBytes ldy  Tmp4 sty.z  Begin,  \ for each dividend byte  ok
+    8 ldy.#  Tmp5 1+ sty.z  Begin,  \ for each bit in byte  ok
+      rol.a  ok
+      Tmp5 cmp.z  IfCs, Tmp5 sbc.z Then,  ok
+      pha  ] MRol [ pla  ok
+     Tmp5 1+ dec.z  UntilEq,  \ next bit  ok
+   Tmp4 dec.z  UntilEq,  \ next byte  ok
   ] ;  SeeL
-nt: $1C00 xt: $1C84
+nt: $1C0D xt: $1C91
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
-size: #36
+size: #39
 
-1C84  20 47 C5 85 1C 20 94 19  08 AD 07 15 0A 0A 0A 85   G... .. ........
-1C94  1D 28 A9 00 2A C5 1C 90  02 E5 1C 48 20 75 19 68  .(..*... ...H u.h
-1CA4  C6 1D D0 F0  ....
+1C91  20 47 C5 85 1C 20 A6 19  A9 00 AC 07 15 84 1A A0   G... .. ........
+1CA1  08 84 1D 2A C5 1C 90 02  E5 1C 48 20 95 19 68 C6  ...*.... ..H ..h.
+1CB1  1D D0 F0 C6 1A D0 E8  .......
 
-1C84 20 47 C5   50503  jsr  ( $C547 PopA )
-1C87 85 1C      28  sta.z  ( $001C Tmp5 )
-1C89 20 94 19   6548  jsr  ( $1994 M2* )
-1C8C 08          php
-1C8D AD 07 15   5383  lda  ( $1507 MCellBytes +3 )
-1C90 0A          asl.a
-1C91 0A          asl.a
-1C92 0A          asl.a
-1C93 85 1D      29  sta.z  ( $001D Tmp5 +1 )
-1C95 28          plp
-1C96 A9 00      0  lda.#  ( $0000 cp )
-1C98 2A          rol.a
-1C99 C5 1C      28  cmp.z  ( $001C Tmp5 )
-1C9B 90 02      2  bcc  ( $1C9F MU/ModByteA +27 )
-1C9D E5 1C      28  sbc.z  ( $001C Tmp5 )
-1C9F 48          pha
-1CA0 20 75 19   6517  jsr  ( $1975 MRol )
-1CA3 68          pla
-1CA4 C6 1D      29  dec.z  ( $001D Tmp5 +1 )
-1CA6 D0 F0      -16  bne  ( $1C98 MU/ModByteA +20 )  ok
-: MU/ModWordA MU/ModByteA ;  SeeL  \ for wordsmtest.fs
-nt: $1C34 xt: $1CB8
-flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
-size: #3
-
-1CB8  20 84 1C   ..
-
-1CB8 20 84 1C   7300  jsr  ( $1C84 MU/ModByteA )  ok
-: PushA PushZA ;  SeeL  \ for wordsmtest.fs
-nt: $1C41 xt: $1CC5
+1C91 20 47 C5   50503  jsr  ( $C547 PopA )
+1C94 85 1C      28  sta.z  ( $001C Tmp5 )
+1C96 20 A6 19   6566  jsr  ( $19A6 M2* )
+1C99 A9 00      0  lda.#  ( $0000 cp )
+1C9B AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1C9E 84 1A      26  sty.z  ( $001A Tmp4 )
+1CA0 A0 08      8  ldy.#  ( $0008 >In )
+1CA2 84 1D      29  sty.z  ( $001D Tmp5 +1 )
+1CA4 2A          rol.a
+1CA5 C5 1C      28  cmp.z  ( $001C Tmp5 )
+1CA7 90 02      2  bcc  ( $1CAB MU/ModByteA +26 )
+1CA9 E5 1C      28  sbc.z  ( $001C Tmp5 )
+1CAB 48          pha
+1CAC 20 95 19   6549  jsr  ( $1995 MRol )
+1CAF 68          pla
+1CB0 C6 1D      29  dec.z  ( $001D Tmp5 +1 )
+1CB2 D0 F0      -16  bne  ( $1CA4 MU/ModByteA +19 )
+1CB4 C6 1A      26  dec.z  ( $001A Tmp4 )
+1CB6 D0 E8      -24  bne  ( $1CA0 MU/ModByteA +15 )  ok
+: MU/ModWordA MU/ModByteA ;  SeeL  \ for WordsMTest.fs
+nt: $1C44 xt: $1CC8
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #3
 
-1CC5  20 5D C9   ].
+1CC8  20 91 1C   ..
 
-1CC5 20 5D C9   51549  jsr  ( $C95D PushZA )  ok
+1CC8 20 91 1C   7313  jsr  ( $1C91 MU/ModByteA )  ok
+: PushA PushZA ;  SeeL  \ for WordsMTest.fs
+nt: $1C51 xt: $1CD5
+flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
+size: #3
+
+1CD5  20 5D C9   ].
+
+1CD5 20 5D C9   51549  jsr  ( $C95D PushZA )  ok
   ok
 : MUM/Mod ( M: umlo umhi umdivisor -- umremainder umquotient )  \ division  compiled
   \ https://forth-standard.org/standard/core/UMDivMOD  compiled
-  MTmp123  \ Tmp1=^umdivisor, Tmp2=^umhi/umremainder, Tmp3=^umlo/umquotient  compiled
+  MTmp123  \ Tmp1=^umdivisor, Tmp2=^umhi&umremainder, Tmp3=^umlo&umquotient  compiled
   [ LSInit  \ init local labels  ok
   Tmp4 1+ stx.z  \ save data stack index  ok
-  MCellBytes ldy  Begin, dey  Tmp5 1+ sty.z  \ for each umlo/umquotient byte  ok
+  MCellBytes ldy  Begin, dey  Tmp5 1+ sty.z  \ for each umlo&umquotient byte  ok
     Tmp3 lda.ziy  asl.a  Tmp4 sta.z  \ get byte  ok
     8 lda.#  Tmp5 sta.z  Begin,  \ for each bit in byte  ok
-      MCellBytes ldx  0 ldy.#  Begin, Tmp2 lda.ziy rol.a Tmp2 sta.ziy iny  dex UntilEq,  \ rol umhi  ok
+      Tmp2 lda  Tmp2 1+ ldy ] MRolYA [  \ rol umhi  ok
       LRefR @sub bcsa  ok
       MCellBytes ldy  Begin, dey  Tmp2 lda.ziy  Tmp1 cmp.ziy  LRefR @1 bnea  tya UntilEq, \ test divisor  ok
      LDef @1  LRefR @2 bcca  ok
@@ -2660,114 +2664,109 @@ size: #3
   [ ' MSwap jmp,  ok
   LSFinish  \ finish local labels  ok
   ] ;  SeeL
-nt: $1C50 xt: $1CD4
+nt: $1C60 xt: $1CE4
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
-size: #90
+size: #85
 
-1CD4  20 7D 16 86 1B AC 07 15  88 84 1D B1 18 0A 85 1A   }...... ........
-1CE4  A9 08 85 1C AE 07 15 A0  00 B1 16 2A 91 16 C8 CA  ........ ...*....
-1CF4  D0 F7 B0 0F AC 07 15 88  B1 16 D1 14 D0 03 98 D0  ........ ........
-1D04  F6 90 10 AE 07 15 A0 00  B1 16 F1 14 91 16 C8 CA  ........ ........
-1D14  D0 F6 38 26 1A C6 1C D0  CB A4 1D A5 1A 91 18 98  ..8&.... ........
-1D24  D0 B6 A6 1B 20 9B 17 4C  48 17  .... ..L H.
+1CE4  20 7D 16 86 1B AC 07 15  88 84 1D B1 18 0A 85 1A   }...... ........
+1CF4  A9 08 85 1C AD 16 00 AC  17 00 20 76 19 B0 0F AC  ........ .. v....
+1D04  07 15 88 B1 16 D1 14 D0  03 98 D0 F6 90 10 AE 07  ........ ........
+1D14  15 A0 00 B1 16 F1 14 91  16 C8 CA D0 F6 38 26 1A  ........ .....8&.
+1D24  C6 1C D0 D0 A4 1D A5 1A  91 18 98 D0 BB A6 1B 20  ........ .......
+1D34  9B 17 4C 48 17  ..LH.
 
-1CD4 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1CD7 86 1B      27  stx.z  ( $001B Tmp4 +1 )
-1CD9 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1CDC 88          dey
-1CDD 84 1D      29  sty.z  ( $001D Tmp5 +1 )
-1CDF B1 18      24  lda.ziy  ( $0018 Tmp3 )
-1CE1 0A          asl.a
-1CE2 85 1A      26  sta.z  ( $001A Tmp4 )
-1CE4 A9 08      8  lda.#  ( $0008 >In )
-1CE6 85 1C      28  sta.z  ( $001C Tmp5 )
-1CE8 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-1CEB A0 00      0  ldy.#  ( $0000 cp )
-1CED B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1CEF 2A          rol.a
-1CF0 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1CF2 C8          iny
-1CF3 CA          dex
-1CF4 D0 F7      -9  bne  ( $1CED MUM/Mod +25 )
-1CF6 B0 0F      15  bcs  ( $1D07 MUM/Mod +51 )
-1CF8 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1CFB 88          dey
-1CFC B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1CFE D1 14      20  cmp.ziy  ( $0014 Tmp1 )
-1D00 D0 03      3  bne  ( $1D05 MUM/Mod +49 )
-1D02 98          tya
-1D03 D0 F6      -10  bne  ( $1CFB MUM/Mod +39 )
-1D05 90 10      16  bcc  ( $1D17 MUM/Mod +67 )
-1D07 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
-1D0A A0 00      0  ldy.#  ( $0000 cp )
-1D0C B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1D0E F1 14      20  sbc.ziy  ( $0014 Tmp1 )
-1D10 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1D12 C8          iny
-1D13 CA          dex
-1D14 D0 F6      -10  bne  ( $1D0C MUM/Mod +56 )
-1D16 38          sec
-1D17 26 1A      26  rol.z  ( $001A Tmp4 )
-1D19 C6 1C      28  dec.z  ( $001C Tmp5 )
-1D1B D0 CB      -53  bne  ( $1CE8 MUM/Mod +20 )
-1D1D A4 1D      29  ldy.z  ( $001D Tmp5 +1 )
-1D1F A5 1A      26  lda.z  ( $001A Tmp4 )
-1D21 91 18      24  sta.ziy  ( $0018 Tmp3 )
-1D23 98          tya
-1D24 D0 B6      -74  bne  ( $1CDC MUM/Mod +8 )
-1D26 A6 1B      27  ldx.z  ( $001B Tmp4 +1 )
-1D28 20 9B 17   6043  jsr  ( $179B MDrop )
-1D2B 4C 48 17   5960  jmp  ( $1748 MSwap )  ok
+1CE4 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1CE7 86 1B      27  stx.z  ( $001B Tmp4 +1 )
+1CE9 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1CEC 88          dey
+1CED 84 1D      29  sty.z  ( $001D Tmp5 +1 )
+1CEF B1 18      24  lda.ziy  ( $0018 Tmp3 )
+1CF1 0A          asl.a
+1CF2 85 1A      26  sta.z  ( $001A Tmp4 )
+1CF4 A9 08      8  lda.#  ( $0008 >In )
+1CF6 85 1C      28  sta.z  ( $001C Tmp5 )
+1CF8 AD 16 00   22  lda  ( $0016 Tmp2 )
+1CFB AC 17 00   23  ldy  ( $0017 Tmp2 +1 )
+1CFE 20 76 19   6518  jsr  ( $1976 MRolYA )
+1D01 B0 0F      15  bcs  ( $1D12 MUM/Mod +46 )
+1D03 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1D06 88          dey
+1D07 B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1D09 D1 14      20  cmp.ziy  ( $0014 Tmp1 )
+1D0B D0 03      3  bne  ( $1D10 MUM/Mod +44 )
+1D0D 98          tya
+1D0E D0 F6      -10  bne  ( $1D06 MUM/Mod +34 )
+1D10 90 10      16  bcc  ( $1D22 MUM/Mod +62 )
+1D12 AE 07 15   5383  ldx  ( $1507 MCellBytes +3 )
+1D15 A0 00      0  ldy.#  ( $0000 cp )
+1D17 B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1D19 F1 14      20  sbc.ziy  ( $0014 Tmp1 )
+1D1B 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1D1D C8          iny
+1D1E CA          dex
+1D1F D0 F6      -10  bne  ( $1D17 MUM/Mod +51 )
+1D21 38          sec
+1D22 26 1A      26  rol.z  ( $001A Tmp4 )
+1D24 C6 1C      28  dec.z  ( $001C Tmp5 )
+1D26 D0 D0      -48  bne  ( $1CF8 MUM/Mod +20 )
+1D28 A4 1D      29  ldy.z  ( $001D Tmp5 +1 )
+1D2A A5 1A      26  lda.z  ( $001A Tmp4 )
+1D2C 91 18      24  sta.ziy  ( $0018 Tmp3 )
+1D2E 98          tya
+1D2F D0 BB      -69  bne  ( $1CEC MUM/Mod +8 )
+1D31 A6 1B      27  ldx.z  ( $001B Tmp4 +1 )
+1D33 20 9B 17   6043  jsr  ( $179B MDrop )
+1D36 4C 48 17   5960  jmp  ( $1748 MSwap )  ok
   ok
-: MU/Mod ( um-dividend um-divisor -- um-remainder um-quotient ) \ Divide unsigned  compiled
+: MU/Mod ( M: um-dividend um-divisor -- um-remainder um-quotient ) \ Divide unsigned  compiled
   MSAlloc MTmp123 [  ok
   MCellBytes ldy  Begin, dey  ok
     Tmp2 lda.ziy  Tmp1 sta.ziy  ok
     0 lda.#  Tmp2 sta.ziy  ok
     tya  UntilEq,  ok
   ' MUM/Mod jmp ] ;  SeeL
-nt: $1CB5 xt: $1D39
+nt: $1CC0 xt: $1D44
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #24
 
-1D39  20 A9 16 20 7D 16 AC 07  15 88 B1 16 91 14 A9 00   .. }... ........
-1D49  91 16 98 D0 F4 4C D4 1C   .....L..
+1D44  20 A9 16 20 7D 16 AC 07  15 88 B1 16 91 14 A9 00   .. }... ........
+1D54  91 16 98 D0 F4 4C E4 1C   .....L..
 
-1D39 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
-1D3C 20 7D 16   5757  jsr  ( $167D MTmp123 )
-1D3F AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1D42 88          dey
-1D43 B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1D45 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1D47 A9 00      0  lda.#  ( $0000 cp )
-1D49 91 16      22  sta.ziy  ( $0016 Tmp2 )
-1D4B 98          tya
-1D4C D0 F4      -12  bne  ( $1D42 MU/Mod +9 )
-1D4E 4C D4 1C   7380  jmp  ( $1CD4 MUM/Mod )  ok
+1D44 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
+1D47 20 7D 16   5757  jsr  ( $167D MTmp123 )
+1D4A AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1D4D 88          dey
+1D4E B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1D50 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1D52 A9 00      0  lda.#  ( $0000 cp )
+1D54 91 16      22  sta.ziy  ( $0016 Tmp2 )
+1D56 98          tya
+1D57 D0 F4      -12  bne  ( $1D4D MU/Mod +9 )
+1D59 4C E4 1C   7396  jmp  ( $1CE4 MUM/Mod )  ok
   ok
-: MUMod ( mu-dividend mu-divisor -- mu-remainder )  \ Divide unsigned  compiled
+: MUMod ( M: mu-dividend mu-divisor -- mu-remainder )  \ Divide unsigned  compiled
   MU/Mod MDrop ;  SeeL
-nt: $1CD7 xt: $1D5B
+nt: $1CE2 xt: $1D66
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #6
 
-1D5B  20 39 1D 20 9B 17   9. ..
+1D66  20 44 1D 20 9B 17   D. ..
 
-1D5B 20 39 1D   7481  jsr  ( $1D39 MU/Mod )
-1D5E 20 9B 17   6043  jsr  ( $179B MDrop )  ok
+1D66 20 44 1D   7492  jsr  ( $1D44 MU/Mod )
+1D69 20 9B 17   6043  jsr  ( $179B MDrop )  ok
   ok
-: MU/ ( mu-dividend mu-divisor -- mu-quotient ) \ Divide unsigned  compiled
+: MU/ ( M: mu-dividend mu-divisor -- mu-quotient ) \ Divide unsigned  compiled
   MU/Mod MNip ;  SeeL
-nt: $1CE5 xt: $1D69
+nt: $1CF0 xt: $1D74
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #6
 
-1D69  20 39 1D 20 E6 17   9. ..
+1D74  20 44 1D 20 E6 17   D. ..
 
-1D69 20 39 1D   7481  jsr  ( $1D39 MU/Mod )
-1D6C 20 E6 17   6118  jsr  ( $17E6 MNip )  ok
+1D74 20 44 1D   7492  jsr  ( $1D44 MU/Mod )
+1D77 20 E6 17   6118  jsr  ( $17E6 MNip )  ok
   ok
-\ : MFM/Mod ( mlo mhi mdivisor -- mremainder mquotient ) \ Floored signed division  ok
+\ : MFM/Mod ( M: mlo mhi mdivisor -- mremainder mquotient ) \ Floored signed division  ok
 \  \ http://forth-standard.org/standard/core/FMDivMOD  ok
 \  [ MSPtr lda, clc, MCellBytes adc, MSPtr sta, Tmp1 sta,  \ move over divisor  ok
 \  MCellBytes ldy, dey, dey, Tmp1 (),y lda, pha, IfMi, ] MDNegate [ Then,  ok
@@ -2798,7 +2797,7 @@ size: #6
 \  ] ;  SeeL  ok
   ok
   ok
-: MSM/Rem ( mlo mhi mdivisor -- mremainder mquotient ) \ Symmetric signed division  compiled
+: MSM/Rem ( M: mlo mhi mdivisor -- mremainder mquotient ) \ Symmetric signed division  compiled
   \ http://forth-standard.org/standard/core/SMDivREM  compiled
   MDrop [  \ move over divisor, Tmp2= ^mhi  ok
   MCellBytes ldy  dey  Tmp2 lda.ziy  pha  IfMi, ] MDNegate [ Then,  ok
@@ -2808,66 +2807,66 @@ size: #6
   pla IfMi, ] MNegate [ Then,  \ correct quotient sign  ok
   pla IfMi, ] MDrop MNegate MSAlloc [ Then,  \ correct remainder sign  ok
   ] ;  SeeL
-nt: $1CF7 xt: $1D7B
+nt: $1D02 xt: $1D86
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #55
 
-1D7B  20 9B 17 AC 07 15 88 B1  16 48 10 03 20 F0 1A 20   ....... .H.. ..
-1D8B  A9 16 AC 07 15 88 68 48  51 14 48 B1 14 10 03 20  ......hH Q.H....
-1D9B  BE 1A 20 D4 1C 68 10 03  20 BE 1A 68 10 09 20 9B  .. ..h..  ..h.. .
-1DAB  17 20 BE 1A 20 A9 16  . .. ..
+1D86  20 9B 17 AC 07 15 88 B1  16 48 10 03 20 02 1B 20   ....... .H.. ..
+1D96  A9 16 AC 07 15 88 68 48  51 14 48 B1 14 10 03 20  ......hH Q.H....
+1DA6  D0 1A 20 E4 1C 68 10 03  20 D0 1A 68 10 09 20 9B  .. ..h..  ..h.. .
+1DB6  17 20 D0 1A 20 A9 16  . .. ..
 
-1D7B 20 9B 17   6043  jsr  ( $179B MDrop )
-1D7E AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1D81 88          dey
-1D82 B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1D84 48          pha
-1D85 10 03      3  bpl  ( $1D8A MSM/Rem +15 )
-1D87 20 F0 1A   6896  jsr  ( $1AF0 MDNegate )
-1D8A 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
-1D8D AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1D90 88          dey
-1D91 68          pla
-1D92 48          pha
-1D93 51 14      20  eor.ziy  ( $0014 Tmp1 )
-1D95 48          pha
-1D96 B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1D98 10 03      3  bpl  ( $1D9D MSM/Rem +34 )
-1D9A 20 BE 1A   6846  jsr  ( $1ABE MNegate )
-1D9D 20 D4 1C   7380  jsr  ( $1CD4 MUM/Mod )
-1DA0 68          pla
-1DA1 10 03      3  bpl  ( $1DA6 MSM/Rem +43 )
-1DA3 20 BE 1A   6846  jsr  ( $1ABE MNegate )
-1DA6 68          pla
-1DA7 10 09      9  bpl  ( $1DB2 MSM/Rem +55 )
-1DA9 20 9B 17   6043  jsr  ( $179B MDrop )
-1DAC 20 BE 1A   6846  jsr  ( $1ABE MNegate )
-1DAF 20 A9 16   5801  jsr  ( $16A9 MSAlloc )  ok
+1D86 20 9B 17   6043  jsr  ( $179B MDrop )
+1D89 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1D8C 88          dey
+1D8D B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1D8F 48          pha
+1D90 10 03      3  bpl  ( $1D95 MSM/Rem +15 )
+1D92 20 02 1B   6914  jsr  ( $1B02 MDNegate )
+1D95 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
+1D98 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1D9B 88          dey
+1D9C 68          pla
+1D9D 48          pha
+1D9E 51 14      20  eor.ziy  ( $0014 Tmp1 )
+1DA0 48          pha
+1DA1 B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1DA3 10 03      3  bpl  ( $1DA8 MSM/Rem +34 )
+1DA5 20 D0 1A   6864  jsr  ( $1AD0 MNegate )
+1DA8 20 E4 1C   7396  jsr  ( $1CE4 MUM/Mod )
+1DAB 68          pla
+1DAC 10 03      3  bpl  ( $1DB1 MSM/Rem +43 )
+1DAE 20 D0 1A   6864  jsr  ( $1AD0 MNegate )
+1DB1 68          pla
+1DB2 10 09      9  bpl  ( $1DBD MSM/Rem +55 )
+1DB4 20 9B 17   6043  jsr  ( $179B MDrop )
+1DB7 20 D0 1A   6864  jsr  ( $1AD0 MNegate )
+1DBA 20 A9 16   5801  jsr  ( $16A9 MSAlloc )  ok
   ok
-: M@ ( adr -- m )  \ fetch m from adr  compiled
+: M@ ( adr -- ) ( M: -- m )  \ fetch m from adr  compiled
   \ https://forth-standard.org/standard/core/Fetch  compiled
   PopYA [ Tmp2 sta.z  Tmp2 1+ sty.z  \ Tmp2= adr  ok
   ] MSAlloc [  \ Tmp1= ^m  ok
   MCellBytes ldy Begin,  ok
     dey  Tmp2 lda.ziy  Tmp1 sta.ziy  tya UntilEq,  ok
   ] ;  SeeL
-nt: $1D35 xt: $1DB9
+nt: $1D40 xt: $1DC4
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #21
 
-1DB9  20 62 C5 85 16 84 17 20  A9 16 AC 07 15 88 B1 16   b.....  ........
-1DC9  91 14 98 D0 F8  .....
+1DC4  20 62 C5 85 16 84 17 20  A9 16 AC 07 15 88 B1 16   b.....  ........
+1DD4  91 14 98 D0 F8  .....
 
-1DB9 20 62 C5   50530  jsr  ( $C562 PopYA )
-1DBC 85 16      22  sta.z  ( $0016 Tmp2 )
-1DBE 84 17      23  sty.z  ( $0017 Tmp2 +1 )
-1DC0 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
-1DC3 AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1DC6 88          dey
-1DC7 B1 16      22  lda.ziy  ( $0016 Tmp2 )
-1DC9 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1DCB 98          tya
-1DCC D0 F8      -8  bne  ( $1DC6 M@ +13 )  ok
+1DC4 20 62 C5   50530  jsr  ( $C562 PopYA )
+1DC7 85 16      22  sta.z  ( $0016 Tmp2 )
+1DC9 84 17      23  sty.z  ( $0017 Tmp2 +1 )
+1DCB 20 A9 16   5801  jsr  ( $16A9 MSAlloc )
+1DCE AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1DD1 88          dey
+1DD2 B1 16      22  lda.ziy  ( $0016 Tmp2 )
+1DD4 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1DD6 98          tya
+1DD7 D0 F8      -8  bne  ( $1DD1 M@ +13 )  ok
   ok
 : M! ( adr -- ) ( M: m -- )  \ store m at adr  compiled
   \ https://forth-standard.org/standard/core/Store  compiled
@@ -2876,51 +2875,51 @@ size: #21
   MCellBytes ldy  Begin,  ok
     dey  Tmp1 lda.ziy  Tmp3 sta.ziy  tya  UntilEq,  ok
   ] ;  SeeL
-nt: $1D51 xt: $1DD5
+nt: $1D5C xt: $1DE0
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #21
 
-1DD5  20 62 C5 85 18 84 19 20  9B 17 AC 07 15 88 B1 14   b.....  ........
-1DE5  91 18 98 D0 F8  .....
+1DE0  20 62 C5 85 18 84 19 20  9B 17 AC 07 15 88 B1 14   b.....  ........
+1DF0  91 18 98 D0 F8  .....
 
-1DD5 20 62 C5   50530  jsr  ( $C562 PopYA )
-1DD8 85 18      24  sta.z  ( $0018 Tmp3 )
-1DDA 84 19      25  sty.z  ( $0019 Tmp3 +1 )
-1DDC 20 9B 17   6043  jsr  ( $179B MDrop )
-1DDF AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
-1DE2 88          dey
-1DE3 B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1DE5 91 18      24  sta.ziy  ( $0018 Tmp3 )
-1DE7 98          tya
-1DE8 D0 F8      -8  bne  ( $1DE2 M! +13 )  ok
+1DE0 20 62 C5   50530  jsr  ( $C562 PopYA )
+1DE3 85 18      24  sta.z  ( $0018 Tmp3 )
+1DE5 84 19      25  sty.z  ( $0019 Tmp3 +1 )
+1DE7 20 9B 17   6043  jsr  ( $179B MDrop )
+1DEA AC 07 15   5383  ldy  ( $1507 MCellBytes +3 )
+1DED 88          dey
+1DEE B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1DF0 91 18      24  sta.ziy  ( $0018 Tmp3 )
+1DF2 98          tya
+1DF3 D0 F8      -8  bne  ( $1DED M! +13 )  ok
   ok
 : M, ( M: m -- )  \ compile m  compiled
   Here M!  MCellBytes @ Allot ;  SeeL
-nt: $1D6D xt: $1DF1
+nt: $1D78 xt: $1DFC
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #15
 
-1DF1  20 04 DC 20 D5 1D 20 04  15 20 B2 E0 20 54 D2   .. .. . . .. T.
+1DFC  20 04 DC 20 E0 1D 20 04  15 20 B2 E0 20 54 D2   .. .. . . .. T.
 
-1DF1 20 04 DC   56324  jsr  ( $DC04 Here )
-1DF4 20 D5 1D   7637  jsr  ( $1DD5 M! )
-1DF7 20 04 15   5380  jsr  ( $1504 MCellBytes )
-1DFA 20 B2 E0   57522  jsr  ( $E0B2 @ )
-1DFD 20 54 D2   53844  jsr  ( $D254 Allot )  ok
+1DFC 20 04 DC   56324  jsr  ( $DC04 Here )
+1DFF 20 E0 1D   7648  jsr  ( $1DE0 M! )
+1E02 20 04 15   5380  jsr  ( $1504 MCellBytes )
+1E05 20 B2 E0   57522  jsr  ( $E0B2 @ )
+1E08 20 54 D2   53844  jsr  ( $D254 Allot )  ok
   ok
 : MVariable ( "name" -- )  \ Compile an M variable word  compiled
   \ https://forth-standard.org/standard/core/VARIABLE  compiled
-  Create  0 u>m M, ;  SeeL
-nt: $1D8A xt: $1E0E
+  Create  0 U>M M, ;  SeeL
+nt: $1D95 xt: $1E19
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #12
 
-1E0E  20 5F D3 20 6B C9 20 10  19 20 F1 1D   _. k. . . ..
+1E19  20 5F D3 20 6B C9 20 0F  19 20 FC 1D   _. k. . . ..
 
-1E0E 20 5F D3   54111  jsr  ( $D35F Create )
-1E11 20 6B C9   51563  jsr  ( $C96B 0 )
-1E14 20 10 19   6416  jsr  ( $1910 U>M )
-1E17 20 F1 1D   7665  jsr  ( $1DF1 M, )  ok
+1E19 20 5F D3   54111  jsr  ( $D35F Create )
+1E1C 20 6B C9   51563  jsr  ( $C96B 0 )
+1E1F 20 0F 19   6415  jsr  ( $190F U>M )
+1E22 20 FC 1D   7676  jsr  ( $1DFC M, )  ok
   ok
 : MConstant ( M: m -- ) ( "name" -- )  \ compile an M constant word  compiled
   WordHeader,  \ compile word header  compiled
@@ -2928,23 +2927,23 @@ size: #12
   [ ' M@ 3 + LDYA.# ] JmpYA,  \ compile JMP M@  compiled
   M,  \ compile data  compiled
   ;  SeeL
-nt: $1DA4 xt: $1E28
+nt: $1DAF xt: $1E33
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #27
 
-1E28  20 B2 D2 20 04 DC A9 07  20 5D C9 20 90 DD 20 15   .. ....  ]. .. .
-1E38  C9 A0 1D A9 BC 20 15 0C  20 F1 1D  ..... ..  ..
+1E33  20 B2 D2 20 04 DC A9 07  20 5D C9 20 90 DD 20 15   .. ....  ]. .. .
+1E43  C9 A0 1D A9 C7 20 15 0C  20 FC 1D  ..... ..  ..
 
-1E28 20 B2 D2   53938  jsr  ( $D2B2 WordHeader, )
-1E2B 20 04 DC   56324  jsr  ( $DC04 Here )
-1E2E A9 07      7  lda.#  ( $0007 LSD.Name +1 )
-1E30 20 5D C9   51549  jsr  ( $C95D PushZA )
-1E33 20 90 DD   56720  jsr  ( $DD90 + )
-1E36 20 15 C9   51477  jsr  ( $C915 LDYA.# )
-1E39 A0 1D      29  ldy.#  ( $001D Tmp5 +1 )
-1E3B A9 BC      188  lda.#  ( $00BC FSMant3 +61 )
-1E3D 20 15 0C   3093  jsr  ( $0C15 JmpYA, )
-1E40 20 F1 1D   7665  jsr  ( $1DF1 M, )  ok
+1E33 20 B2 D2   53938  jsr  ( $D2B2 WordHeader, )
+1E36 20 04 DC   56324  jsr  ( $DC04 Here )
+1E39 A9 07      7  lda.#  ( $0007 LSD.Name +1 )
+1E3B 20 5D C9   51549  jsr  ( $C95D PushZA )
+1E3E 20 90 DD   56720  jsr  ( $DD90 + )
+1E41 20 15 C9   51477  jsr  ( $C915 LDYA.# )
+1E44 A0 1D      29  ldy.#  ( $001D Tmp5 +1 )
+1E46 A9 C7      199  lda.#  ( $00C7 FSMant3 +72 )
+1E48 20 15 0C   3093  jsr  ( $0C15 JmpYA, )
+1E4B 20 FC 1D   7676  jsr  ( $1DFC M, )  ok
   ok
 : M.Fmt1 ( M: m -- )  \ 1st part of format m into hold buffer  compiled
   0. <#  compiled
@@ -2952,27 +2951,27 @@ size: #27
     10 cmp.#  IfCs, 6 adc.#  Then, '0' adc.#  ' Hold 3 + jsr ]  compiled
     M0=P [ UntilEq, ]  compiled
   ;  SeeL
-nt: $1DCA xt: $1E4E
+nt: $1DD5 xt: $1E59
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #33
 
-1E4E  20 6B C9 20 6B C9 A9 54  8D 34 03 AD 00 03 20 87   k. k..T .4.... .
-1E5E  1C C9 0A 90 02 69 06 69  30 20 75 BD 20 EF 16 D0  .....i.i 0 u. ...
-1E6E  EA  .
+1E59  20 6B C9 20 6B C9 A9 54  8D 34 03 AD 00 03 20 94   k. k..T .4.... .
+1E69  1C C9 0A 90 02 69 06 69  30 20 75 BD 20 EF 16 D0  .....i.i 0 u. ...
+1E79  EA  .
 
-1E4E 20 6B C9   51563  jsr  ( $C96B 0 )
-1E51 20 6B C9   51563  jsr  ( $C96B 0 )
-1E54 A9 54      84  lda.#  ( $0054 DStack +46 )
-1E56 8D 34 03   820  sta  ( $0334 Scr +38 )
-1E59 AD 00 03   768  lda  ( $0300 Base )
-1E5C 20 87 1C   7303  jsr  ( $1C87 MU/ModByteA +3 )
-1E5F C9 0A      10  cmp.#  ( $000A State )
-1E61 90 02      2  bcc  ( $1E65 M.Fmt1 +23 )
-1E63 69 06      6  adc.#  ( $0006 LSD.Name )
-1E65 69 30      48  adc.#  ( $0030 DStack +10 )
-1E67 20 75 BD   48501  jsr  ( $BD75 Hold +3 )
-1E6A 20 EF 16   5871  jsr  ( $16EF M0=P )
-1E6D D0 EA      -22  bne  ( $1E59 M.Fmt1 +11 )  ok
+1E59 20 6B C9   51563  jsr  ( $C96B 0 )
+1E5C 20 6B C9   51563  jsr  ( $C96B 0 )
+1E5F A9 54      84  lda.#  ( $0054 DStack +46 )
+1E61 8D 34 03   820  sta  ( $0334 Scr +38 )
+1E64 AD 00 03   768  lda  ( $0300 FSMant3 +641 )
+1E67 20 94 1C   7316  jsr  ( $1C94 MU/ModByteA +3 )
+1E6A C9 0A      10  cmp.#  ( $000A State )
+1E6C 90 02      2  bcc  ( $1E70 M.Fmt1 +23 )
+1E6E 69 06      6  adc.#  ( $0006 LSD.Name )
+1E70 69 30      48  adc.#  ( $0030 DStack +10 )
+1E72 20 75 BD   48501  jsr  ( $BD75 Hold +3 )
+1E75 20 EF 16   5871  jsr  ( $16EF M0=P )
+1E78 D0 EA      -22  bne  ( $1E64 M.Fmt1 +11 )  ok
   ok
 : M.Pad ( n -- )  \ add padding spaces to Hold  compiled
   HoldSize  \ calc current length  compiled
@@ -2980,25 +2979,25 @@ size: #33
   Begin  compiled
     Dup 0> While  1-  Bl Hold  Repeat  Drop  compiled
   ;  SeeL
-nt: $1DF5 xt: $1E79
+nt: $1E00 xt: $1E84
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #33
 
-1E79  20 5B BD 20 A9 DD 20 8A  E1 20 F3 DA 20 8C B7 4C   [. .. . . .. ..L
-1E89  97 1E 20 11 DC 20 87 C9  20 72 BD 4C 7F 1E 20 C8  .. .. ..  r.L. .
-1E99  E1  .
+1E84  20 5B BD 20 A9 DD 20 8A  E1 20 F3 DA 20 8C B7 4C   [. .. . . .. ..L
+1E94  A2 1E 20 11 DC 20 87 C9  20 72 BD 4C 8A 1E 20 CA  .. .. ..  r.L.. .
+1EA4  E1  .
 
-1E79 20 5B BD   48475  jsr  ( $BD5B HoldSize )
-1E7C 20 A9 DD   56745  jsr  ( $DDA9 - )
-1E7F 20 8A E1   57738  jsr  ( $E18A Dup )
-1E82 20 F3 DA   56051  jsr  ( $DAF3 0> )
-1E85 20 8C B7   46988  jsr  ( $B78C If +23 )
-1E88 4C 97 1E   7831  jmp  ( $1E97 M.Pad +30 )
-1E8B 20 11 DC   56337  jsr  ( $DC11 1- )
-1E8E 20 87 C9   51591  jsr  ( $C987 Bl )
-1E91 20 72 BD   48498  jsr  ( $BD72 Hold )
-1E94 4C 7F 1E   7807  jmp  ( $1E7F M.Pad +6 )
-1E97 20 C8 E1   57800  jsr  ( $E1C8 Drop )  ok
+1E84 20 5B BD   48475  jsr  ( $BD5B HoldSize )
+1E87 20 A9 DD   56745  jsr  ( $DDA9 - )
+1E8A 20 8A E1   57738  jsr  ( $E18A Dup )
+1E8D 20 F3 DA   56051  jsr  ( $DAF3 0> )
+1E90 20 8C B7   46988  jsr  ( $B78C If +23 )
+1E93 4C A2 1E   7842  jmp  ( $1EA2 M.Pad +30 )
+1E96 20 11 DC   56337  jsr  ( $DC11 1- )
+1E99 20 87 C9   51591  jsr  ( $C987 Bl )
+1E9C 20 72 BD   48498  jsr  ( $BD72 Hold )
+1E9F 4C 8A 1E   7818  jmp  ( $1E8A M.Pad +6 )
+1EA2 20 CA E1   57802  jsr  ( $E1CA Drop )  ok
     ok
 : MU.R ( M: um -- ) ( n -- )  \ type unsigned m, at least n chars  compiled
   \ https://forth-standard.org/standard/core/UDotR  compiled
@@ -3006,46 +3005,46 @@ size: #33
   R> M.Pad  compiled
   #> MDrop  compiled
   Type Space ;  SeeL
-nt: $1E1F xt: $1EA3
+nt: $1E2A xt: $1EAE
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #37
 
-1EA3  20 8B C5 B5 27 48 B5 26  48 E8 E8 20 4E 1E CA CA   ...'H.& H.. N...
-1EB3  68 95 26 68 95 27 20 79  1E 20 3C BD 20 9B 17 20  h.&h.' y . <. ..
-1EC3  F1 DF 20 E5 DF  .. ..
+1EAE  20 8B C5 B5 27 48 B5 26  48 E8 E8 20 59 1E CA CA   ...'H.& H.. Y...
+1EBE  68 95 26 68 95 27 20 84  1E 20 3C BD 20 9B 17 20  h.&h.' . . <. ..
+1ECE  F1 DF 20 E5 DF  .. ..
 
-1EA3 20 8B C5   50571  jsr  ( $C58B underflow_1 )
-1EA6 B5 27      39  lda.zx  ( $0027 DStack +1 )
-1EA8 48          pha
-1EA9 B5 26      38  lda.zx  ( $0026 DStack )
-1EAB 48          pha
-1EAC E8          inx
-1EAD E8          inx
-1EAE 20 4E 1E   7758  jsr  ( $1E4E M.Fmt1 )
-1EB1 CA          dex
-1EB2 CA          dex
-1EB3 68          pla
-1EB4 95 26      38  sta.zx  ( $0026 DStack )
-1EB6 68          pla
-1EB7 95 27      39  sta.zx  ( $0027 DStack +1 )
-1EB9 20 79 1E   7801  jsr  ( $1E79 M.Pad )
-1EBC 20 3C BD   48444  jsr  ( $BD3C #> )
-1EBF 20 9B 17   6043  jsr  ( $179B MDrop )
-1EC2 20 F1 DF   57329  jsr  ( $DFF1 Type )
-1EC5 20 E5 DF   57317  jsr  ( $DFE5 Space )  ok
+1EAE 20 8B C5   50571  jsr  ( $C58B underflow_1 )
+1EB1 B5 27      39  lda.zx  ( $0027 DStack +1 )
+1EB3 48          pha
+1EB4 B5 26      38  lda.zx  ( $0026 DStack )
+1EB6 48          pha
+1EB7 E8          inx
+1EB8 E8          inx
+1EB9 20 59 1E   7769  jsr  ( $1E59 M.Fmt1 )
+1EBC CA          dex
+1EBD CA          dex
+1EBE 68          pla
+1EBF 95 26      38  sta.zx  ( $0026 DStack )
+1EC1 68          pla
+1EC2 95 27      39  sta.zx  ( $0027 DStack +1 )
+1EC4 20 84 1E   7812  jsr  ( $1E84 M.Pad )
+1EC7 20 3C BD   48444  jsr  ( $BD3C #> )
+1ECA 20 9B 17   6043  jsr  ( $179B MDrop )
+1ECD 20 F1 DF   57329  jsr  ( $DFF1 Type )
+1ED0 20 E5 DF   57317  jsr  ( $DFE5 Space )  ok
   ok
 : MU. ( M: um -- )  \ type unsigned m, minimum length  compiled
   \ https://forth-standard.org/standard/core/Ud  compiled
   0 MU.R Space ;  SeeL
-nt: $1E4C xt: $1ED0
+nt: $1E57 xt: $1EDB
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #9
 
-1ED0  20 6B C9 20 A3 1E 20 E5  DF   k. .. . .
+1EDB  20 6B C9 20 AE 1E 20 E5  DF   k. .. . .
 
-1ED0 20 6B C9   51563  jsr  ( $C96B 0 )
-1ED3 20 A3 1E   7843  jsr  ( $1EA3 MU.R )
-1ED6 20 E5 DF   57317  jsr  ( $DFE5 Space )  ok
+1EDB 20 6B C9   51563  jsr  ( $C96B 0 )
+1EDE 20 AE 1E   7854  jsr  ( $1EAE MU.R )
+1EE1 20 E5 DF   57317  jsr  ( $DFE5 Space )  ok
   ok
 : M.R ( M. m -- ) ( n -- ) \ type signed m, at least n chars  compiled
   \ https://forth-standard.org/standard/core/DotR  compiled
@@ -3056,58 +3055,58 @@ size: #9
   R> M.Pad  compiled
   #> MDrop  compiled
   Type ;  SeeL
-nt: $1E5D xt: $1EE1
+nt: $1E68 xt: $1EEC
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #54
 
-1EE1  20 8B C5 B5 27 48 B5 26  48 E8 E8 20 08 17 08 10   ...'H.& H.. ....
-1EF1  03 20 BE 1A 20 4E 1E 28  10 08 A9 2D 20 5D C9 20  . .. N.( ...- ].
-1F01  72 BD CA CA 68 95 26 68  95 27 20 79 1E 20 3C BD  r...h.&h .' y. <.
-1F11  20 9B 17 20 F1 DF   .. ..
+1EEC  20 8B C5 B5 27 48 B5 26  48 E8 E8 20 08 17 08 10   ...'H.& H.. ....
+1EFC  03 20 D0 1A 20 59 1E 28  10 08 A9 2D 20 5D C9 20  . .. Y.( ...- ].
+1F0C  72 BD CA CA 68 95 26 68  95 27 20 84 1E 20 3C BD  r...h.&h .' .. <.
+1F1C  20 9B 17 20 F1 DF   .. ..
 
-1EE1 20 8B C5   50571  jsr  ( $C58B underflow_1 )
-1EE4 B5 27      39  lda.zx  ( $0027 DStack +1 )
-1EE6 48          pha
-1EE7 B5 26      38  lda.zx  ( $0026 DStack )
-1EE9 48          pha
-1EEA E8          inx
-1EEB E8          inx
-1EEC 20 08 17   5896  jsr  ( $1708 M0<P )
-1EEF 08          php
-1EF0 10 03      3  bpl  ( $1EF5 M.R +20 )
-1EF2 20 BE 1A   6846  jsr  ( $1ABE MNegate )
-1EF5 20 4E 1E   7758  jsr  ( $1E4E M.Fmt1 )
-1EF8 28          plp
-1EF9 10 08      8  bpl  ( $1F03 M.R +34 )
-1EFB A9 2D      45  lda.#  ( $002D DStack +7 )
-1EFD 20 5D C9   51549  jsr  ( $C95D PushZA )
-1F00 20 72 BD   48498  jsr  ( $BD72 Hold )
-1F03 CA          dex
-1F04 CA          dex
-1F05 68          pla
-1F06 95 26      38  sta.zx  ( $0026 DStack )
-1F08 68          pla
-1F09 95 27      39  sta.zx  ( $0027 DStack +1 )
-1F0B 20 79 1E   7801  jsr  ( $1E79 M.Pad )
-1F0E 20 3C BD   48444  jsr  ( $BD3C #> )
-1F11 20 9B 17   6043  jsr  ( $179B MDrop )
-1F14 20 F1 DF   57329  jsr  ( $DFF1 Type )  ok
+1EEC 20 8B C5   50571  jsr  ( $C58B underflow_1 )
+1EEF B5 27      39  lda.zx  ( $0027 DStack +1 )
+1EF1 48          pha
+1EF2 B5 26      38  lda.zx  ( $0026 DStack )
+1EF4 48          pha
+1EF5 E8          inx
+1EF6 E8          inx
+1EF7 20 08 17   5896  jsr  ( $1708 M0<P )
+1EFA 08          php
+1EFB 10 03      3  bpl  ( $1F00 M.R +20 )
+1EFD 20 D0 1A   6864  jsr  ( $1AD0 MNegate )
+1F00 20 59 1E   7769  jsr  ( $1E59 M.Fmt1 )
+1F03 28          plp
+1F04 10 08      8  bpl  ( $1F0E M.R +34 )
+1F06 A9 2D      45  lda.#  ( $002D DStack +7 )
+1F08 20 5D C9   51549  jsr  ( $C95D PushZA )
+1F0B 20 72 BD   48498  jsr  ( $BD72 Hold )
+1F0E CA          dex
+1F0F CA          dex
+1F10 68          pla
+1F11 95 26      38  sta.zx  ( $0026 DStack )
+1F13 68          pla
+1F14 95 27      39  sta.zx  ( $0027 DStack +1 )
+1F16 20 84 1E   7812  jsr  ( $1E84 M.Pad )
+1F19 20 3C BD   48444  jsr  ( $BD3C #> )
+1F1C 20 9B 17   6043  jsr  ( $179B MDrop )
+1F1F 20 F1 DF   57329  jsr  ( $DFF1 Type )  ok
   ok
 : M. ( M. m -- )  \ type signed m, minimum length  compiled
   \ https://forth-standard.org/standard/core/d  compiled
   0 M.R Space ;  SeeL
-nt: $1E9A xt: $1F1E
+nt: $1EA5 xt: $1F29
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #9
 
-1F1E  20 6B C9 20 E1 1E 20 E5  DF   k. .. . .
+1F29  20 6B C9 20 EC 1E 20 E5  DF   k. .. . .
 
-1F1E 20 6B C9   51563  jsr  ( $C96B 0 )
-1F21 20 E1 1E   7905  jsr  ( $1EE1 M.R )
-1F24 20 E5 DF   57317  jsr  ( $DFE5 Space )  ok
+1F29 20 6B C9   51563  jsr  ( $C96B 0 )
+1F2C 20 EC 1E   7916  jsr  ( $1EEC M.R )
+1F2F 20 E5 DF   57317  jsr  ( $DFE5 Space )  ok
   ok
   ok
-: M.S \ Print the M stack  compiled
+: M.S \ Print the MStack  compiled
   \ https://forth-standard.org/standard/tools/DotS  compiled
   [ '<' lda.# ] EmitA  MDepth 0 U.R [ '>' lda.# ] EmitA  Space  compiled
   MSEmpty [ Begin, ]  compiled
@@ -3115,41 +3114,41 @@ size: #9
     Dup M@ M.  compiled
     [ Repeat, ] Drop  compiled
   CR ;  SeeL
-nt: $1EAB xt: $1F2F
+nt: $1EB6 xt: $1F3A
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #64
 
-1F2F  A9 3C 20 D9 DF 20 5C 16  20 6B C9 20 22 DE A9 3E  .< .. \.  k. "..>
-1F3F  20 D9 DF 20 E5 DF 20 22  16 20 04 15 20 B2 E0 20   .. .. " . .. ..
-1F4F  A9 DD B5 26 CD 35 16 B5  27 ED 36 16 90 0C 20 8A  ...&.5.. '.6... .
-1F5F  E1 20 B9 1D 20 1E 1F 4C  48 1F 20 C8 E1 20 B7 BC  . .. ..L H. .. ..
-1F6F
+1F3A  A9 3C 20 CD DF 20 5C 16  20 6B C9 20 22 DE A9 3E  .< .. \.  k. "..>
+1F4A  20 CD DF 20 E5 DF 20 22  16 20 04 15 20 B2 E0 20   .. .. " . .. ..
+1F5A  A9 DD B5 26 CD 35 16 B5  27 ED 36 16 90 0C 20 8A  ...&.5.. '.6... .
+1F6A  E1 20 C4 1D 20 29 1F 4C  53 1F 20 CA E1 20 B7 BC  . .. ).L S. .. ..
+1F7A
 
-1F2F A9 3C      60  lda.#  ( $003C DStack +22 )
-1F31 20 D9 DF   57305  jsr  ( $DFD9 EmitA )
-1F34 20 5C 16   5724  jsr  ( $165C MDepth )
-1F37 20 6B C9   51563  jsr  ( $C96B 0 )
-1F3A 20 22 DE   56866  jsr  ( $DE22 U.R )
-1F3D A9 3E      62  lda.#  ( $003E DStack +24 )
-1F3F 20 D9 DF   57305  jsr  ( $DFD9 EmitA )
-1F42 20 E5 DF   57317  jsr  ( $DFE5 Space )
-1F45 20 22 16   5666  jsr  ( $1622 MSEmpty )
-1F48 20 04 15   5380  jsr  ( $1504 MCellBytes )
-1F4B 20 B2 E0   57522  jsr  ( $E0B2 @ )
-1F4E 20 A9 DD   56745  jsr  ( $DDA9 - )
-1F51 B5 26      38  lda.zx  ( $0026 DStack )
-1F53 CD 35 16   5685  cmp  ( $1635 MSPtr +3 )
-1F56 B5 27      39  lda.zx  ( $0027 DStack +1 )
-1F58 ED 36 16   5686  sbc  ( $1636 MSPtr +4 )
-1F5B 90 0C      12  bcc  ( $1F69 M.S +58 )
-1F5D 20 8A E1   57738  jsr  ( $E18A Dup )
-1F60 20 B9 1D   7609  jsr  ( $1DB9 M@ )
-1F63 20 1E 1F   7966  jsr  ( $1F1E M. )
-1F66 4C 48 1F   8008  jmp  ( $1F48 M.S +25 )
-1F69 20 C8 E1   57800  jsr  ( $E1C8 Drop )
-1F6C 20 B7 BC   48311  jsr  ( $BCB7 CR )  ok
+1F3A A9 3C      60  lda.#  ( $003C DStack +22 )
+1F3C 20 CD DF   57293  jsr  ( $DFCD EmitA )
+1F3F 20 5C 16   5724  jsr  ( $165C MDepth )
+1F42 20 6B C9   51563  jsr  ( $C96B 0 )
+1F45 20 22 DE   56866  jsr  ( $DE22 U.R )
+1F48 A9 3E      62  lda.#  ( $003E DStack +24 )
+1F4A 20 CD DF   57293  jsr  ( $DFCD EmitA )
+1F4D 20 E5 DF   57317  jsr  ( $DFE5 Space )
+1F50 20 22 16   5666  jsr  ( $1622 MSEmpty )
+1F53 20 04 15   5380  jsr  ( $1504 MCellBytes )
+1F56 20 B2 E0   57522  jsr  ( $E0B2 @ )
+1F59 20 A9 DD   56745  jsr  ( $DDA9 - )
+1F5C B5 26      38  lda.zx  ( $0026 DStack )
+1F5E CD 35 16   5685  cmp  ( $1635 MSPtr +3 )
+1F61 B5 27      39  lda.zx  ( $0027 DStack +1 )
+1F63 ED 36 16   5686  sbc  ( $1636 MSPtr +4 )
+1F66 90 0C      12  bcc  ( $1F74 M.S +58 )
+1F68 20 8A E1   57738  jsr  ( $E18A Dup )
+1F6B 20 C4 1D   7620  jsr  ( $1DC4 M@ )
+1F6E 20 29 1F   7977  jsr  ( $1F29 M. )
+1F71 4C 53 1F   8019  jmp  ( $1F53 M.S +25 )
+1F74 20 CA E1   57802  jsr  ( $E1CA Drop )
+1F77 20 B7 BC   48311  jsr  ( $BCB7 CR )  ok
   ok
-.S <0>  ok
+.S  \ look for stray compile stuff <0>  ok
   ok
 : >M ( M: -- m ) ( c-addr u -- true | false) \ Convert a string to an m  compiled
   \ https://forth-standard.org/standard/float/toFLOAT  compiled
@@ -3187,85 +3186,85 @@ size: #64
     clc  ok
    Then,  ok
   LSFinish  ] ;  SeeL
-nt: $1EF2 xt: $1F76
+nt: $1EFD xt: $1F81
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #128
 
-1F76  20 6B C9 20 10 19 20 E6  1F B0 61 C9 2D 08 F0 04   k. .. . ..a.-...
-1F86  C9 2B D0 05 20 E6 1F B0  43 48 AD 00 03 20 63 1B  .+.. ... CH... c.
-1F96  68 C9 61 90 02 29 DF 38  E9 30 90 3F C9 0A 90 02  h.a..).8 .0.?....
-1FA6  E9 06 CD 00 03 B0 34 AC  35 16 84 14 AC 36 16 84  ......4. 5....6..
-1FB6  15 A0 00 18 71 14 91 14  90 0F C8 98 4D 07 15 F0  ....q... ....M...
-1FC6  08 B1 14 69 00 91 14 B0  EF 4C 8A 1F 28 D0 03 20  ...i.... .L..(..
-1FD6  BE 1A A9 FF E8 E8 95 26  95 27 60 28 A9 00 F0 F4  .......& .'`(....
-1FE6  38 B5 26 F0 0B D6 26 A1  28 F6 28 D0 02 F6 29 18  8.&...&. (.(...).
-1FF6
+1F81  20 6B C9 20 0F 19 20 F1  1F B0 61 C9 2D 08 F0 04   k. .. . ..a.-...
+1F91  C9 2B D0 05 20 F1 1F B0  43 48 AD 00 03 20 75 1B  .+.. ... CH... u.
+1FA1  68 C9 61 90 02 29 DF 38  E9 30 90 3F C9 0A 90 02  h.a..).8 .0.?....
+1FB1  E9 06 CD 00 03 B0 34 AC  35 16 84 14 AC 36 16 84  ......4. 5....6..
+1FC1  15 A0 00 18 71 14 91 14  90 0F C8 98 4D 07 15 F0  ....q... ....M...
+1FD1  08 B1 14 69 00 91 14 B0  EF 4C 95 1F 28 D0 03 20  ...i.... .L..(..
+1FE1  D0 1A A9 FF E8 E8 95 26  95 27 60 28 A9 00 F0 F4  .......& .'`(....
+1FF1  38 B5 26 F0 0B D6 26 A1  28 F6 28 D0 02 F6 29 18  8.&...&. (.(...).
+2001
 
-1F76 20 6B C9   51563  jsr  ( $C96B 0 )
-1F79 20 10 19   6416  jsr  ( $1910 U>M )
-1F7C 20 E6 1F   8166  jsr  ( $1FE6 >M +112 )
-1F7F B0 61      97  bcs  ( $1FE2 >M +108 )
-1F81 C9 2D      45  cmp.#  ( $002D DStack +7 )
-1F83 08          php
-1F84 F0 04      4  beq  ( $1F8A >M +20 )
-1F86 C9 2B      43  cmp.#  ( $002B DStack +5 )
-1F88 D0 05      5  bne  ( $1F8F >M +25 )
-1F8A 20 E6 1F   8166  jsr  ( $1FE6 >M +112 )
-1F8D B0 43      67  bcs  ( $1FD2 >M +92 )
-1F8F 48          pha
-1F90 AD 00 03   768  lda  ( $0300 Base )
-1F93 20 63 1B   7011  jsr  ( $1B63 MU*ByteA )
-1F96 68          pla
-1F97 C9 61      97  cmp.#  ( $0061 FSMant0 )
-1F99 90 02      2  bcc  ( $1F9D >M +39 )
-1F9B 29 DF      223  and.#  ( $00DF FSMant3 +96 )
-1F9D 38          sec
-1F9E E9 30      48  sbc.#  ( $0030 DStack +10 )
-1FA0 90 3F      63  bcc  ( $1FE1 >M +107 )
-1FA2 C9 0A      10  cmp.#  ( $000A State )
-1FA4 90 02      2  bcc  ( $1FA8 >M +50 )
-1FA6 E9 06      6  sbc.#  ( $0006 LSD.Name )
-1FA8 CD 00 03   768  cmp  ( $0300 Base )
-1FAB B0 34      52  bcs  ( $1FE1 >M +107 )
-1FAD AC 35 16   5685  ldy  ( $1635 MSPtr +3 )
-1FB0 84 14      20  sty.z  ( $0014 Tmp1 )
-1FB2 AC 36 16   5686  ldy  ( $1636 MSPtr +4 )
-1FB5 84 15      21  sty.z  ( $0015 Tmp1 +1 )
-1FB7 A0 00      0  ldy.#  ( $0000 cp )
-1FB9 18          clc
-1FBA 71 14      20  adc.ziy  ( $0014 Tmp1 )
-1FBC 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1FBE 90 0F      15  bcc  ( $1FCF >M +89 )
-1FC0 C8          iny
-1FC1 98          tya
-1FC2 4D 07 15   5383  eor  ( $1507 MCellBytes +3 )
-1FC5 F0 08      8  beq  ( $1FCF >M +89 )
-1FC7 B1 14      20  lda.ziy  ( $0014 Tmp1 )
-1FC9 69 00      0  adc.#  ( $0000 cp )
-1FCB 91 14      20  sta.ziy  ( $0014 Tmp1 )
-1FCD B0 EF      -17  bcs  ( $1FBE >M +72 )
-1FCF 4C 8A 1F   8074  jmp  ( $1F8A >M +20 )
-1FD2 28          plp
-1FD3 D0 03      3  bne  ( $1FD8 >M +98 )
-1FD5 20 BE 1A   6846  jsr  ( $1ABE MNegate )
-1FD8 A9 FF      255  lda.#  ( $00FF FSMant3 +128 )
-1FDA E8          inx
-1FDB E8          inx
-1FDC 95 26      38  sta.zx  ( $0026 DStack )
-1FDE 95 27      39  sta.zx  ( $0027 DStack +1 )
-1FE0 60          rts
-1FE1 28          plp
-1FE2 A9 00      0  lda.#  ( $0000 cp )
-1FE4 F0 F4      -12  beq  ( $1FDA >M +100 )
-1FE6 38          sec
-1FE7 B5 26      38  lda.zx  ( $0026 DStack )
-1FE9 F0 0B      11  beq  ( $1FF6 >M +128 )
-1FEB D6 26      38  dec.zx  ( $0026 DStack )
-1FED A1 28      40  lda.zxi  ( $0028 DStack +2 )
-1FEF F6 28      40  inc.zx  ( $0028 DStack +2 )
-1FF1 D0 02      2  bne  ( $1FF5 >M +127 )
-1FF3 F6 29      41  inc.zx  ( $0029 DStack +3 )
-1FF5 18          clc ok
+1F81 20 6B C9   51563  jsr  ( $C96B 0 )
+1F84 20 0F 19   6415  jsr  ( $190F U>M )
+1F87 20 F1 1F   8177  jsr  ( $1FF1 >M +112 )
+1F8A B0 61      97  bcs  ( $1FED >M +108 )
+1F8C C9 2D      45  cmp.#  ( $002D DStack +7 )
+1F8E 08          php
+1F8F F0 04      4  beq  ( $1F95 >M +20 )
+1F91 C9 2B      43  cmp.#  ( $002B DStack +5 )
+1F93 D0 05      5  bne  ( $1F9A >M +25 )
+1F95 20 F1 1F   8177  jsr  ( $1FF1 >M +112 )
+1F98 B0 43      67  bcs  ( $1FDD >M +92 )
+1F9A 48          pha
+1F9B AD 00 03   768  lda  ( $0300 FSMant3 +641 )
+1F9E 20 75 1B   7029  jsr  ( $1B75 MU*ByteA )
+1FA1 68          pla
+1FA2 C9 61      97  cmp.#  ( $0061 FSMant0 )
+1FA4 90 02      2  bcc  ( $1FA8 >M +39 )
+1FA6 29 DF      223  and.#  ( $00DF FSMant3 +96 )
+1FA8 38          sec
+1FA9 E9 30      48  sbc.#  ( $0030 DStack +10 )
+1FAB 90 3F      63  bcc  ( $1FEC >M +107 )
+1FAD C9 0A      10  cmp.#  ( $000A State )
+1FAF 90 02      2  bcc  ( $1FB3 >M +50 )
+1FB1 E9 06      6  sbc.#  ( $0006 LSD.Name )
+1FB3 CD 00 03   768  cmp  ( $0300 FSMant3 +641 )
+1FB6 B0 34      52  bcs  ( $1FEC >M +107 )
+1FB8 AC 35 16   5685  ldy  ( $1635 MSPtr +3 )
+1FBB 84 14      20  sty.z  ( $0014 Tmp1 )
+1FBD AC 36 16   5686  ldy  ( $1636 MSPtr +4 )
+1FC0 84 15      21  sty.z  ( $0015 Tmp1 +1 )
+1FC2 A0 00      0  ldy.#  ( $0000 cp )
+1FC4 18          clc
+1FC5 71 14      20  adc.ziy  ( $0014 Tmp1 )
+1FC7 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1FC9 90 0F      15  bcc  ( $1FDA >M +89 )
+1FCB C8          iny
+1FCC 98          tya
+1FCD 4D 07 15   5383  eor  ( $1507 MCellBytes +3 )
+1FD0 F0 08      8  beq  ( $1FDA >M +89 )
+1FD2 B1 14      20  lda.ziy  ( $0014 Tmp1 )
+1FD4 69 00      0  adc.#  ( $0000 cp )
+1FD6 91 14      20  sta.ziy  ( $0014 Tmp1 )
+1FD8 B0 EF      -17  bcs  ( $1FC9 >M +72 )
+1FDA 4C 95 1F   8085  jmp  ( $1F95 >M +20 )
+1FDD 28          plp
+1FDE D0 03      3  bne  ( $1FE3 >M +98 )
+1FE0 20 D0 1A   6864  jsr  ( $1AD0 MNegate )
+1FE3 A9 FF      255  lda.#  ( $00FF FSMant3 +128 )
+1FE5 E8          inx
+1FE6 E8          inx
+1FE7 95 26      38  sta.zx  ( $0026 DStack )
+1FE9 95 27      39  sta.zx  ( $0027 DStack +1 )
+1FEB 60          rts
+1FEC 28          plp
+1FED A9 00      0  lda.#  ( $0000 cp )
+1FEF F0 F4      -12  beq  ( $1FE5 >M +100 )
+1FF1 38          sec
+1FF2 B5 26      38  lda.zx  ( $0026 DStack )
+1FF4 F0 0B      11  beq  ( $2001 >M +128 )
+1FF6 D6 26      38  dec.zx  ( $0026 DStack )
+1FF8 A1 28      40  lda.zxi  ( $0028 DStack +2 )
+1FFA F6 28      40  inc.zx  ( $0028 DStack +2 )
+1FFC D0 02      2  bne  ( $2000 >M +127 )
+1FFE F6 29      41  inc.zx  ( $0029 DStack +3 )
+2000 18          clc ok
   ok
 : MLiteral ( M: m -- )  \ compile inline m literal  compiled
   [ Here 10 + ldya.# ] JsrYA,  \ compile JSR  compiled
@@ -3276,38 +3275,38 @@ size: #128
   tay  Tmp4 lda.z  clc  1 adc.#  IfCs, iny Then,  ' M@ 3 + jsr  \ get value  ok
   Tmp4 lda.z  clc  MCellBytes adc  tay  Tmp4 1+ lda.z  0 adc.#  pha  tya  pha  \ fix RTS addr  ok
   ] ;  Immediate  SeeL
-nt: $1F7F xt: $2003
+nt: $1F8A xt: $200E
 flags: __=0 UF=0 AN=0 NN=1 IM=1 CO=0 DB=0 FP=0
 size: #42
 
-2003  A0 20 A9 0D 20 25 0C 4C  F1 1D 68 85 1A 68 85 1B  . .. %.L ..h..h..
-2013  A8 A5 1A 18 69 01 90 01  C8 20 BC 1D A5 1A 18 6D  ....i... . .....m
-2023  07 15 A8 A5 1B 69 00 48  98 48  .....i.H .H
+200E  A0 20 A9 18 20 25 0C 4C  FC 1D 68 85 1A 68 85 1B  . .. %.L ..h..h..
+201E  A8 A5 1A 18 69 01 90 01  C8 20 C7 1D A5 1A 18 6D  ....i... . .....m
+202E  07 15 A8 A5 1B 69 00 48  98 48  .....i.H .H
 
-2003 A0 20      32  ldy.#  ( $0020 Tmp6 +2 )
-2005 A9 0D      13  lda.#  ( $000D State +3 )
-2007 20 25 0C   3109  jsr  ( $0C25 JsrYA, )
-200A 4C F1 1D   7665  jmp  ( $1DF1 M, )
-200D 68          pla
-200E 85 1A      26  sta.z  ( $001A Tmp4 )
-2010 68          pla
-2011 85 1B      27  sta.z  ( $001B Tmp4 +1 )
-2013 A8          tay
-2014 A5 1A      26  lda.z  ( $001A Tmp4 )
-2016 18          clc
-2017 69 01      1  adc.#  ( $0001 cp +1 )
-2019 90 01      1  bcc  ( $201C MLiteral +25 )
-201B C8          iny
-201C 20 BC 1D   7612  jsr  ( $1DBC M@ +3 )
+200E A0 20      32  ldy.#  ( $0020 Tmp6 +2 )
+2010 A9 18      24  lda.#  ( $0018 Tmp3 )
+2012 20 25 0C   3109  jsr  ( $0C25 JsrYA, )
+2015 4C FC 1D   7676  jmp  ( $1DFC M, )
+2018 68          pla
+2019 85 1A      26  sta.z  ( $001A Tmp4 )
+201B 68          pla
+201C 85 1B      27  sta.z  ( $001B Tmp4 +1 )
+201E A8          tay
 201F A5 1A      26  lda.z  ( $001A Tmp4 )
 2021 18          clc
-2022 6D 07 15   5383  adc  ( $1507 MCellBytes +3 )
-2025 A8          tay
-2026 A5 1B      27  lda.z  ( $001B Tmp4 +1 )
-2028 69 00      0  adc.#  ( $0000 cp )
-202A 48          pha
-202B 98          tya
-202C 48          pha ok
+2022 69 01      1  adc.#  ( $0001 cp +1 )
+2024 90 01      1  bcc  ( $2027 MLiteral +25 )
+2026 C8          iny
+2027 20 C7 1D   7623  jsr  ( $1DC7 M@ +3 )
+202A A5 1A      26  lda.z  ( $001A Tmp4 )
+202C 18          clc
+202D 6D 07 15   5383  adc  ( $1507 MCellBytes +3 )
+2030 A8          tay
+2031 A5 1B      27  lda.z  ( $001B Tmp4 +1 )
+2033 69 00      0  adc.#  ( $0000 cp )
+2035 48          pha
+2036 98          tya
+2037 48          pha ok
   ok
 : M' ( "string" -- ) ( M: -- m )  \ convert inline string to m  compiled
   Parse-Name            \ get word string  compiled
@@ -3316,171 +3315,171 @@ size: #42
   [ State lda.z  ' MLiteral bnea ] \ compiling?  compiled
   ;  Immediate  SeeL eof
 
-nt: $1FB0 xt: $2034
+nt: $1FBB xt: $203F
 flags: __=0 UF=0 AN=0 NN=1 IM=1 CO=0 DB=0 FP=0
 size: #22
 
-2034  20 15 CC 20 76 1F 20 C6  DA 20 8C B7 4C 46 20 20   .. v. . . ..LF
-2044  3A C5 A5 0A D0 B9  :.....
+203F  20 15 CC 20 81 1F 20 C6  DA 20 8C B7 4C 51 20 20   .. .. . . ..LQ
+204F  3A C5 A5 0A D0 B9  :.....
 
-2034 20 15 CC   52245  jsr  ( $CC15 Parse-Name )
-2037 20 76 1F   8054  jsr  ( $1F76 >M )
-203A 20 C6 DA   56006  jsr  ( $DAC6 0= )
-203D 20 8C B7   46988  jsr  ( $B78C If +23 )
-2040 4C 46 20   8262  jmp  ( $2046 M' +18 )
-2043 20 3A C5   50490  jsr  ( $C53A Abort )
-2046 A5 0A      10  lda.z  ( $000A State )
-2048 D0 B9      -71  bne  ( $2003 MLiteral )  ok
+203F 20 15 CC   52245  jsr  ( $CC15 Parse-Name )
+2042 20 81 1F   8065  jsr  ( $1F81 >M )
+2045 20 C6 DA   56006  jsr  ( $DAC6 0= )
+2048 20 8C B7   46988  jsr  ( $B78C If +23 )
+204B 4C 51 20   8273  jmp  ( $2051 M' +18 )
+204E 20 3A C5   50490  jsr  ( $C53A Abort )
+2051 A5 0A      10  lda.z  ( $000A State )
+2053 D0 B9      -71  bne  ( $200E MLiteral )  ok
   ok
   ok
 
-A=00FE X=002E Y=0000 S=01F9 EnvMXdIzC D=0000 B=00 B0F760A9 00f128 bcs f121
+A=00FE X=002E Y=0000 S=01F9 ENvMXdIzC D=0000 B=00 B0F760A9 00f128 bcs f121
 .@..\wordsmtest.fs
 .g
 \ Tests for  Multi-precision integer operations.  ok
   ok
 : Timer ( "name" -- )  \ measure execution time  compiled
   ' CC@ 2>R Execute CC@ 2R> D- UD. ." cycles " ;  SeeL
-nt: $1FD0 xt: $2054
+nt: $1FDB xt: $205F
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #69
 
-2054  20 D4 CD 20 38 F1 20 9F  C5 B5 29 48 B5 28 48 B5   .. 8. . ..)H.(H.
-2064  27 48 B5 26 48 E8 E8 E8  E8 20 2F E0 20 38 F1 CA  'H.&H... . /. 8..
-2074  CA CA CA 68 95 26 68 95  27 68 95 28 68 95 29 20  ...h.&h. 'h.(h.)
-2084  BF D1 20 03 DE 20 4B CA  4C 96 20 63 79 63 6C 65  .. .. K. L. cycle
-2094  73 20 20 F1 DF  s  ..
+205F  20 D4 CD 20 38 F1 20 9F  C5 B5 29 48 B5 28 48 B5   .. 8. . ..)H.(H.
+206F  27 48 B5 26 48 E8 E8 E8  E8 20 2F E0 20 38 F1 CA  'H.&H... . /. 8..
+207F  CA CA CA 68 95 26 68 95  27 68 95 28 68 95 29 20  ...h.&h. 'h.(h.)
+208F  BF D1 20 03 DE 20 4B CA  4C A1 20 63 79 63 6C 65  .. .. K. L. cycle
+209F  73 20 20 F1 DF  s  ..
 
-2054 20 D4 CD   52692  jsr  ( $CDD4 ' )
-2057 20 38 F1   61752  jsr  ( $F138 CC@ )
-205A 20 9F C5   50591  jsr  ( $C59F underflow_2 )
-205D B5 29      41  lda.zx  ( $0029 DStack +3 )
-205F 48          pha
-2060 B5 28      40  lda.zx  ( $0028 DStack +2 )
-2062 48          pha
-2063 B5 27      39  lda.zx  ( $0027 DStack +1 )
-2065 48          pha
-2066 B5 26      38  lda.zx  ( $0026 DStack )
-2068 48          pha
-2069 E8          inx
-206A E8          inx
-206B E8          inx
-206C E8          inx
-206D 20 2F E0   57391  jsr  ( $E02F Execute )
-2070 20 38 F1   61752  jsr  ( $F138 CC@ )
-2073 CA          dex
-2074 CA          dex
-2075 CA          dex
-2076 CA          dex
-2077 68          pla
-2078 95 26      38  sta.zx  ( $0026 DStack )
-207A 68          pla
-207B 95 27      39  sta.zx  ( $0027 DStack +1 )
-207D 68          pla
-207E 95 28      40  sta.zx  ( $0028 DStack +2 )
-2080 68          pla
-2081 95 29      41  sta.zx  ( $0029 DStack +3 )
-2083 20 BF D1   53695  jsr  ( $D1BF D- )
-2086 20 03 DE   56835  jsr  ( $DE03 UD. )
-2089 20 4B CA   51787  jsr  ( $CA4B SLiteral +65 )
-208C 4C 96 20
-208F 63 79 63 6C 65 73 20
-2096 20 F1 DF   57329  jsr  ( $DFF1 Type )  ok
+205F 20 D4 CD   52692  jsr  ( $CDD4 ' )
+2062 20 38 F1   61752  jsr  ( $F138 CC@ )
+2065 20 9F C5   50591  jsr  ( $C59F underflow_2 )
+2068 B5 29      41  lda.zx  ( $0029 DStack +3 )
+206A 48          pha
+206B B5 28      40  lda.zx  ( $0028 DStack +2 )
+206D 48          pha
+206E B5 27      39  lda.zx  ( $0027 DStack +1 )
+2070 48          pha
+2071 B5 26      38  lda.zx  ( $0026 DStack )
+2073 48          pha
+2074 E8          inx
+2075 E8          inx
+2076 E8          inx
+2077 E8          inx
+2078 20 2F E0   57391  jsr  ( $E02F Execute )
+207B 20 38 F1   61752  jsr  ( $F138 CC@ )
+207E CA          dex
+207F CA          dex
+2080 CA          dex
+2081 CA          dex
+2082 68          pla
+2083 95 26      38  sta.zx  ( $0026 DStack )
+2085 68          pla
+2086 95 27      39  sta.zx  ( $0027 DStack +1 )
+2088 68          pla
+2089 95 28      40  sta.zx  ( $0028 DStack +2 )
+208B 68          pla
+208C 95 29      41  sta.zx  ( $0029 DStack +3 )
+208E 20 BF D1   53695  jsr  ( $D1BF D- )
+2091 20 03 DE   56835  jsr  ( $DE03 UD. )
+2094 20 4B CA   51787  jsr  ( $CA4B SLiteral +65 )
+2097 4C A1 20
+209A 63 79 63 6C 65 73 20
+20A1 20 F1 DF   57329  jsr  ( $DFF1 Type )  ok
 : Clr   compiled
   Empty-Stack MEmpty-Stack ;  SeeL
-nt: $201D xt: $20A1
+nt: $2028 xt: $20AC
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #6
 
-20A1  20 4A C6 20 47 16   J. G.
+20AC  20 4A C6 20 47 16   J. G.
 
-20A1 20 4A C6   50762  jsr  ( $C64A Empty-Stack )
-20A4 20 47 16   5703  jsr  ( $1647 MEmpty-Stack )  ok
+20AC 20 4A C6   50762  jsr  ( $C64A Empty-Stack )
+20AF 20 47 16   5703  jsr  ( $1647 MEmpty-Stack )  ok
 : IsClr ( .. -- )  compiled
   Depth 0<> If ." IsClr S: " .S  Abort Then  compiled
   MSPtr @ MSEmpty <> If  ." IsClr M: " M.S ABort Then  compiled
   ;  SeeL redefined IsClr
-nt: $202D xt: $20B1
+nt: $2038 xt: $20BC
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #78
 
-20B1  20 F3 D3 20 DC DA 20 8C  B7 4C D5 20 20 4B CA 4C   .. .. . .L.  K.L
-20C1  CC 20 49 73 43 6C 72 20  53 3A 20 20 F1 DF 20 71  . IsClr  S:  .. q
-20D1  BA 20 3A C5 20 32 16 20  B2 E0 20 22 16 20 2F DA  . :. 2.  .. ". /.
-20E1  20 8C B7 4C FF 20 20 4B  CA 4C F6 20 49 73 43 6C   ..L.  K .L. IsCl
-20F1  72 20 4D 3A 20 20 F1 DF  20 2F 1F 20 3A C5  r M:  ..  /. :.
+20BC  20 F3 D3 20 DC DA 20 8C  B7 4C E0 20 20 4B CA 4C   .. .. . .L.  K.L
+20CC  D7 20 49 73 43 6C 72 20  53 3A 20 20 F1 DF 20 71  . IsClr  S:  .. q
+20DC  BA 20 3A C5 20 32 16 20  B2 E0 20 22 16 20 2F DA  . :. 2.  .. ". /.
+20EC  20 8C B7 4C 0A 21 20 4B  CA 4C 01 21 49 73 43 6C   ..L.! K .L.!IsCl
+20FC  72 20 4D 3A 20 20 F1 DF  20 3A 1F 20 3A C5  r M:  ..  :. :.
 
-20B1 20 F3 D3   54259  jsr  ( $D3F3 Depth )
-20B4 20 DC DA   56028  jsr  ( $DADC 0<> )
-20B7 20 8C B7   46988  jsr  ( $B78C If +23 )
-20BA 4C D5 20   8405  jmp  ( $20D5 IsClr +36 )
-20BD 20 4B CA   51787  jsr  ( $CA4B SLiteral +65 )
-20C0 4C CC 20
-20C3 49 73 43 6C 72 20 53 3A 20
-20CC 20 F1 DF   57329  jsr  ( $DFF1 Type )
-20CF 20 71 BA   47729  jsr  ( $BA71 .S )
-20D2 20 3A C5   50490  jsr  ( $C53A Abort )
-20D5 20 32 16   5682  jsr  ( $1632 MSPtr )
-20D8 20 B2 E0   57522  jsr  ( $E0B2 @ )
-20DB 20 22 16   5666  jsr  ( $1622 MSEmpty )
-20DE 20 2F DA   55855  jsr  ( $DA2F <> )
-20E1 20 8C B7   46988  jsr  ( $B78C If +23 )
-20E4 4C FF 20   8447  jmp  ( $20FF IsClr +78 )
-20E7 20 4B CA   51787  jsr  ( $CA4B SLiteral +65 )
-20EA 4C F6 20
-20ED 49 73 43 6C 72 20 4D 3A 20
-20F6 20 F1 DF   57329  jsr  ( $DFF1 Type )
-20F9 20 2F 1F   7983  jsr  ( $1F2F M.S )
-20FC 20 3A C5   50490  jsr  ( $C53A Abort )  ok
+20BC 20 F3 D3   54259  jsr  ( $D3F3 Depth )
+20BF 20 DC DA   56028  jsr  ( $DADC 0<> )
+20C2 20 8C B7   46988  jsr  ( $B78C If +23 )
+20C5 4C E0 20   8416  jmp  ( $20E0 IsClr +36 )
+20C8 20 4B CA   51787  jsr  ( $CA4B SLiteral +65 )
+20CB 4C D7 20
+20CE 49 73 43 6C 72 20 53 3A 20
+20D7 20 F1 DF   57329  jsr  ( $DFF1 Type )
+20DA 20 71 BA   47729  jsr  ( $BA71 .S )
+20DD 20 3A C5   50490  jsr  ( $C53A Abort )
+20E0 20 32 16   5682  jsr  ( $1632 MSPtr )
+20E3 20 B2 E0   57522  jsr  ( $E0B2 @ )
+20E6 20 22 16   5666  jsr  ( $1622 MSEmpty )
+20E9 20 2F DA   55855  jsr  ( $DA2F <> )
+20EC 20 8C B7   46988  jsr  ( $B78C If +23 )
+20EF 4C 0A 21   8458  jmp  ( $210A IsClr +78 )
+20F2 20 4B CA   51787  jsr  ( $CA4B SLiteral +65 )
+20F5 4C 01 21
+20F8 49 73 43 6C 72 20 4D 3A 20
+2101 20 F1 DF   57329  jsr  ( $DFF1 Type )
+2104 20 3A 1F   7994  jsr  ( $1F3A M.S )
+2107 20 3A C5   50490  jsr  ( $C53A Abort )  ok
 : =S ( n1 n2 -- )  compiled
   2Dup <> If  ." =S: " . . Abort Then 2Drop ;  SeeL
-nt: $2082 xt: $2106
+nt: $208D xt: $2111
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #37
 
-2106  20 97 DE 20 2F DA 20 8C  B7 4C 28 21 20 4B CA 4C   .. /. . .L(! K.L
-2116  1C 21 3D 53 3A 20 20 F1  DF 20 C2 DD 20 C2 DD 20  .!=S:  . . .. ..
-2126  3A C5 20 04 D7  :. ..
+2111  20 97 DE 20 2F DA 20 8C  B7 4C 33 21 20 4B CA 4C   .. /. . .L3! K.L
+2121  27 21 3D 53 3A 20 20 F1  DF 20 C2 DD 20 C2 DD 20  '!=S:  . . .. ..
+2131  3A C5 20 04 D7  :. ..
 
-2106 20 97 DE   56983  jsr  ( $DE97 2Dup )
-2109 20 2F DA   55855  jsr  ( $DA2F <> )
-210C 20 8C B7   46988  jsr  ( $B78C If +23 )
-210F 4C 28 21   8488  jmp  ( $2128 =S +34 )
-2112 20 4B CA   51787  jsr  ( $CA4B SLiteral +65 )
-2115 4C 1C 21
-2118 3D 53 3A 20
-211C 20 F1 DF   57329  jsr  ( $DFF1 Type )
-211F 20 C2 DD   56770  jsr  ( $DDC2 . )
-2122 20 C2 DD   56770  jsr  ( $DDC2 . )
-2125 20 3A C5   50490  jsr  ( $C53A Abort )
-2128 20 04 D7   55044  jsr  ( $D704 2Drop )  ok
+2111 20 97 DE   56983  jsr  ( $DE97 2Dup )
+2114 20 2F DA   55855  jsr  ( $DA2F <> )
+2117 20 8C B7   46988  jsr  ( $B78C If +23 )
+211A 4C 33 21   8499  jmp  ( $2133 =S +34 )
+211D 20 4B CA   51787  jsr  ( $CA4B SLiteral +65 )
+2120 4C 27 21
+2123 3D 53 3A 20
+2127 20 F1 DF   57329  jsr  ( $DFF1 Type )
+212A 20 C2 DD   56770  jsr  ( $DDC2 . )
+212D 20 C2 DD   56770  jsr  ( $DDC2 . )
+2130 20 3A C5   50490  jsr  ( $C53A Abort )
+2133 20 04 D7   55044  jsr  ( $D704 2Drop )  ok
 : =M ( M: m1 m2 -- )  compiled
   MOver MOver M<> If ." =M: " CR M. CR M. Abort Then MDrop MDrop ;  SeeL
-nt: $20AE xt: $2132
+nt: $20B9 xt: $213D
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #49
 
-2132  20 80 17 20 80 17 20 53  18 20 8C B7 4C 5D 21 20   .. .. S . ..L]!
-2142  4B CA 4C 4B 21 3D 4D 3A  20 20 F1 DF 20 B7 BC 20  K.LK!=M:   .. ..
-2152  1E 1F 20 B7 BC 20 1E 1F  20 3A C5 20 9B 17 20 9B  .. .. ..  :. .. .
-2162  17  .
+213D  20 80 17 20 80 17 20 53  18 20 8C B7 4C 68 21 20   .. .. S . ..Lh!
+214D  4B CA 4C 56 21 3D 4D 3A  20 20 F1 DF 20 B7 BC 20  K.LV!=M:   .. ..
+215D  29 1F 20 B7 BC 20 29 1F  20 3A C5 20 9B 17 20 9B  ). .. ).  :. .. .
+216D  17  .
 
-2132 20 80 17   6016  jsr  ( $1780 MOver )
-2135 20 80 17   6016  jsr  ( $1780 MOver )
-2138 20 53 18   6227  jsr  ( $1853 M<> )
-213B 20 8C B7   46988  jsr  ( $B78C If +23 )
-213E 4C 5D 21   8541  jmp  ( $215D =M +43 )
-2141 20 4B CA   51787  jsr  ( $CA4B SLiteral +65 )
-2144 4C 4B 21
-2147 3D 4D 3A 20
-214B 20 F1 DF   57329  jsr  ( $DFF1 Type )
-214E 20 B7 BC   48311  jsr  ( $BCB7 CR )
-2151 20 1E 1F   7966  jsr  ( $1F1E M. )
-2154 20 B7 BC   48311  jsr  ( $BCB7 CR )
-2157 20 1E 1F   7966  jsr  ( $1F1E M. )
-215A 20 3A C5   50490  jsr  ( $C53A Abort )
-215D 20 9B 17   6043  jsr  ( $179B MDrop )
-2160 20 9B 17   6043  jsr  ( $179B MDrop )  ok
+213D 20 80 17   6016  jsr  ( $1780 MOver )
+2140 20 80 17   6016  jsr  ( $1780 MOver )
+2143 20 53 18   6227  jsr  ( $1853 M<> )
+2146 20 8C B7   46988  jsr  ( $B78C If +23 )
+2149 4C 68 21   8552  jmp  ( $2168 =M +43 )
+214C 20 4B CA   51787  jsr  ( $CA4B SLiteral +65 )
+214F 4C 56 21
+2152 3D 4D 3A 20
+2156 20 F1 DF   57329  jsr  ( $DFF1 Type )
+2159 20 B7 BC   48311  jsr  ( $BCB7 CR )
+215C 20 29 1F   7977  jsr  ( $1F29 M. )
+215F 20 B7 BC   48311  jsr  ( $BCB7 CR )
+2162 20 29 1F   7977  jsr  ( $1F29 M. )
+2165 20 3A C5   50490  jsr  ( $C53A Abort )
+2168 20 9B 17   6043  jsr  ( $179B MDrop )
+216B 20 9B 17   6043  jsr  ( $179B MDrop )  ok
   ok
 \ 32 MCellBytes !  \ # of bytes in an M cell; must be even  ok
 Clr  ok
@@ -3528,19 +3527,19 @@ IsClr  ok
 MA MB Timer MNip  MB =M 731 cycles  ok
 IsClr  ok
   ok
-MP     MP     Timer MMax  MP     =M  IsClr 1423 cycles  ok
+MP     MP     Timer MMax  MP     =M  IsClr 860 cycles  ok
 MP     MN     Timer MMax  MP     =M  IsClr 271 cycles  ok
 MN     MP     Timer MMax  MP     =M  IsClr 834 cycles  ok
-MN     MN     Timer MMax  MN     =M  IsClr 1423 cycles  ok
+MN     MN     Timer MMax  MN     =M  IsClr 860 cycles  ok
 +3 S>M +4 S>M Timer MMax  +4 S>M =M  IsClr 1431 cycles  ok
 -3 S>M +4 S>M Timer MMax  +4 S>M =M  IsClr 829 cycles  ok
 +3 S>M -4 S>M Timer MMax  +3 S>M =M  IsClr 266 cycles  ok
 -3 S>M -4 S>M Timer MMax  -3 S>M =M  IsClr 868 cycles  ok
   ok
-MP     MP     Timer MMin  MP     =M  IsClr 860 cycles  ok
+MP     MP     Timer MMin  MP     =M  IsClr 1423 cycles  ok
 MP     MN     Timer MMin  MN     =M  IsClr 834 cycles  ok
 MN     MP     Timer MMin  MN     =M  IsClr 271 cycles  ok
-MN     MN     Timer MMin  MN     =M  IsClr 860 cycles  ok
+MN     MN     Timer MMin  MN     =M  IsClr 1423 cycles  ok
 +3 S>M +4 S>M Timer MMin  +3 S>M =M  IsClr 868 cycles  ok
 -3 S>M +4 S>M Timer MMin  -3 S>M =M  IsClr 266 cycles  ok
 +3 S>M -4 S>M Timer MMin  -4 S>M =M  IsClr 829 cycles  ok
@@ -3567,25 +3566,25 @@ MN    MN    Timer M<>  False =S  IsClr 962 cycles  ok
 MP    MN    Timer M<>  True  =S  IsClr 368 cycles  ok
 1 S>M 1 S>M Timer M<>  False =S  IsClr 962 cycles  ok
   ok
-MN    MP    Timer M<  True  =S  IsClr 370 cycles  ok
-MN    MN    Timer M<  False =S  IsClr 964 cycles  ok
-MP    MN    Timer M<  False =S  IsClr 371 cycles  ok
-1 S>M 1 S>M Timer M<  False =S  IsClr 964 cycles  ok
+MN    MP    Timer M<  True  =S  IsClr 368 cycles  ok
+MN    MN    Timer M<  False =S  IsClr 962 cycles  ok
+MP    MN    Timer M<  False =S  IsClr 373 cycles  ok
+1 S>M 1 S>M Timer M<  False =S  IsClr 962 cycles  ok
   ok
-MN    MP    Timer M>=  False =S  IsClr 422 cycles  ok
-MN    MN    Timer M>=  True  =S  IsClr 1015 cycles  ok
-MP    MN    Timer M>=  True  =S  IsClr 422 cycles  ok
-1 S>M 1 S>M Timer M>=  True  =S  IsClr 1015 cycles  ok
+MN    MP    Timer M<=  True  =S  IsClr 368 cycles  ok
+MN    MN    Timer M<=  True  =S  IsClr 961 cycles  ok
+MP    MN    Timer M<=  False =S  IsClr 373 cycles  ok
+1 S>M 1 S>M Timer M<=  True  =S  IsClr 961 cycles  ok
   ok
-MN    MP    Timer MU<  False =S  IsClr 371 cycles  ok
-MN    MN    Timer MU<  False =S  IsClr 964 cycles  ok
-MP    MN    Timer MU<  True  =S  IsClr 370 cycles  ok
-1 S>M 1 S>M Timer MU<  False  =S  IsClr 964 cycles  ok
+MN    MP    Timer MU<  False =S  IsClr 373 cycles  ok
+MN    MN    Timer MU<  False =S  IsClr 962 cycles  ok
+MP    MN    Timer MU<  True  =S  IsClr 368 cycles  ok
+1 S>M 1 S>M Timer MU<  False =S  IsClr 962 cycles  ok
   ok
-MN    MP    Timer MU>=  True  =S  IsClr 368 cycles  ok
-MN    MN    Timer MU>=  True =S  IsClr 961 cycles  ok
-MP    MN    Timer MU>=  False =S  IsClr 373 cycles  ok
-1 S>M 1 S>M Timer MU>=  True  =S  IsClr 961 cycles  ok
+MN    MP    Timer MU<=  False =S  IsClr 373 cycles  ok
+MN    MN    Timer MU<=  True  =S  IsClr 961 cycles  ok
+MP    MN    Timer MU<=  True  =S  IsClr 368 cycles  ok
+1 S>M 1 S>M Timer MU<=  True  =S  IsClr 961 cycles  ok
   ok
 MN Timer MU>D  M0  =M MN =M IsClr 716 cycles  ok
 MN Timer MS>D  M1s =M MN =M IsClr 785 cycles  ok
@@ -3593,12 +3592,12 @@ MP Timer MS>D  M0  =M MP =M IsClr 800 cycles  ok
   ok
 M-4 Timer M>S  -4 =S  IsClr 265 cycles  ok
   ok
-Timer MVariable MVar  IsClr 42510 cycles  ok
+Timer MVariable MVar  IsClr 42556 cycles  ok
 MN MVar Timer M! IsClr 828 cycles  ok
 MVar Timer M@  MN =M IsClr 822 cycles  ok
   ok
 \ MRol ( M: m1 P.C -- m2 P.C )  ok
-MN Timer M2*  MN MN M+1 =M IsClr 876 cycles  ok
+MN Timer M2*  MN MN M+1 =M IsClr 612 cycles  ok
   ok
 \ MRor ( M: m1 P.C -- m2 P.C )  \ Rotate the content of a cell in memory right through the CARRY bit.  ok
 \ MN: MU2/ ( M: m1 -- m2 )  ok
@@ -3638,7 +3637,7 @@ MMIN-INT Timer MAbs MMID-UINT+1 =M IsClr 950 cycles  ok
 \ Hex>M ( uhi ... -- ) ( M: -- m ) \ convert words to M  ok
 \ M.Hex ( M: m -- )  \ type M in hex  ok
   ok
-33 S>M 4 Timer MU*Word  132 S>M =M  IsClr 3708 cycles  ok
+33 S>M 4 Timer MU*Word  132 S>M =M  IsClr 3090 cycles  ok
   ok
   0 S>M          0 S>M Timer MUM*  0 S>M =M       0 S>M =M IsClr 163365 cycles  ok
   0 S>M          1 S>M Timer MUM*  0 S>M =M       0 S>M =M IsClr 163365 cycles  ok
@@ -3691,70 +3690,70 @@ MMAX-INT MMAX-INT Timer MM*  MMSB M2/ MInvert =M        1 S>M =M IsClr 370408 cy
   ok
 : MU/ModWord ( M: um1 -- um2 ) ( udivisor -- uremainder )  compiled
   MU/ModWordA PushA ;  SeeL
-nt: $234B xt: $23CF
+nt: $2356 xt: $23DA
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #6
 
-23CF  20 B8 1C 20 C5 1C   .. ..
+23DA  20 C8 1C 20 D5 1C   .. ..
 
-23CF 20 B8 1C   7352  jsr  ( $1CB8 MU/ModWordA )
-23D2 20 C5 1C   7365  jsr  ( $1CC5 PushA )  ok
-133 S>M 4 Timer MU/ModWord  33 S>M =M  1 =S  IsClr 201194 cycles  ok
+23DA 20 C8 1C   7368  jsr  ( $1CC8 MU/ModWordA )
+23DD 20 D5 1C   7381  jsr  ( $1CD5 PushA )  ok
+133 S>M 4 Timer MU/ModWord  33 S>M =M  1 =S  IsClr 133717 cycles  ok
   ok
-   0 U>M          0 U>M      1 U>M Timer MUM/Mod        M0 =M    M0 =M IsClr 352600 cycles  ok
-   1 U>M          0 U>M      1 U>M Timer MUM/Mod     1 U>M =M 0 U>M =M IsClr 353409 cycles  ok
-   1 U>M          0 U>M      2 U>M Timer MUM/Mod        M0 =M 1 U>M =M IsClr 352600 cycles  ok
-   3 U>M          0 U>M      1 U>M Timer MUM/Mod     3 U>M =M 0 U>M =M IsClr 354218 cycles  ok
-   3 U>M          0 U>M      2 U>M Timer MUM/Mod     1 U>M =M 1 U>M =M IsClr 353406 cycles  ok
-MMAX-UINT     2 U>M MUM*     2 U>M Timer MUM/Mod MMAX-UINT =M    M0 =M IsClr 558939 cycles  ok
-MMAX-UINT     2 U>M MUM* MMAX-UINT Timer MUM/Mod     2 U>M =M 0 U>M =M IsClr 187404 cycles  ok
-MMAX-UINT MMAX-UINT MUM* MMAX-UINT Timer MUM/Mod MMAX-UINT =M    M0 =M IsClr 387324 cycles  ok
- 133 U>M MS>D                4 U>M Timer MUM/Mod    33 U>M =M 1 U>M =M IsClr 354215 cycles  ok
+   0 U>M          0 U>M      1 U>M Timer MUM/Mod        M0 =M    M0 =M IsClr 305240 cycles  ok
+   1 U>M          0 U>M      1 U>M Timer MUM/Mod     1 U>M =M 0 U>M =M IsClr 306049 cycles  ok
+   1 U>M          0 U>M      2 U>M Timer MUM/Mod        M0 =M 1 U>M =M IsClr 305240 cycles  ok
+   3 U>M          0 U>M      1 U>M Timer MUM/Mod     3 U>M =M 0 U>M =M IsClr 306858 cycles  ok
+   3 U>M          0 U>M      2 U>M Timer MUM/Mod     1 U>M =M 1 U>M =M IsClr 306046 cycles  ok
+MMAX-UINT     2 U>M MUM*     2 U>M Timer MUM/Mod MMAX-UINT =M    M0 =M IsClr 511579 cycles  ok
+MMAX-UINT     2 U>M MUM* MMAX-UINT Timer MUM/Mod     2 U>M =M 0 U>M =M IsClr 140044 cycles  ok
+MMAX-UINT MMAX-UINT MUM* MMAX-UINT Timer MUM/Mod MMAX-UINT =M    M0 =M IsClr 339964 cycles  ok
+ 133 U>M MS>D                4 U>M Timer MUM/Mod    33 U>M =M 1 U>M =M IsClr 306855 cycles  ok
   ok
-   0 U>M           1 U>M Timer MU/Mod             M0 =M    M0 =M IsClr 353578 cycles  ok
-   1 U>M           1 U>M Timer MU/Mod          1 U>M =M 0 U>M =M IsClr 354387 cycles  ok
-   1 U>M           2 U>M Timer MU/Mod             M0 =M 1 U>M =M IsClr 353578 cycles  ok
-   3 U>M           2 U>M Timer MU/Mod          1 U>M =M 1 U>M =M IsClr 354384 cycles  ok
-MMAX-UINT          2 U>M Timer MU/Mod MMAX-UINT MU2/ =M 1 U>M =M IsClr 559108 cycles  ok
-MMAX-UINT      MMAX-UINT Timer MU/Mod          1 U>M =M 0 U>M =M IsClr 188382 cycles  ok
-MMAX-UINT MMAX-UINT MU2/ Timer MU/Mod          2 U>M =M 1 U>M =M IsClr 188382 cycles  ok
- 135 U>M           4 U>M Timer MU/Mod         33 U>M =M 3 U>M =M IsClr 355193 cycles  ok
+   0 U>M           1 U>M Timer MU/Mod             M0 =M    M0 =M IsClr 306218 cycles  ok
+   1 U>M           1 U>M Timer MU/Mod          1 U>M =M 0 U>M =M IsClr 307027 cycles  ok
+   1 U>M           2 U>M Timer MU/Mod             M0 =M 1 U>M =M IsClr 306218 cycles  ok
+   3 U>M           2 U>M Timer MU/Mod          1 U>M =M 1 U>M =M IsClr 307024 cycles  ok
+MMAX-UINT          2 U>M Timer MU/Mod MMAX-UINT MU2/ =M 1 U>M =M IsClr 511748 cycles  ok
+MMAX-UINT      MMAX-UINT Timer MU/Mod          1 U>M =M 0 U>M =M IsClr 141022 cycles  ok
+MMAX-UINT MMAX-UINT MU2/ Timer MU/Mod          2 U>M =M 1 U>M =M IsClr 141022 cycles  ok
+ 135 U>M           4 U>M Timer MU/Mod         33 U>M =M 3 U>M =M IsClr 307833 cycles  ok
   ok
 \ MUMod ( mu-dividend mu-divisor -- mu-remainder )  \ Divide unsigned  ok
 \ MU/ ( mu-dividend mu-divisor -- mu-quotient ) \ Divide unsigned  ok
   ok
 \ : MFM/Mod ( mlo mhi mdivisor -- mremainder mquotient ) \ Floored signed division  ok
   ok
-     0 S>M MS>D          1 S>M Timer MSM/Rem        M0 =M     M0 =M IsClr 352785 cycles  ok
-     1 S>M MS>D          1 S>M Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 353594 cycles  ok
-     2 S>M MS>D          1 S>M Timer MSM/Rem     2 S>M =M  0 S>M =M IsClr 353594 cycles  ok
-    -1 S>M MS>D          1 S>M Timer MSM/Rem    -1 S>M =M  0 S>M =M IsClr 356640 cycles  ok
-    -2 S>M MS>D          1 S>M Timer MSM/Rem    -2 S>M =M  0 S>M =M IsClr 356640 cycles  ok
-     0 S>M MS>D         -1 S>M Timer MSM/Rem     0 S>M =M  0 S>M =M IsClr 354290 cycles  ok
-     1 S>M MS>D         -1 S>M Timer MSM/Rem    -1 S>M =M  0 S>M =M IsClr 355099 cycles  ok
-     2 S>M MS>D         -1 S>M Timer MSM/Rem    -2 S>M =M  0 S>M =M IsClr 355099 cycles  ok
-    -1 S>M MS>D         -1 S>M Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 356639 cycles  ok
-    -2 S>M MS>D         -1 S>M Timer MSM/Rem     2 S>M =M  0 S>M =M IsClr 356639 cycles  ok
-     2 S>M MS>D          2 S>M Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 353594 cycles  ok
-    -1 S>M MS>D         -1 S>M Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 356639 cycles  ok
-    -2 S>M MS>D         -2 S>M Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 356639 cycles  ok
-     7 S>M MS>D          3 S>M Timer MSM/Rem     2 S>M =M  1 S>M =M IsClr 353594 cycles  ok
-     7 S>M MS>D         -3 S>M Timer MSM/Rem    -2 S>M =M  1 S>M =M IsClr 355099 cycles  ok
-    -7 S>M MS>D          3 S>M Timer MSM/Rem    -2 S>M =M -1 S>M =M IsClr 356640 cycles  ok
-    -7 S>M MS>D         -3 S>M Timer MSM/Rem     2 S>M =M -1 S>M =M IsClr 356639 cycles  ok
-  MMAX-INT MS>D          1 S>M Timer MSM/Rem  MMAX-INT =M     M0 =M IsClr 559080 cycles  ok
-  MMIN-INT MS>D          1 S>M Timer MSM/Rem  MMIN-INT =M     M0 =M IsClr 356640 cycles  ok
-  MMAX-INT MS>D       MMAX-INT Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 187589 cycles  ok
-  MMIN-INT MS>D       MMIN-INT Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 190634 cycles  ok
-     M1S 1 S>M           4 S>M Timer MSM/Rem  MMAX-INT =M  3 S>M =M IsClr 558315 cycles  ok
-2 S>M MMIN-INT    MM*    2 S>M Timer MSM/Rem  MMIN-INT =M  0 S>M =M IsClr 356640 cycles  ok
-2 S>M MMIN-INT    MM* MMIN-INT Timer MSM/Rem     2 S>M =M  0 S>M =M IsClr 190634 cycles  ok
-2 S>M MMAX-INT    MM*    2 S>M Timer MSM/Rem  MMAX-INT =M  0 S>M =M IsClr 558318 cycles  ok
-2 S>M MMAX-INT    MM* MMAX-INT Timer MSM/Rem     2 S>M =M  0 S>M =M IsClr 187589 cycles  ok
-MMIN-INT MMIN-INT MM* MMIN-INT Timer MSM/Rem  MMIN-INT =M  0 S>M =M IsClr 189094 cycles  ok
-MMIN-INT MMAX-INT MM* MMIN-INT Timer MSM/Rem  MMAX-INT =M  0 S>M =M IsClr 395358 cycles  ok
-MMIN-INT MMAX-INT MM* MMAX-INT Timer MSM/Rem  MMIN-INT =M  0 S>M =M IsClr 190635 cycles  ok
-MMAX-INT MMAX-INT MM* MMAX-INT Timer MSM/Rem  MMAX-INT =M  0 S>M =M IsClr 392964 cycles  ok
+     0 S>M MS>D          1 S>M Timer MSM/Rem        M0 =M     M0 =M IsClr 305425 cycles  ok
+     1 S>M MS>D          1 S>M Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 306234 cycles  ok
+     2 S>M MS>D          1 S>M Timer MSM/Rem     2 S>M =M  0 S>M =M IsClr 306234 cycles  ok
+    -1 S>M MS>D          1 S>M Timer MSM/Rem    -1 S>M =M  0 S>M =M IsClr 309280 cycles  ok
+    -2 S>M MS>D          1 S>M Timer MSM/Rem    -2 S>M =M  0 S>M =M IsClr 309280 cycles  ok
+     0 S>M MS>D         -1 S>M Timer MSM/Rem     0 S>M =M  0 S>M =M IsClr 306930 cycles  ok
+     1 S>M MS>D         -1 S>M Timer MSM/Rem    -1 S>M =M  0 S>M =M IsClr 307739 cycles  ok
+     2 S>M MS>D         -1 S>M Timer MSM/Rem    -2 S>M =M  0 S>M =M IsClr 307739 cycles  ok
+    -1 S>M MS>D         -1 S>M Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 309279 cycles  ok
+    -2 S>M MS>D         -1 S>M Timer MSM/Rem     2 S>M =M  0 S>M =M IsClr 309279 cycles  ok
+     2 S>M MS>D          2 S>M Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 306234 cycles  ok
+    -1 S>M MS>D         -1 S>M Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 309279 cycles  ok
+    -2 S>M MS>D         -2 S>M Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 309279 cycles  ok
+     7 S>M MS>D          3 S>M Timer MSM/Rem     2 S>M =M  1 S>M =M IsClr 306234 cycles  ok
+     7 S>M MS>D         -3 S>M Timer MSM/Rem    -2 S>M =M  1 S>M =M IsClr 307739 cycles  ok
+    -7 S>M MS>D          3 S>M Timer MSM/Rem    -2 S>M =M -1 S>M =M IsClr 309280 cycles  ok
+    -7 S>M MS>D         -3 S>M Timer MSM/Rem     2 S>M =M -1 S>M =M IsClr 309279 cycles  ok
+  MMAX-INT MS>D          1 S>M Timer MSM/Rem  MMAX-INT =M     M0 =M IsClr 511720 cycles  ok
+  MMIN-INT MS>D          1 S>M Timer MSM/Rem  MMIN-INT =M     M0 =M IsClr 309280 cycles  ok
+  MMAX-INT MS>D       MMAX-INT Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 140229 cycles  ok
+  MMIN-INT MS>D       MMIN-INT Timer MSM/Rem     1 S>M =M  0 S>M =M IsClr 143274 cycles  ok
+     M1S 1 S>M           4 S>M Timer MSM/Rem  MMAX-INT =M  3 S>M =M IsClr 510955 cycles  ok
+2 S>M MMIN-INT    MM*    2 S>M Timer MSM/Rem  MMIN-INT =M  0 S>M =M IsClr 309280 cycles  ok
+2 S>M MMIN-INT    MM* MMIN-INT Timer MSM/Rem     2 S>M =M  0 S>M =M IsClr 143274 cycles  ok
+2 S>M MMAX-INT    MM*    2 S>M Timer MSM/Rem  MMAX-INT =M  0 S>M =M IsClr 510958 cycles  ok
+2 S>M MMAX-INT    MM* MMAX-INT Timer MSM/Rem     2 S>M =M  0 S>M =M IsClr 140229 cycles  ok
+MMIN-INT MMIN-INT MM* MMIN-INT Timer MSM/Rem  MMIN-INT =M  0 S>M =M IsClr 141734 cycles  ok
+MMIN-INT MMAX-INT MM* MMIN-INT Timer MSM/Rem  MMAX-INT =M  0 S>M =M IsClr 347998 cycles  ok
+MMIN-INT MMAX-INT MM* MMAX-INT Timer MSM/Rem  MMIN-INT =M  0 S>M =M IsClr 143275 cycles  ok
+MMAX-INT MMAX-INT MM* MMAX-INT Timer MSM/Rem  MMAX-INT =M  0 S>M =M IsClr 345604 cycles  ok
   ok
   ok
 \ MU.R ( M: um -- ) ( n -- )  ok
@@ -3779,38 +3778,38 @@ IsClr  ok
 : MPowers ( -- )  \ print powers of 2  compiled
   0  1 U>M  Begin  compiled
     CR Dup U. 9 Emit  MDup MU.  1+ M2*  MDup M0= Until Drop MDrop ; SeeL
-nt: $235D xt: $23E1
+nt: $2368 xt: $23EC
 flags: __=0 UF=0 AN=0 NN=1 IM=0 CO=0 DB=0 FP=0
 size: #58
 
-23E1  20 6B C9 20 74 C9 20 10  19 20 B7 BC 20 8A E1 20   k. t. . . .. ..
-23F1  F3 DD A9 09 20 5D C9 20  D6 DF 20 65 17 20 D0 1E  .... ].  .. e. ..
-2401  20 37 DC 20 94 19 20 65  17 20 A3 18 E8 E8 B5 24   7. .. e . .....$
-2411  15 25 F0 D5 20 C8 E1 20  9B 17  .%.. ..  ..
+23EC  20 6B C9 20 74 C9 20 0F  19 20 B7 BC 20 8A E1 20   k. t. . . .. ..
+23FC  F3 DD A9 09 20 5D C9 20  CA DF 20 65 17 20 DB 1E  .... ].  .. e. ..
+240C  20 37 DC 20 A6 19 20 65  17 20 A2 18 E8 E8 B5 24   7. .. e . .....$
+241C  15 25 F0 D5 20 CA E1 20  9B 17  .%.. ..  ..
 
-23E1 20 6B C9   51563  jsr  ( $C96B 0 )		0
-23E4 20 74 C9   51572  jsr  ( $C974 1 )		1
-23E7 20 10 19   6416  jsr  ( $1910 U>M )	U>M
+23EC 20 6B C9   51563  jsr  ( $C96B 0 )		0
+23EF 20 74 C9   51572  jsr  ( $C974 1 )		1
+23F2 20 0F 19   6415  jsr  ( $190F U>M )	U>M
 						Begin
-23EA 20 B7 BC   48311  jsr  ( $BCB7 CR )	  CR
-23ED 20 8A E1   57738  jsr  ( $E18A Dup )	  Dup
-23F0 20 F3 DD   56819  jsr  ( $DDF3 U. )	  U.
-23F3 A9 09      9  lda.#  ( $0009 >In +1 )	  9
-23F5 20 5D C9   51549  jsr  ( $C95D PushZA )
-23F8 20 D6 DF   57302  jsr  ( $DFD6 Emit )	  Emit
-23FB 20 65 17   5989  jsr  ( $1765 MDup )	  MDup
-23FE 20 D0 1E   7888  jsr  ( $1ED0 MU. )	  MU.
-2401 20 37 DC   56375  jsr  ( $DC37 1+ )	  1+
-2404 20 94 19   6548  jsr  ( $1994 M2* )	  M2*
-2407 20 65 17   5989  jsr  ( $1765 MDup )	  MDup
-240A 20 A3 18   6307  jsr  ( $18A3 M0= )	  M0=
-240D E8          inx				 Until
-240E E8          inx
-240F B5 24      36  lda.zx  ( $0024 Tmp6 +6 )
-2411 15 25      37  ora.zx  ( $0025 Tmp6 +7 )
-2413 F0 D5      -43  beq  ( $23EA MPowers +9 )
-2415 20 C8 E1   57800  jsr  ( $E1C8 Drop )	Drop
-2418 20 9B 17   6043  jsr  ( $179B MDrop )  ok	MDrop
+23F5 20 B7 BC   48311  jsr  ( $BCB7 CR )	  CR
+23F8 20 8A E1   57738  jsr  ( $E18A Dup )	  Dup
+23FB 20 F3 DD   56819  jsr  ( $DDF3 U. )	  U.
+23FE A9 09      9  lda.#  ( $0009 >In +1 )	  9
+2400 20 5D C9   51549  jsr  ( $C95D PushZA )
+2403 20 CA DF   57290  jsr  ( $DFCA Emit )	  Emit
+2406 20 65 17   5989  jsr  ( $1765 MDup )	  MDup
+2409 20 DB 1E   7899  jsr  ( $1EDB MU. )	  MU.
+240C 20 37 DC   56375  jsr  ( $DC37 1+ )	  1+
+240F 20 A6 19   6566  jsr  ( $19A6 M2* )	  M2*
+2412 20 65 17   5989  jsr  ( $1765 MDup )	  MDup
+2415 20 A2 18   6306  jsr  ( $18A2 M0= )	  M0=
+2418 E8          inx				 Until
+2419 E8          inx
+241A B5 24      36  lda.zx  ( $0024 Tmp6 +6 )
+241C 15 25      37  ora.zx  ( $0025 Tmp6 +7 )
+241E F0 D5      -43  beq  ( $23F5 MPowers +9 )
+2420 20 CA E1   57802  jsr  ( $E1CA Drop )	Drop
+2423 20 9B 17   6043  jsr  ( $179B MDrop )  ok	MDrop
 MPowers eof
 
 0       1
